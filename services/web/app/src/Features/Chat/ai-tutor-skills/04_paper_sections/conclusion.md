@@ -19,3 +19,18 @@ Think of future work as potential "academic offspring."
 ## Section Ordering
 
 See `05_writing_style/latex_formatting.md` for the standard ordering of final sections (Conclusion → Acknowledgment → Limitations → Ethical Considerations → References → Appendix).
+
+## Improvement Prompting Template
+
+```
+Your task is to improve the following Conclusion section:
+<<conclusion_section>>
+
+Here is the guidance for a good Conclusion:
+- **Conciseness**: Does it summarize without copying the Abstract?
+- **Forward-Looking**: Does it offer concrete "Future Work" directions?
+- **Closure**: Does it leave the reader with a clear sense of the contribution?
+
+Critique the section based on these criteria.
+Then, suggest an improved version that is punchy and actionable.
+```

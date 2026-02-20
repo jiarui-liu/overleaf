@@ -82,3 +82,22 @@ First, discuss any high-level structural changes and grammatical or stylistic is
 
 Finally, output the improved text altogether.
 ```
+
+## How to Critique the Introduction (Based on ICLR 2025 Reviews)
+
+### 1. Motivation must be watertight
+**Reviewer Insight:** If the "Why" isn't clear, the paper is rejected.
+- **Bad Example (Critique):** "The motivation to use [Method] is unclear." "The paper feels very ad-hoc to the [Specific Task]."
+- **Good Example (Praise):** "The paper addresses a critical challenge... how to proceed when even explainable AI tools disagree." (from *EXAGREE...*)
+- **Action:** Ask: "Does the introduction convince a skeptic that this problem *needs* to be solved?"
+
+### 2. Contextualize the "Villain" (Existing Approaches)
+**Reviewer Insight:** You must explain *why* existing methods fail.
+- **Bad Example (Critique):** "The paper feels incomplete... lack of discussion about other approaches... A 'Related Work' section should be added to explain how the proposed model differs."
+- **Action:** Ensure the introduction explicitly names the specific limitations of current SOTA that this paper overcomes.
+
+### 3. Define the Scope and Domain
+**Reviewer Insight:** Ambiguity about *where* the method applies implies weakness.
+- **Bad Example (Critique):** "It is not clear what problem the paper is dealing with... The definition of a 'system' is not clear."
+- **Good Example (Praise):** "The paper clearly lays out the problem of selection bias... and why certain natural approaches are not sufficient."
+

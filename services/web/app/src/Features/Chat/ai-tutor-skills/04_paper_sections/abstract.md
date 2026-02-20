@@ -60,3 +60,25 @@ Here is an example of a well written abstract which conforms to the guidance:
 
 Make improvements to this abstract in line with the guidance. First, provide a bullet list of the improvements that have been made. Finally, output the improved abstract.
 ```
+
+## How to Critique the Abstract (Based on ICLR 2025 Reviews)
+
+Use the following real-world examples from ICLR 2025 to guide your feedback.
+
+### 1. Check for Clarity of Contribution
+**Reviewer Insight:** Weak papers often fail to explicitly state their contributions.
+- **Bad Example (Critique):** "The contributions are not very clear." "The presented claims are not adequately supported by empirical evidence." (from *Differentiable Implicit Solver...*)
+- **Good Example (Praise):** "The paper attempts to build a framework... [and] effectively illustrates the overall pipeline."
+- **Action:** If the abstract is vague, specificially ask: "What is the single most important thing this paper contributes? State it in one sentence."
+
+### 2. Check for Novelty vs. Incrementalism
+**Reviewer Insight:** Reviewers reject papers that sound like "just another X".
+- **Bad Example (Critique):** "The novelty is unfortunately low. Incorporating FVM into GNN is not new... The authors should clarify the added novelty."
+- **Good Example (Praise):** "The proposed method is solid, with enough technical contributions... moves beyond traditional text-based summaries."
+- **Action:** If the abstract sounds generic, ask the user to explicitly contrast their work with the nearest existing solution (e.g., "Unlike [Method X], we...").
+
+### 3. Check for Misplaced Content
+**Reviewer Insight:** The abstract should not be a "related work" section.
+- **Bad Example (Critique):** "Abstract contains content which would better fit to related work."
+- **Action:** Flag definitions or long descriptions of other people's work. The abstract is for *this* paper.
+
