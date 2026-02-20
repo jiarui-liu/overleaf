@@ -528,8 +528,29 @@ async function analyzeWholeProject(req, res) {
 
 async function reviewWholeProject(req, res) {
   const { project_id: projectId } = req.params
-  const { model = 'gpt-4o', venue = 'arxiv' } = req.body
+  const { model = 'gpt-5.2-chat-latest', venue = 'arxiv', roleModelTexts: rawRoleModelTexts = [] } = req.body
   const userId = SessionManager.getLoggedInUserId(req.session)
+
+  // Validate roleModelTexts if provided
+  const roleModelTexts = []
+  if (Array.isArray(rawRoleModelTexts)) {
+    for (const rm of rawRoleModelTexts.slice(0, 3)) {
+      if (rm && typeof rm.name === 'string' && typeof rm.text === 'string' && rm.text.length > 0) {
+        roleModelTexts.push({
+          name: rm.name.slice(0, 200),
+          text: rm.text.slice(0, 80000),
+        })
+      }
+    }
+  }
+  if (roleModelTexts.length > 0) {
+    const totalChars = roleModelTexts.reduce((sum, rm) => sum + rm.text.length, 0)
+    console.log(
+      `[AI Tutor] Role model papers: ${roleModelTexts.length} paper(s), ` +
+      `${(totalChars / 1000).toFixed(0)}K total chars: ` +
+      roleModelTexts.map(rm => `"${rm.name}" (${(rm.text.length / 1000).toFixed(0)}K)`).join(', ')
+    )
+  }
 
   // Step 1: Run project analysis (always re-analyze for fresh data)
   console.log('[AI Tutor] reviewWholeProject: running project analysis...')
@@ -702,6 +723,15 @@ async function reviewWholeProject(req, res) {
   fs.writeFileSync(path.join(cacheDir, 'metadata.json'), JSON.stringify(metadata, null, 2), 'utf-8')
   console.log(`[AI Tutor] Project analysis complete: ${texFilesOrdered.length} tex files, ${mergedTexContent.length} chars merged`)
 
+  // Save role model texts to cache for debugging
+  if (roleModelTexts.length > 0) {
+    for (let i = 0; i < roleModelTexts.length; i++) {
+      const rmPath = path.join(cacheDir, `role_model_${i}_${roleModelTexts[i].name.replace(/[^a-zA-Z0-9._-]/g, '_')}.txt`)
+      fs.writeFileSync(rmPath, roleModelTexts[i].text, 'utf-8')
+      console.log(`[AI Tutor] Saved role model text to ${rmPath} (${(roleModelTexts[i].text.length / 1000).toFixed(0)}K chars)`)
+    }
+  }
+
   // Step 2: Run multi-agent review
   try {
     const result = await runFullReview({
@@ -711,6 +741,7 @@ async function reviewWholeProject(req, res) {
       cacheDir,
       docContentMap,
       rootDocPath: normalizedRootPath,
+      roleModelTexts,
     })
     // Attach metadata to the response so frontend can display file info
     result.metadata = metadata
@@ -740,6 +771,7 @@ async function reviewWholeProject(req, res) {
         userId: userId.toString(),
         model,
         venue,
+        roleModelPapers: roleModelTexts.length > 0 ? roleModelTexts.map(rm => rm.name) : undefined,
         paperType: result.classification.paperType,
         paperTypeSummary: result.classification.paperTypeSummary,
         summary: result.summary,

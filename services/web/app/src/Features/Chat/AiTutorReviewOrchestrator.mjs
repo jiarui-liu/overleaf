@@ -960,6 +960,52 @@ function buildSkeleton(sections)
   return lines.join('\n')
 }
 
+// ---------------------------------------------------------------------------
+// Role Model Prompt Injection Builder
+// ---------------------------------------------------------------------------
+
+const ROLE_MODEL_AGENT_HINTS = {
+  abstract: 'Compare abstract structure: Does the user follow a similar sentence pattern (context → problem → method → results → impact)? Is the level of specificity comparable?',
+  introduction: 'Compare introduction flow: Does the user follow a similar storytelling arc? Are contributions presented with similar clarity and specificity?',
+  related_work: 'Compare related work organization: Does the user group prior work into similar thematic clusters? Is the compare-and-contrast style as clear?',
+  methods: 'Compare methods presentation: Is the level of formalism similar? Does the user provide comparable intuition before formal definitions? Is notation introduced as cleanly?',
+  results: 'Compare results presentation: Are findings presented with similar boldness and clarity? Are research questions structured comparably? Do tables/figures serve similar roles?',
+  conclusion: 'Compare conclusion structure: Is the conclusion similarly concise? Are limitations presented with comparable depth?',
+  appendix: 'Compare appendix organization: Is supplementary material organized with similar clarity?',
+  writing_style: 'Compare writing style: sentence length variation, active vs. passive voice usage, transition patterns between paragraphs, formality level, and use of hedging language.',
+  latex_formatting: 'Compare LaTeX formatting conventions: reference style, equation formatting, table structure, and overall typographic quality.',
+  figures_tables: 'Compare figure/table captions: Are captions similarly self-contained? Do they follow similar patterns (statement + evidence + interpretation)?',
+  structure: 'Compare overall structure: section ordering, heading density, paragraph length distribution, and the "first sentences tell the story" pattern.',
+  paper_type: 'Compare overall paper organization against the role model(s) for this paper type.',
+  venue: 'Compare adherence to venue conventions visible in the role model(s).',
+}
+
+function buildRoleModelInjection(roleModelTexts, agentId) {
+  if (!roleModelTexts || roleModelTexts.length === 0) return ''
+
+  const hint = ROLE_MODEL_AGENT_HINTS[agentId] || ''
+
+  const roleModelSections = roleModelTexts.map((rm, i) =>
+    `### Role Model Paper ${i + 1}: "${rm.name}"\n${rm.text}`
+  ).join('\n\n')
+
+  return `\n\n## Role Model Papers — Structure & Style Reference
+
+You have been provided with ${roleModelTexts.length} exemplary academic paper(s) as "role models."
+Your task is to compare the STRUCTURE, ORGANIZATION, and WRITING STYLE of the user's paper against these role models.
+
+**IMPORTANT INSTRUCTIONS:**
+- Study HOW the role model papers are written, NOT WHAT they are about.
+- The role model papers may be on completely different topics — that is expected and intentional.
+- DO NOT suggest that the user's paper should cover the same topics, methods, datasets, or findings as the role models.
+- DO NOT penalize the user's paper for having different content.
+- FOCUS ON: paragraph structure, sentence patterns, section flow, transition techniques, how claims are supported, how findings are presented, level of specificity, and overall readability.
+- When you find a structural or stylistic pattern in the role model that the user's paper could benefit from, cite the specific pattern and explain how it could be adapted.
+
+${hint ? `**Agent-specific comparison focus:**\n${hint}\n` : ''}
+${roleModelSections}`
+}
+
 /**
  * Collect sections matching a list of title strings from the Phase 1 mapping.
  *
@@ -1032,7 +1078,8 @@ async function runSubagent(
   sections,
   sectionMapping,
   typeGuidance,
-  mergedTex
+  mergedTex,
+  roleModelTexts = []
 )
 {
   console.log(`[AI Tutor] [${def.name}] Starting — gathering review text...`)
@@ -1107,6 +1154,9 @@ async function runSubagent(
     guidanceInjection += `\n\n## General Type Notes\n${typeGuidance.overallNotes}`
   }
 
+  // 3b. Build role model injection
+  const roleModelInjection = buildRoleModelInjection(roleModelTexts, def.id)
+
   // 4. Call LLM
   const systemPrompt = `You are the "${def.name}" for an academic paper writing tutor.
 ${def.systemPreamble}
@@ -1136,11 +1186,15 @@ Avoid including too many low impact [suggestion] comments. If there are only a f
 
 ## Writing Skills Reference
 ${skillContent}
-${guidanceInjection}`
+${guidanceInjection}
+${roleModelInjection}`
 
   const userPrompt = `Review the following LaTeX text and provide your comments:\n\n${reviewText}`
 
   // Build log-friendly versions: full template but skill content and review text previewed
+  const roleModelLogNote = roleModelTexts.length > 0
+    ? `\n\n## Role Model Papers — Structure & Style Reference\n[${roleModelTexts.length} paper(s), ${roleModelTexts.reduce((s, r) => s + r.text.length, 0)} chars total — content omitted from log]`
+    : ''
   const logSystemPrompt = `You are the "${def.name}" for an academic paper writing tutor.
 ${def.systemPreamble}
 
@@ -1169,13 +1223,15 @@ Avoid including too many low impact [suggestion] comments. If there are only a f
 
 ## Writing Skills Reference
 ${previewText(skillContent)}
-${guidanceInjection}`
+${guidanceInjection}
+${roleModelLogNote}`
 
   const logUserPrompt = `Review the following LaTeX text. For each comment, identify a specific passage that could be strengthened and provide either a concrete suggestion for improvement or a concern the author needs to address:\n\n${previewText(reviewText)}`
 
   console.log(
     `[AI Tutor] [${def.name}] System prompt: ${systemPrompt.length} chars ` +
-    `(${def.skillFiles.length} skill files, guidance: ${guidanceInjection ? 'yes' : 'none'})`
+    `(${def.skillFiles.length} skill files, guidance: ${guidanceInjection ? 'yes' : 'none'}, ` +
+    `role models: ${roleModelTexts.length > 0 ? roleModelTexts.length + ' paper(s)' : 'none'})`
   )
 
   const result = await generateObjectWithRetry({
@@ -1580,6 +1636,7 @@ export async function runFullReview({
   cacheDir,
   docContentMap,
   rootDocPath,
+  roleModelTexts = [],
 })
 {
   const apiKey = process.env.OPENAI_API_KEY
@@ -1609,6 +1666,9 @@ export async function runFullReview({
   console.log(`[AI Tutor]   Model: ${model}`)
   console.log(`[AI Tutor]   merged.tex: ${mergedTex.length} chars`)
   console.log(`[AI Tutor]   docContentMap: ${Object.keys(docContentMap).length} files (${Object.keys(docContentMap).join(', ')})`)
+  if (roleModelTexts.length > 0) {
+    console.log(`[AI Tutor]   Role models: ${roleModelTexts.length} paper(s): ${roleModelTexts.map(rm => `"${rm.name}" (${(rm.text.length / 1000).toFixed(0)}K chars)`).join(', ')}`)
+  }
   console.log('='.repeat(80))
 
   // Phase 0: Parse sections
@@ -1722,7 +1782,8 @@ export async function runFullReview({
       sections,
       classification.sectionMapping,
       classification.typeSpecificGuidance,
-      mergedTex
+      mergedTex,
+      roleModelTexts
     )
     // Wrap with timeout
     return Promise.race([
@@ -1814,6 +1875,9 @@ export async function runFullReview({
   {
     if (!c.comment.startsWith('[AI Tutor]'))
     {
+      // Strip any leading severity tag the LLM may have echoed into the comment text,
+      // since we add [severity] ourselves from the structured field.
+      c.comment = c.comment.replace(/^\[(suggestion|warning|critical)\]\s*/i, '')
       c.comment = `[AI Tutor] [${c.severity}] [${c.agentName}] ${c.comment}`
     }
   }
@@ -1850,6 +1914,7 @@ export async function runFullReview({
       bySeverity: bySev,
     },
     failedAgents,
+    roleModelPapers: roleModelTexts.length > 0 ? roleModelTexts.map(rm => rm.name) : undefined,
   }
 
   // Cache results

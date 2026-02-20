@@ -54,18 +54,27 @@ export interface ReviewResult {
     bySeverity: Record<string, number>
   }
   failedAgents: Array<{ id: string; name: string; reason: string }>
+  roleModelPapers?: string[]
   metadata?: WholeProjectMetadata
 }
 
 export async function runFullReview(
   projectId: string,
   model: string,
-  venue: string = 'arxiv'
+  venue: string = 'arxiv',
+  roleModelTexts: Array<{ name: string; text: string }> = []
 ): Promise<{ success: boolean; result?: ReviewResult; error?: string }> {
   try {
     const result = (await postJSON(
       `/project/${projectId}/ai-tutor-review`,
-      { body: { model, venue } }
+      {
+        body: {
+          model,
+          venue,
+          roleModelTexts:
+            roleModelTexts.length > 0 ? roleModelTexts : undefined,
+        },
+      }
     )) as ReviewResult
     return { success: true, result }
   } catch (error) {

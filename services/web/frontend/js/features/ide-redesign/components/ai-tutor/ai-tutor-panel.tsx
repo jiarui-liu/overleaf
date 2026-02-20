@@ -19,6 +19,10 @@ import OLFormControl from '@/shared/components/ol/ol-form-control'
 import OLFormGroup from '@/shared/components/ol/ol-form-group'
 import OLFormLabel from '@/shared/components/ol/ol-form-label'
 import MaterialIcon from '@/shared/components/material-icon'
+import {
+  extractTextFromPdf,
+  RoleModelPaper,
+} from './extract-pdf-text'
 
 const MODEL_OPTIONS = [
   { value: 'gpt-4o', label: 'GPT-4o' },
@@ -52,10 +56,17 @@ export default function AiTutorPanel() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   // Model selection
-  const [selectedModel, setSelectedModel] = useState('gpt-4o')
+  const [selectedModel, setSelectedModel] = useState('gpt-5.2-chat-latest')
 
   // Venue selection
   const [selectedVenue, setSelectedVenue] = useState('arxiv')
+
+  // Role model papers
+  const [roleModelFiles, setRoleModelFiles] = useState<File[]>([])
+  const [roleModelTexts, setRoleModelTexts] = useState<RoleModelPaper[]>([])
+  const [isExtracting, setIsExtracting] = useState(false)
+  const [extractionError, setExtractionError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Delete comments state
   const [isDeleting, setIsDeleting] = useState(false)
@@ -93,16 +104,33 @@ export default function AiTutorPanel() {
     if (entry.docId !== currentDocumentId) return
     if (currentDocument.doc_id !== currentDocumentId) return
 
-    const snapshot = currentDocument.getSnapshot()
-    if (!snapshot) return
+    // Quick check that the document has content before starting
+    if (!currentDocument.getSnapshot()) return
 
     const applyBatch = async () => {
       let applied = 0
       let skipped = 0
 
       for (const comment of entry.comments) {
-        const idx = snapshot.indexOf(comment.highlightText)
+        // Re-fetch snapshot for each comment to account for position shifts
+        // from previously applied comment operations
+        const currentSnap = currentDocument.getSnapshot()
+        if (!currentSnap) {
+          skipped++
+          continue
+        }
+
+        const idx = currentSnap.indexOf(comment.highlightText)
         if (idx === -1) {
+          skipped++
+          continue
+        }
+
+        // Bounds check: ensure position + highlight length is within document
+        if (idx + comment.highlightText.length > currentSnap.length) {
+          console.warn(
+            `[AI Tutor] Position out of range: idx=${idx}, highlight=${comment.highlightText.length}, doc=${currentSnap.length}`
+          )
           skipped++
           continue
         }
@@ -158,6 +186,62 @@ export default function AiTutorPanel() {
   }, [currentDocument, currentDocumentId, applyTrigger])
 
   // -----------------------------------------------------------------------
+  // Role model paper file handling
+  // -----------------------------------------------------------------------
+  const handleFileSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || [])
+      if (files.length === 0) return
+
+      const newFiles = [...roleModelFiles, ...files].slice(0, 3)
+      setRoleModelFiles(newFiles)
+      setExtractionError(null)
+      setIsExtracting(true)
+
+      try {
+        const extracted: RoleModelPaper[] = await Promise.all(
+          newFiles.map(async file => {
+            const text = await extractTextFromPdf(file)
+            if (text.trim().length < 100) {
+              throw new Error(
+                `"${file.name}" appears to contain no extractable text (scanned/image PDF?).`
+              )
+            }
+            return { name: file.name, text }
+          })
+        )
+        setRoleModelTexts(extracted)
+      } catch (err) {
+        console.error('[AI Tutor] PDF extraction error:', err)
+        setExtractionError(
+          err instanceof Error
+            ? err.message
+            : 'Failed to extract text from PDF.'
+        )
+        setRoleModelFiles(roleModelFiles)
+      } finally {
+        setIsExtracting(false)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
+    },
+    [roleModelFiles]
+  )
+
+  const handleRemoveFile = useCallback(
+    (index: number) => {
+      const newFiles = roleModelFiles.filter((_, i) => i !== index)
+      setRoleModelFiles(newFiles)
+      if (newFiles.length === 0) {
+        setRoleModelTexts([])
+      } else {
+        setRoleModelTexts(roleModelTexts.filter((_, i) => i !== index))
+      }
+      setExtractionError(null)
+    },
+    [roleModelFiles, roleModelTexts]
+  )
+
+  // -----------------------------------------------------------------------
   // Run full review (analyzes project + runs multi-agent review in one call)
   // -----------------------------------------------------------------------
   const handleFullReview = useCallback(async () => {
@@ -171,7 +255,12 @@ export default function AiTutorPanel() {
     setAppliedCount(0)
 
     try {
-      const result = await runFullReview(projectId, selectedModel, selectedVenue)
+      const result = await runFullReview(
+        projectId,
+        selectedModel,
+        selectedVenue,
+        roleModelTexts
+      )
 
       if (!result.success) {
         setError(result.error || 'Review failed.')
@@ -201,7 +290,7 @@ export default function AiTutorPanel() {
     } finally {
       setIsReviewing(false)
     }
-  }, [projectId, selectedModel, selectedVenue])
+  }, [projectId, selectedModel, selectedVenue, roleModelTexts])
 
   // -----------------------------------------------------------------------
   // Apply review comments across all documents automatically
@@ -339,6 +428,104 @@ export default function AiTutorPanel() {
           </OLFormControl>
         </OLFormGroup>
 
+        {/* ── Role Model Papers (Optional) ── */}
+        <OLFormGroup
+          controlId="ai-tutor-role-models"
+          style={{ marginBottom: '12px' }}
+        >
+          <OLFormLabel>
+            Role Model Papers{' '}
+            <span style={{ fontSize: '11px', color: '#6c757d' }}>
+              (optional, up to 3 PDFs)
+            </span>
+          </OLFormLabel>
+          <div
+            style={{
+              border: '1px dashed #adb5bd',
+              borderRadius: '6px',
+              padding: '10px',
+              backgroundColor: '#fdfdfe',
+              marginBottom: '4px',
+            }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              multiple
+              onChange={handleFileSelect}
+              disabled={
+                isReviewing ||
+                isApplying ||
+                isExtracting ||
+                roleModelFiles.length >= 3
+              }
+              style={{ fontSize: '12px', width: '100%' }}
+            />
+            <p
+              style={{ fontSize: '11px', color: '#6c757d', margin: '6px 0 0 0' }}
+            >
+              Upload exemplary papers to compare structure and writing style (not
+              content).
+            </p>
+          </div>
+          {isExtracting && (
+            <div
+              style={{ fontSize: '12px', color: '#0d6efd', marginTop: '4px' }}
+            >
+              Extracting text from PDF(s)...
+            </div>
+          )}
+          {extractionError && (
+            <div
+              style={{ fontSize: '12px', color: '#dc3545', marginTop: '4px' }}
+            >
+              {extractionError}
+            </div>
+          )}
+          {roleModelFiles.length > 0 && (
+            <ul
+              style={{
+                margin: '6px 0 0 0',
+                paddingLeft: '18px',
+                fontSize: '12px',
+              }}
+            >
+              {roleModelFiles.map((file, i) => (
+                <li
+                  key={`${file.name}-${i}`}
+                  style={{ marginBottom: '2px' }}
+                >
+                  {file.name}
+                  {roleModelTexts[i] && (
+                    <span style={{ color: '#6c757d' }}>
+                      {' '}
+                      ({(roleModelTexts[i].text.length / 1000).toFixed(0)}K
+                      chars)
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(i)}
+                    disabled={isReviewing || isApplying}
+                    style={{
+                      marginLeft: '6px',
+                      border: 'none',
+                      background: 'none',
+                      color: '#dc3545',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      padding: '0 2px',
+                    }}
+                  >
+                    remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </OLFormGroup>
+
         {/* ── Full Paper Review ── */}
         <div
           style={{
@@ -446,6 +633,13 @@ export default function AiTutorPanel() {
                     {reviewResult.classification.paperType} —{' '}
                     {reviewResult.classification.paperTypeSummary}
                   </p>
+                  {reviewResult.roleModelPapers &&
+                    reviewResult.roleModelPapers.length > 0 && (
+                      <p style={{ margin: '0 0 4px 0' }}>
+                        <strong>Role models:</strong>{' '}
+                        {reviewResult.roleModelPapers.join(', ')}
+                      </p>
+                    )}
                   <p style={{ margin: '0 0 4px 0' }}>
                     <strong>By category:</strong>
                   </p>
