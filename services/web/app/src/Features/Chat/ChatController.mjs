@@ -528,7 +528,7 @@ async function analyzeWholeProject(req, res) {
 
 async function reviewWholeProject(req, res) {
   const { project_id: projectId } = req.params
-  const { model = 'gpt-4o' } = req.body
+  const { model = 'gpt-4o', venue = 'arxiv' } = req.body
   const userId = SessionManager.getLoggedInUserId(req.session)
 
   // Step 1: Run project analysis (always re-analyze for fresh data)
@@ -707,6 +707,7 @@ async function reviewWholeProject(req, res) {
     const result = await runFullReview({
       projectId,
       model,
+      venue,
       cacheDir,
       docContentMap,
       rootDocPath: normalizedRootPath,
@@ -738,6 +739,7 @@ async function reviewWholeProject(req, res) {
         projectId,
         userId: userId.toString(),
         model,
+        venue,
         paperType: result.classification.paperType,
         paperTypeSummary: result.classification.paperTypeSummary,
         summary: result.summary,

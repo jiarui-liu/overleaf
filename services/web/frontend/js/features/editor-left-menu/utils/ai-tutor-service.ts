@@ -59,12 +59,13 @@ export interface ReviewResult {
 
 export async function runFullReview(
   projectId: string,
-  model: string
+  model: string,
+  venue: string = 'arxiv'
 ): Promise<{ success: boolean; result?: ReviewResult; error?: string }> {
   try {
     const result = (await postJSON(
       `/project/${projectId}/ai-tutor-review`,
-      { body: { model } }
+      { body: { model, venue } }
     )) as ReviewResult
     return { success: true, result }
   } catch (error) {

@@ -17,7 +17,24 @@ Actions the agent should take before giving writing suggestions (e.g., web searc
 
 ---
 
-## 02_paper_types/ — Paper Type Identification
+## 02_venues/ — Target Venue Guidelines
+
+Venue-specific submission requirements, page limits, required sections, and reviewer evaluation criteria. When a venue is selected, a dedicated Venue Reviewer subagent is added to check the paper against that venue's specific expectations.
+
+| File | Modality | Description |
+|------|----------|-------------|
+| `arxiv_default.md` | TEXT | No specific venue; general ML best practices apply |
+| `colm_2026.md` | TEXT | COLM 2026: 9 pages, 6 reviewer dimensions (Empiricism, Impact, Ambition, Understanding, Clarity, Reproducibility) |
+| `icml_2026.md` | TEXT | ICML 2026: 8 pages, mandatory impact statement, 4 dimensions (Soundness, Presentation, Significance, Originality) |
+| `acl_2026.md` | TEXT | ACL 2026: 8/4 pages, ARR system, required Limitations section, scores: Soundness, Excitement, Overall |
+| `aaai_2026.md` | TEXT | AAAI 2026: 7 pages, required Reproducibility Checklist, two-phase review with AI supplement |
+| `iclr_2026.md` | TEXT | ICLR 2026: 9 pages, 4 reviewer questions (Problem, Motivation, Evidence, Significance), rating 0–10 |
+| `emnlp_2025.md` | TEXT | EMNLP 2025: 8/4 pages, ARR system, NLP focus, required Limitations, scores: Soundness, Excitement, Overall |
+| `neurips_2025.md` | TEXT | NeurIPS 2025: 9 pages, required checklist, 4 dimensions (Quality, Clarity, Significance, Originality), 1–6 scale |
+
+---
+
+## 03_paper_types/ — Paper Type Identification
 
 Identify what type of paper is being written, then apply type-specific structural guidance.
 
@@ -33,7 +50,7 @@ Identify what type of paper is being written, then apply type-specific structura
 
 ---
 
-## 03_paper_sections/ — Section-by-Section Writing Guide
+## 04_paper_sections/ — Section-by-Section Writing Guide
 
 Detailed guidance for writing each section, including improvement prompting templates where applicable.
 
@@ -52,7 +69,7 @@ Detailed guidance for writing each section, including improvement prompting temp
 
 ---
 
-## 04_figures_and_tables/ — Visual Elements
+## 05_figures_and_tables/ — Visual Elements
 
 Guidance on creating and reviewing figures, tables, and their captions.
 
@@ -67,7 +84,7 @@ Guidance on creating and reviewing figures, tables, and their captions.
 
 ---
 
-## 05_writing_style/ — Formatting and Language
+## 06_writing_style/ — Formatting and Language
 
 Rules and conventions for professional academic writing.
 

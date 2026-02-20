@@ -761,7 +761,7 @@ const SUBAGENT_DEFS = [
   {
     id: 'abstract',
     name: 'Abstract Reviewer',
-    skillFiles: ['03_paper_sections/abstract.md'],
+    skillFiles: ['04_paper_sections/abstract.md'],
     sectionCategories: ['abstract'],
     guidanceKey: 'abstractFocus',
     textOnly: true,
@@ -771,7 +771,7 @@ const SUBAGENT_DEFS = [
   {
     id: 'introduction',
     name: 'Introduction Reviewer',
-    skillFiles: ['03_paper_sections/introduction.md'],
+    skillFiles: ['04_paper_sections/introduction.md'],
     sectionCategories: ['introduction'],
     guidanceKey: 'introductionFocus',
     textOnly: true,
@@ -782,8 +782,8 @@ const SUBAGENT_DEFS = [
     id: 'related_work',
     name: 'Related Work Reviewer',
     skillFiles: [
-      '03_paper_sections/related_work.md',
-      '05_writing_style/citations_and_references.md',
+      '04_paper_sections/related_work.md',
+      '06_writing_style/citations_and_references.md',
     ],
     sectionCategories: ['related_work'],
     guidanceKey: null,
@@ -795,9 +795,9 @@ const SUBAGENT_DEFS = [
     id: 'methods',
     name: 'Methods Reviewer',
     skillFiles: [
-      '03_paper_sections/methods.md',
-      '03_paper_sections/task_formulation.md',
-      '05_writing_style/math_and_formulas.md',
+      '04_paper_sections/methods.md',
+      '04_paper_sections/task_formulation.md',
+      '06_writing_style/math_and_formulas.md',
     ],
     sectionCategories: ['methods'],
     guidanceKey: 'methodsFocus',
@@ -808,7 +808,7 @@ const SUBAGENT_DEFS = [
   {
     id: 'results',
     name: 'Results Reviewer',
-    skillFiles: ['03_paper_sections/results_and_analysis.md'],
+    skillFiles: ['04_paper_sections/results_and_analysis.md'],
     sectionCategories: ['results'],
     guidanceKey: 'resultsFocus',
     textOnly: true,
@@ -819,9 +819,9 @@ const SUBAGENT_DEFS = [
     id: 'conclusion',
     name: 'Conclusion & Supplements Reviewer',
     skillFiles: [
-      '03_paper_sections/conclusion.md',
-      '03_paper_sections/limitations.md',
-      '03_paper_sections/ethical_considerations.md',
+      '04_paper_sections/conclusion.md',
+      '04_paper_sections/limitations.md',
+      '04_paper_sections/ethical_considerations.md',
     ],
     sectionCategories: ['conclusion'],
     guidanceKey: null,
@@ -833,7 +833,7 @@ const SUBAGENT_DEFS = [
     id: 'appendix',
     name: 'Appendix Reviewer',
     skillFiles: [
-      '03_paper_sections/faq_appendix.md',
+      '04_paper_sections/faq_appendix.md',
     ],
     sectionCategories: ['appendix'],
     guidanceKey: null,
@@ -848,10 +848,10 @@ const SUBAGENT_DEFS = [
     id: 'writing_style',
     name: 'Writing Style Reviewer',
     skillFiles: [
-      '05_writing_style/grammar_and_punctuation.md',
-      '05_writing_style/capitalization_and_acronyms.md',
-      '05_writing_style/general_writing_habits.md',
-      '05_writing_style/citations_and_references.md',
+      '06_writing_style/grammar_and_punctuation.md',
+      '06_writing_style/capitalization_and_acronyms.md',
+      '06_writing_style/general_writing_habits.md',
+      '06_writing_style/citations_and_references.md',
     ],
     sectionCategories: null, // receives full document
     guidanceKey: null,
@@ -863,9 +863,9 @@ const SUBAGENT_DEFS = [
     id: 'latex_formatting',
     name: 'LaTeX & Formatting Reviewer',
     skillFiles: [
-      '05_writing_style/latex_formatting.md',
-      '05_writing_style/math_and_formulas.md',
-      '04_figures_and_tables/table_formatting.md',
+      '06_writing_style/latex_formatting.md',
+      '06_writing_style/math_and_formulas.md',
+      '05_figures_and_tables/table_formatting.md',
     ],
     sectionCategories: null, // receives full document
     guidanceKey: null,
@@ -877,9 +877,9 @@ const SUBAGENT_DEFS = [
     id: 'figures_tables',
     name: 'Figures & Captions Reviewer',
     skillFiles: [
-      '04_figures_and_tables/caption_writing.md',
-      '04_figures_and_tables/figure1_design.md',
-      '04_figures_and_tables/experiment_visualization.md',
+      '05_figures_and_tables/caption_writing.md',
+      '05_figures_and_tables/figure1_design.md',
+      '05_figures_and_tables/experiment_visualization.md',
     ],
     sectionCategories: null, // special: extracts figure/table environments
     guidanceKey: null,
@@ -890,7 +890,7 @@ const SUBAGENT_DEFS = [
   {
     id: 'structure',
     name: 'Structure & Narrative Reviewer',
-    skillFiles: ['05_writing_style/general_writing_habits.md'],
+    skillFiles: ['06_writing_style/general_writing_habits.md'],
     sectionCategories: null, // receives section skeleton
     guidanceKey: 'overallNotes',
     textOnly: true,
@@ -1576,6 +1576,7 @@ export function mapCommentsToDocuments(
 export async function runFullReview({
   projectId,
   model,
+  venue = 'arxiv',
   cacheDir,
   docContentMap,
   rootDocPath,
@@ -1640,7 +1641,7 @@ export async function runFullReview({
   const agentDefs = [...SUBAGENT_DEFS]
 
   // Add a paper-type-specific reviewer if a guideline file exists for this type
-  const paperTypeFile = `02_paper_types/${classification.paperType}_paper.md`
+  const paperTypeFile = `03_paper_types/${classification.paperType}_paper.md`
   const paperTypeGuideline = loadSkill(paperTypeFile)
   if (!paperTypeGuideline.startsWith('[skill file not found'))
   {
@@ -1666,6 +1667,42 @@ export async function runFullReview({
     console.log(
       `[AI Tutor] No paper type guideline file found for "${classification.paperType}", skipping Paper Type Reviewer`
     )
+  }
+
+  // Add a venue-specific reviewer if a venue is selected (not arxiv/default)
+  if (venue && venue !== 'arxiv')
+  {
+    const venueFile = `02_venues/${venue}.md`
+    const venueGuideline = loadSkill(venueFile)
+    if (!venueGuideline.startsWith('[skill file not found'))
+    {
+      agentDefs.push({
+        id: 'venue',
+        name: `Venue Reviewer (${venue})`,
+        skillFiles: [venueFile],
+        sectionCategories: null, // receives full document
+        guidanceKey: 'overallNotes',
+        textOnly: true,
+        systemPreamble:
+          `The paper is being prepared for submission to: ${venue}.\n` +
+          'Review the paper specifically against this venue\'s requirements: ' +
+          'page limits, required sections (e.g. limitations, reproducibility, impact statement), ' +
+          'formatting rules, and the evaluation criteria that reviewers at this venue apply. ' +
+          'Flag any issues that would hurt the paper\'s acceptance at this specific venue. ' +
+          'Focus on venue-specific gaps — do not repeat general writing advice covered by other reviewers.',
+      })
+      console.log(
+        `[AI Tutor] Added dynamic Venue Reviewer for "${venue}" using ${venueFile}`
+      )
+    } else
+    {
+      console.log(
+        `[AI Tutor] No venue guideline file found for "${venue}", skipping Venue Reviewer`
+      )
+    }
+  } else
+  {
+    console.log('[AI Tutor] No specific venue selected, skipping Venue Reviewer')
   }
 
   // Phase 2: Run subagents in parallel

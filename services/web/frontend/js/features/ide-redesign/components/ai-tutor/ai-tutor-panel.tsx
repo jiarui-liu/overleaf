@@ -29,6 +29,17 @@ const MODEL_OPTIONS = [
   { value: 'gpt-5.2-chat-latest', label: 'GPT-5.2 Chat' },
 ]
 
+const VENUE_OPTIONS = [
+  { value: 'arxiv', label: 'arXiv / No Specific Venue' },
+  { value: 'colm_2026', label: 'COLM 2026' },
+  { value: 'icml_2026', label: 'ICML 2026' },
+  { value: 'acl_2026', label: 'ACL 2026' },
+  { value: 'aaai_2026', label: 'AAAI 2026' },
+  { value: 'iclr_2026', label: 'ICLR 2026' },
+  { value: 'emnlp_2025', label: 'EMNLP 2025' },
+  { value: 'neurips_2025', label: 'NeurIPS 2025' },
+]
+
 interface CommentQueue {
   entries: Array<{ docPath: string; docId: string; comments: ReviewComment[] }>
   currentIndex: number
@@ -42,6 +53,9 @@ export default function AiTutorPanel() {
 
   // Model selection
   const [selectedModel, setSelectedModel] = useState('gpt-4o')
+
+  // Venue selection
+  const [selectedVenue, setSelectedVenue] = useState('arxiv')
 
   // Delete comments state
   const [isDeleting, setIsDeleting] = useState(false)
@@ -157,7 +171,7 @@ export default function AiTutorPanel() {
     setAppliedCount(0)
 
     try {
-      const result = await runFullReview(projectId, selectedModel)
+      const result = await runFullReview(projectId, selectedModel, selectedVenue)
 
       if (!result.success) {
         setError(result.error || 'Review failed.')
@@ -187,7 +201,7 @@ export default function AiTutorPanel() {
     } finally {
       setIsReviewing(false)
     }
-  }, [projectId, selectedModel])
+  }, [projectId, selectedModel, selectedVenue])
 
   // -----------------------------------------------------------------------
   // Apply review comments across all documents automatically
@@ -299,6 +313,25 @@ export default function AiTutorPanel() {
             disabled={isReviewing || isApplying}
           >
             {MODEL_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </OLFormControl>
+        </OLFormGroup>
+
+        {/* ── Venue Selection ── */}
+        <OLFormGroup controlId="ai-tutor-venue" style={{ marginBottom: '12px' }}>
+          <OLFormLabel>Target Venue</OLFormLabel>
+          <OLFormControl
+            as="select"
+            value={selectedVenue}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              setSelectedVenue(e.target.value)
+            }
+            disabled={isReviewing || isApplying}
+          >
+            {VENUE_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
