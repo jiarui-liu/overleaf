@@ -265,6 +265,7 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   if (Features.hasFeature('registration-page')) {
     webRouter.get('/register', UserPagesController.registerPage)
+    webRouter.post('/register', UserController.register)
     AuthenticationController.addEndpointToLoginWhitelist('/register')
   }
 

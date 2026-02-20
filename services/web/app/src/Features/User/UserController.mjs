@@ -1,4 +1,5 @@
 import UserHandler from './UserHandler.mjs'
+import UserRegistrationHandler from './UserRegistrationHandler.mjs'
 import UserDeleter from './UserDeleter.mjs'
 import UserGetter from './UserGetter.mjs'
 import { User } from '../../models/User.mjs'
@@ -523,6 +524,38 @@ async function logout(req, res, next) {
   }
 }
 
+async function register(req, res, next) {
+  const { email, password, first_name, last_name } = req.body
+  try {
+    const user = await UserRegistrationHandler.promises.registerNewUser({
+      email,
+      password,
+      first_name: first_name || '',
+      last_name: last_name || '',
+    })
+    await new Promise((resolve, reject) => {
+      req.login(user, { keepSessionInfo: true }, err =>
+        err ? reject(err) : resolve()
+      )
+    })
+    res.redirect('/project')
+  } catch (err) {
+    if (err.message === 'EmailAlreadyRegistered') {
+      res.render('user/register', {
+        title: 'register',
+        errorMessage: 'Email already registered. Please log in.',
+      })
+    } else if (err.message === 'request is not valid') {
+      res.render('user/register', {
+        title: 'register',
+        errorMessage: 'Invalid email or password (min 8 characters).',
+      })
+    } else {
+      next(err)
+    }
+  }
+}
+
 async function expireDeletedUser(req, res, next) {
   const userId = req.params.userId
   await UserDeleter.promises.expireDeletedUser(userId)
@@ -546,4 +579,5 @@ export default {
   expireDeletedUsersAfterDuration: expressify(expireDeletedUsersAfterDuration),
   ensureAffiliationMiddleware: expressify(ensureAffiliationMiddleware),
   ensureAffiliation,
+  register: expressify(register),
 }

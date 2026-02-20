@@ -5,11 +5,57 @@
 - Docker and Docker Compose installed on your Linux machine
 - SSH access to the machine from your local computer
 
+## 0. Install Prerequisites
+
+### tmux
+
+```bash
+sudo apt-get install -y tmux
+```
+
+Verify: `tmux -V`
+
+### Docker (Ubuntu)
+
+```bash
+# Update apt and install dependencies
+sudo apt-get update -y
+sudo apt-get install -y ca-certificates curl gnupg
+
+# Add Docker's official GPG key
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Add Docker apt repository
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# Install Docker Engine and plugins
+sudo apt-get update -y
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Enable and start Docker
+sudo systemctl enable docker
+sudo systemctl start docker
+
+# Allow running Docker without sudo (re-login or run `newgrp docker` to apply)
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+Verify installation:
+
+```bash
+docker --version
+docker compose version
+```
+
 ## 1. Start the Services
 
 ```bash
 cd /home/ubuntu/.jiarui/overleaf/develop
 bin/build
+# or try COMPOSE_PARALLEL_LIMIT=1 bin/build
 docker build texlive -t texlive-full
 bin/up
 ```
@@ -47,7 +93,7 @@ docker compose up -d clsi
 The CLSI container does not include TeX Live by default:
 
 ```bash
-docker compose exec --user root clsi bash -c "apt-get update -qq && apt-get install -y texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended latexmk qpdf"
+docker compose exec --user root clsi bash -c "apt-get update -qq && apt-get install -y texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-lang-european texlive-lang-cjk texlive-lang-all latexmk qpdf"
 ```
 
 This takes a few minutes. Verify installation:
@@ -161,7 +207,7 @@ cd /home/ubuntu/.jiarui/overleaf/develop
 docker compose exec --user root web bash -c "mkdir -p /overleaf/services/web/data/uploads && chmod 777 /overleaf/services/web/data/uploads"
 
 # Install TeX Live (takes a few minutes)
-docker compose exec --user root clsi bash -c "apt-get update -qq && apt-get install -y texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended latexmk qpdf"
+docker compose exec --user root clsi bash -c "apt-get update -qq && apt-get install -y texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-lang-european texlive-lang-cjk texlive-lang-all latexmk qpdf"
 
 # Create admin user (inside web container)
 bin/shell web
