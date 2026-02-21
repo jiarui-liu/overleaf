@@ -4,6 +4,18 @@
 
 Before giving writing suggestions on a section, the agent should find high-quality prototype papers to understand what good writing looks like for this paper's topic.
 
+## Action 0: Check local review sets first
+
+Before searching the web, check the curated review set JSON files in `review_sets/`. These files contain high-quality accepted papers with full reviewer feedback — providing a fast, reviewer-calibrated shortcut to strong examples.
+
+**When to use:** If the paper's target venue is ICLR, NeurIPS, or COLM, always check the corresponding high-quality JSON first.
+
+**How to use:** See `01_setup/review_sets_guide.md` for the full lookup workflow — keyword search, candidate selection, fetching papers via OpenReview links, and what to extract.
+
+**Fallback:** If no topically relevant papers are found in the review sets (e.g., for other venues or niche topics), proceed to Actions 1–7 below.
+
+---
+
 ## Action 1: Identify the paper's topic
 - Identify the paper's topic, keywords, and target venue from the LaTeX source.
 

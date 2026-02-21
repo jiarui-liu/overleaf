@@ -53,3 +53,16 @@ The required checklist addresses:
 - No comparison to relevant baselines or ablations
 - Ethics and societal impact not addressed
 - Overstating significance
+
+## High-Quality Example Papers (Review Sets)
+
+Before reviewing a paper targeting NeurIPS, consult the curated review set JSON file to find **topically similar, highly-rated accepted papers** as reference points.
+
+| File | Use For |
+|------|---------|
+| `review_sets/NeurIPS2025_100_high_quality_papers.json` | Find strong examples — 100 high-quality NeurIPS 2025 accepts |
+| `review_sets/NeurIPS2025_100_low_quality_papers.json` | Identify common weaknesses reviewers flag — use as a negative reference |
+
+**How to use:** Scan titles and abstracts for keyword overlap with the paper under review. Select 2–3 topically relevant entries with the highest `review scores`. Fetch them via their `link` (OpenReview URL) and study their structure, writing quality, and experimental design. Read the `strengths` field to understand what NeurIPS reviewers praised, and the `weaknesses` field to capture patterns to avoid.
+
+See `01_setup/review_sets_guide.md` for the full lookup workflow.

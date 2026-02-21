@@ -11,9 +11,10 @@ This skill library is given to an LLM agent that reviews Overleaf papers and lea
 Actions the agent should take before giving writing suggestions (e.g., web search, fetching prototype papers).
 
 | File | Modality | Description |
-|------|----------|-------------|
-| `finding_prototype_papers.md` | TEXT | Web search for prototype papers from top venues (>=8 pages), literature review completeness check, filtering by credibility, useful tools (Allen AI, CatalyzeX, DBLP, ACL Anthology, Google Scholar PDF Reader) |
+|------|----------|--------------|
+| `finding_prototype_papers.md` | TEXT | **Action 0:** Check local review sets first; then web search for prototype papers from top venues (>=8 pages), literature review completeness check, filtering by credibility, useful tools (Allen AI, CatalyzeX, DBLP, ACL Anthology, Google Scholar PDF Reader) |
 | `example_papers_guide.md` | TEXT+MULTIMODAL | Index of 34 downloaded example papers in `example_papers/`, organized by section/paper type, with what to study in each |
+| `review_sets_guide.md` | TEXT | How to search the curated review set JSON files to find topically relevant high-quality accepted papers; lookup workflow, what to extract from strong examples, and how to use the low-quality set as a negative reference |
 
 ---
 
@@ -96,3 +97,17 @@ Rules and conventions for professional academic writing.
 | `math_and_formulas.md` | TEXT | \mathrm/\bm/\top, formula numbering, equations as sentences, style tips, readability (notation with names, consistency, simplify, macros), punctuation, variable definitions |
 | `capitalization_and_acronyms.md` | TEXT | Lowercase ML terms, abbreviation rules, title vs. sentence capitalization |
 | `general_writing_habits.md` | TEXT | Writing as thinking, write early, shitty first draft, outline method, first sentences tell story, elevator pitch, one key idea, every section tells a story, contributions clarity, terminology consistency, scientific claims, headings, put readers first, listen to readers, fresh perspective |
+
+---
+
+## review_sets/ — Curated Review Datasets
+
+JSON files containing accepted papers from recent top conferences, with full reviewer feedback (scores, strengths, weaknesses). Used by the agent to find topically relevant **high-quality example papers** before web searching. See `01_setup/review_sets_guide.md` for the lookup workflow.
+
+| File | Coverage | Papers |
+|------|----------|---------|
+| `ICLR2025_50_high_quality_papers.json` | ICLR 2025 — high quality | 50 papers (avg score >8, mostly Oral/Spotlight) |
+| `ICLR2025_50_low_quality_papers.json` | ICLR 2025 — low quality | 50 papers (lower scores; use as negative reference) |
+| `NeurIPS2025_100_high_quality_papers.json` | NeurIPS 2025 — high quality | 100 papers |
+| `NeurIPS2025_100_low_quality_papers.json` | NeurIPS 2025 — low quality | 100 papers (lower scores; use as negative reference) |
+| `COLM2025_50_high_quality_papers.json` | COLM 2025 — high quality | 50 papers |

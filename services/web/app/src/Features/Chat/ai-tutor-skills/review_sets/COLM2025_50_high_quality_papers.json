@@ -1,0 +1,737 @@
+{
+    "aV2hQN9vkp": {
+        "venue": "ICLR 2025",
+        "title": "EvalTree: Profiling Language Model Weaknesses via Hierarchical Capability Trees",
+        "link": "https://openreview.net/forum?id=aV2hQN9vkp",
+        "abstract": "An ideal model evaluation should achieve two goals: identifying where the model fails and providing actionable improvement guidance. Toward these goals for language model (LM) evaluations, we formulate the problem of generating a weakness profile, a set of weaknesses expressed in natural language, given an LM's performance on every individual instance in a benchmark. We introduce a suite of quantitative assessments to compare different weakness profiling methods. We also introduce a weakness profiling method EvalTree. EvalTree constructs a capability tree where each node represents a capability described in natural language and is linked to a subset of benchmark instances that specifically evaluate this capability; it then extracts nodes where the LM performs poorly to generate a weakness profile. On the MATH and WildChat benchmarks, we show that EvalTree outperforms baseline weakness profiling methods by identifying weaknesses more precisely and comprehensively. Weakness profiling further enables weakness-guided data collection, and training data collection guided by EvalTree-identified weaknesses improves LM performance more than other data collection strategies. We also show how EvalTree exposes flaws in Chatbot Arena's human-voter-based evaluation practice. To facilitate future work, we provide an interface that allows practitioners to interactively explore the capability trees built by EvalTree.",
+        "decision": "Accept",
+        "review scores": [
+            9,
+            8,
+            8,
+            10
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "jnRBe6zatP": {
+        "venue": "ICLR 2025",
+        "title": "FineWeb2: One Pipeline to Scale Them All \u2014 Adapting Pre-Training Data Processing to Every Language",
+        "link": "https://openreview.net/forum?id=jnRBe6zatP",
+        "abstract": "Pre-training state-of-the-art large language models (LLMs) requires vast amounts of clean and diverse text data. While the open development of large high-quality English pre-training datasets has seen substantial recent progress, training performant multilingual LLMs remains a challenge, in large part due to the inherent difficulty of tailoring filtering and deduplication pipelines to a large number of languages. In this work, we introduce a new pre-training dataset curation pipeline based on FineWeb that can be automatically adapted to support any language. We extensively ablate our pipeline design choices on a set of 9 diverse languages, guided by a set of meaningful and informative evaluation tasks that were chosen through a novel selection process based on measurable criteria. Ultimately, we show that our pipeline can be used to create non-English corpora that produce more performant models than prior datasets. We additionally introduce a straightforward and principled approach to rebalance datasets that takes into consideration both duplication count and quality, providing an additional performance uplift. Finally, we scale our pipeline to over 1000 languages using almost 100 Common Crawl snapshots to produce FineWeb2, a new 20 terabyte (5 billion document) multilingual dataset which we release along with our pipeline, training, and evaluation codebases.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            8,
+            8,
+            9
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "xqIwK9mNkj": {
+        "venue": "ICLR 2025",
+        "title": "Can LLM \"Self-report\"?: Evaluating the Validity of Self-report Scales in Measuring Personality Design in LLM-based Chatbots",
+        "link": "https://openreview.net/forum?id=xqIwK9mNkj",
+        "abstract": "A chatbot\u2019s personality design is key to interaction quality. As chatbots evolved from rule-based systems to those powered by large language models (LLMs), evaluating the effectiveness of their personality design has become increasingly complex, particularly due to the open-ended nature of interactions. A recent and widely adopted method for assessing the personality design of LLM-based chatbots is the use of self-report questionnaires. These questionnaires, often borrowed from established human personality inventories, ask the chatbot to rate itself on various personality traits. Can LLM-based chatbots meaningfully \"self-report\" their personality? We created 500 chatbots with distinct personality designs and evaluated the validity of their self-report personality scores by examining human perceptions formed during interactions with these chatbots. Our findings indicate that the chatbot's answers on human personality scales exhibit weak correlations with both human-perceived personality traits and the overall interaction quality. These findings raise concerns about both the criterion validity and the predictive validity of self-report methods in this context. Further analysis revealed the role of task context and interaction in the chatbot's personality design assessment. We further discuss design implications for creating more contextualized and interactive evaluation.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            7,
+            10
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "lcDRvffeNP": {
+        "venue": "ICLR 2025",
+        "title": "SuperBPE: Space Travel for Language Models",
+        "link": "https://openreview.net/forum?id=lcDRvffeNP",
+        "abstract": "The assumption across nearly all language model (LM) tokenization schemes is that tokens should be subwords, i.e., contained within word boundaries. While providing a seemingly reasonable inductive bias, is this common practice limiting the potential of modern LMs? Whitespace is not a reliable delimiter of meaning, as evidenced by multi-word expressions (e.g., \"by the way\"), crosslingual variation in the number of words needed to express a concept (e.g., \"spacesuit helmet\" in German is \"raumanzughelm\"), and languages that do not use whitespace at all (e.g., Chinese). To explore the potential of tokenization beyond subwords, we introduce a \"superword\" tokenizer, SuperBPE, which incorporates a simple pretokenization curriculum into the byte-pair encoding (BPE) algorithm to first learn subwords, then superwords that bridge whitespace. This brings dramatic improvements in encoding efficiency: when fixing the vocabulary size to 200k, SuperBPE encodes a fixed piece of text with up to 33% fewer tokens than BPE on average. In experiments, we pretrain 8B transformer LMs from scratch while fixing the model size, vocabulary size, and train compute, varying *only* the algorithm for learning the vocabulary. Our model trained with SuperBPE achieves an average +4.0% absolute improvement over the BPE baseline across 30 downstream tasks (including +8.2% on MMLU), while simultaneously requiring 27% less compute at inference time. In analysis, we find that SuperBPE results in segmentations of text that are more uniform in per-token difficulty. Qualitatively, this may be because SuperBPE tokens often capture common multi-word expressions that function semantically as a single unit. SuperBPE is a straightforward, local modification to tokenization that improves both encoding efficiency and downstream performance, yielding better language models overall.",
+        "decision": "Accept",
+        "review scores": [
+            9,
+            9,
+            5,
+            9
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "i1uGbfHHpH": {
+        "venue": "ICLR 2025",
+        "title": "Tulu 3: Pushing Frontiers in Open Language Model Post-Training",
+        "link": "https://openreview.net/forum?id=i1uGbfHHpH",
+        "abstract": "Language model post-training is applied to refine behaviors and unlock\nnew skills across a wide range of language models, but open recipes for\napplying these techniques lag behind proprietary ones. The underlying\ntraining data and recipes for post-training are simultaneously the most im-\nportant pieces of the puzzle and the portion with the least transparency. To\nbridge this gap, we introduce T\u00dcLU 3, a family of fully-open state-of-the-art\npost-trained models, alongside its data, code, and training recipes, serving\nas a comprehensive guide for modern post-training techniques. T\u00dcLU 3,\nwhich builds on Llama 3.1 base models at 8B, 70B and 405B parameters,\nachieves results surpassing the instruct versions of Llama 3.1, Qwen 2.5,\nand Mistral at comparable model sizes. The 405B T\u00dcLU 3 performs compet-\nitively against closed models such as GPT-4o-mini and Claude 3.5-Haiku or\nlarge open models like DeepSeek V3. The training algorithms for our mod-\nels include supervised finetuning (SFT), Direct Preference Optimization\n(DPO), and a novel method we call Reinforcement Learning with Verifiable\nRewards (RLVR). We detail varying the objective, model initialization, gen-\neralization, and over-optimization of this new RL finetuning method. With\nT\u00dcLU 3, we build a multi-task evaluation scheme for post-training with\ndevelopment and unseen evaluations, standard benchmark implementa-\ntions, and substantial decontamination of existing open datasets on said\nbenchmarks. The T\u00dcLU 3 release includes model weights, a demo, and the\ncomplete recipe \u2014 datasets for diverse core skills, a robust toolkit for data\ncuration and evaluation, the training code and infrastructure, and, most\nimportantly, a detailed recipe for reproducing and further adapting the\nT\u00dcLU 3 approach to more domains.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            9,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "a6QsOjr3wo": {
+        "venue": "ICLR 2025",
+        "title": "Can Performant LLMs Be Ethical? Quantifying the Impact of Web Crawling Opt-Outs",
+        "link": "https://openreview.net/forum?id=a6QsOjr3wo",
+        "abstract": "The increasing adoption of web crawling opt-outs by copyright holders of online content raises critical questions about the impact of data compliance on large language model (LLM) performance. However, little is known about how these restrictions (and the resultant filtering of pretraining datasets) affect the capabilities of models trained using these corpora. In this work, we conceptualize this effect as the $\\textit{data compliance gap} (DCG)$, which quantifies the performance difference between models trained on datasets that comply with web crawling opt-outs, and those that do not. We measure the data compliance gap in two settings: pretraining models from scratch and continual pretraining from existing compliant models (simulating a setting where copyrighted data could be integrated later in pertaining). Our experiments with 1.5B models show that, as of January 2025, compliance with web data opt-outs does not degrade general knowledge acquisition (close to 0\\% DCG). However, in specialized domains such as biomedical research, excluding major publishers leads to performance declines. These findings suggest that while general-purpose LLMs can be trained to perform equally well using fully open data, performance in specialized domains may benefit from access to high-quality copyrighted sources later in training.\nOur study provides empirical insights into the long-debated trade-off between data compliance and downstream model performance, informing future discussions on AI training practices and policy decisions.",
+        "decision": "Accept",
+        "review scores": [
+            10,
+            7,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "9rwtezthwo": {
+        "venue": "ICLR 2025",
+        "title": "The Delta Learning Hypothesis: Preference Tuning on Weak Data can Yield Strong Gains",
+        "link": "https://openreview.net/forum?id=9rwtezthwo",
+        "abstract": "Improvements in language models are often driven by increasing the quality of the data we train them on, which can be limiting when strong supervision is not readily available. In this work, we show that paired preference data consisting of individually weak data points can enable gains beyond the strength of each individual sample. We formulate the **delta learning hypothesis** to explain this phenomenon, positing that the relative quality _delta_ between points suffices to drive learning via preference tuning\u2014even when supervised finetuning on the weak data hurts. We validate our hypothesis in controlled experiments and at scale, where we post-train 8B models on preference data generated by pairing a small 3B model's responses with outputs from an even smaller 1.5B model to ensure a meaningful delta. Strikingly, on a standard 11-benchmark evaluation suite (MATH, MMLU, etc.), our simple recipe matches the performance of T\u00fclu 3, a state-of-the-art open model that was tuned from the same base as our model while relying on vastly stronger supervisors (e.g., GPT-4o). Delta learning thus enables simpler and cheaper open recipes for state-of-the-art post-training, highlighting that models can learn a surprising amount from data that might typically be considered weak.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            9,
+            9,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "7evvwwdo3z": {
+        "venue": "ICLR 2025",
+        "title": "R2E-Gym: Procedural Environment Generation and Hybrid Verifiers for Scaling Open-Weights SWE Agents",
+        "link": "https://openreview.net/forum?id=7evvwwdo3z",
+        "abstract": "Improving open-source models on real-world SWE tasks (solving GITHUB issues) faces two key challenges: 1) scalable curation of execution environments to train these models, and, 2) optimal scaling of test-time compute. We introduce R2EGym, the largest procedurally-curated executable gym environment for training real-world SWE-agents, consisting of more than 8.1K tasks. R2EGym is powered by two main contributions: 1) SWEGEN: a synthetic data curation recipe that enables scalable curation of executable environments using test-generation and back-translation directly from commits, thereby reducing reliance on human-written issues or unit tests. We show that this enables more scalable training leading to pass@1 performance of 34.4% on SWE-Bench Verified benchmark with our 32B model. 2) Hybrid Test-time Scaling: we provide an in-depth analysis of two test-time scaling axes; execution-based and execution-free verifiers, demonstrating that they exhibit complementary strengths and limitations. Test-based verifiers suffer from low distinguishability, while execution-free verifiers are biased and often rely on stylistic features. Surprisingly, we find that while each approach individually saturates around 42-43%, significantly higher gains can be obtained by leveraging their complementary strengths. Overall, our approach achieves 51% on the SWE-Bench Verified benchmark, reflecting a new state-of-the-art for open-weight SWE-agents and for the first time showing competitive performance with proprietary models such as o1, o1-preview and sonnet-3.5-v2 (with tools). We will open-source our environments, models, and agent trajectories.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            9,
+            8,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "5PAF7PAY2Y": {
+        "venue": "ICLR 2025",
+        "title": "Understanding R1-Zero-Like Training: A Critical Perspective",
+        "link": "https://openreview.net/forum?id=5PAF7PAY2Y",
+        "abstract": "DeepSeek-R1-Zero has shown that reinforcement learning (RL) at scale can directly enhance the reasoning capabilities of LLMs without supervised fine-tuning. In this work, we critically examine R1-Zero-like training by analyzing its two core components: base models and RL. We investigate a wide range of base models, including DeepSeek-V3-Base, to understand how pretraining characteristics influence RL performance. Our analysis reveals that DeepSeek-V3-Base already exhibit ''Aha moment'', while Qwen2.5 base models demonstrate strong reasoning capabilities even without prompt templates, suggesting potential pretraining biases. Additionally, we identify an optimization bias in Group Relative Policy Optimization (GRPO), which artificially increases response length (especially for incorrect outputs) during training. To address this, we introduce Dr. GRPO, an unbiased optimization method that improves token efficiency while maintaining reasoning performance. Leveraging these insights, we present a minimalist R1-Zero recipe that achieves 43.3% accuracy on AIME 2024 with a 7B base model, establishing a new state-of-the-art.",
+        "decision": "Accept",
+        "review scores": [
+            5,
+            10,
+            9
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "3BmPSFAdq3": {
+        "venue": "ICLR 2025",
+        "title": "Fast Controlled Generation from Language Models with Adaptive Weighted Rejection Sampling",
+        "link": "https://openreview.net/forum?id=3BmPSFAdq3",
+        "abstract": "The dominant approach to generating from language models subject to some constraint is locally constrained decoding (LCD), incrementally sampling tokens at each time step such that the constraint is never violated. Typically, this is achieved through token masking: looping over the vocabulary and excluding non-conforming tokens. There are two important problems with this approach. (i) Evaluating the constraint on every token can be prohibitively expensive---LM vocabularies often exceed 100,000 tokens. (ii) LCD can distort the global distribution over strings, sampling tokens based only on local information, even if they lead down dead-end paths. This work introduces a new algorithm that addresses both these problems. First, to avoid evaluating a constraint on the full vocabulary at each step of generation, we propose an adaptive rejection sampling algorithm that typically requires orders of magnitude fewer constraint evaluations. Second, we show how this algorithm can be extended to produce low-variance, unbiased estimates of importance weights at a very small additional cost---estimates that can be soundly used within previously proposed sequential Monte Carlo algorithms to correct for the myopic behavior of local constraint enforcement. Through extensive empirical evaluation in text-to-SQL, molecular synthesis, goal inference, pattern matching, and JSON domains, we show that our approach is superior to state-of-the-art baselines, supporting a broader class of constraints and improving both runtime and performance. Additional theoretical and empirical analyses show that our method's runtime efficiency is driven by its dynamic use of computation, scaling with the divergence between the unconstrained and constrained LM, and as a consequence, runtime improvements are greater for better models.",
+        "decision": "Accept",
+        "review scores": [
+            9,
+            7,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "mxcCg9YRqj": {
+        "venue": "ICLR 2025",
+        "title": "Fluid Language Model Benchmarking",
+        "link": "https://openreview.net/forum?id=mxcCg9YRqj",
+        "abstract": "Language model (LM) benchmarking faces several challenges: comprehensive evaluations are costly, benchmarks often fail to measure the intended capabilities, and evaluation quality can degrade due to labeling errors and benchmark saturation. Although various strategies have been proposed to mitigate these issues, they tend to address individual aspects in isolation, neglecting broader questions about overall evaluation quality. Here, we introduce Fluid Benchmarking, a new evaluation approach that advances LM benchmarking across multiple dimensions. Inspired by psychometrics, Fluid Benchmarking is based on the insight that the relative value of benchmark items depends on an LM's capability level, suggesting that evaluation should adapt to each LM. Methodologically, Fluid Benchmarking estimates an item response model based on existing LM evaluation results and uses the inferred quantities to select evaluation items dynamically, similar to computerized adaptive testing in education. In our experiments, we compare Fluid Benchmarking against the common practice of random item sampling as well as more sophisticated baselines, including alternative methods grounded in item response theory. We examine four dimensions&mdash;efficiency, validity, variance, and saturation&mdash;and find that Fluid Benchmarking achieves superior performance in all of them (e.g., higher validity and less variance on MMLU with fifty times fewer items). Our analysis shows that the two components of Fluid Benchmarking have distinct effects: item response theory, used to map performance into a latent ability space, increases validity, while dynamic item selection reduces variance. Overall, our results suggest that LM benchmarking can be substantially improved by moving beyond static evaluation.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            9,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "dNW3RGW0gi": {
+        "venue": "ICLR 2025",
+        "title": "Algorithm Discovery With LLMs: Evolutionary Search Meets Reinforcement Learning",
+        "link": "https://openreview.net/forum?id=dNW3RGW0gi",
+        "abstract": "Discovering efficient algorithms for solving complex problems has been an outstanding challenge in mathematics and computer science, requiring substantial human expertise over the years. Recent advancements in evolutionary search with large language models (LLMs) have shown promise in accelerating the discovery of algorithms across various domains, particularly in mathematics and optimization. \nHowever, existing approaches treat the LLM as a static generator, missing the opportunity to update the model with the signal obtained from evolutionary exploration. In this work, we propose to augment LLM-based evolutionary search by continuously refining the search operator $-$ the LLM $-$ through reinforcement learning (RL) fine-tuning. Our method leverages evolutionary search as an exploration strategy to discover improved algorithms, while RL optimizes the LLM policy based on these discoveries. Our experiments on combinatorial optimization tasks demonstrate that integrating RL with evolutionary search accelerates the discovery of superior algorithms, showcasing the potential of RL-enhanced evolutionary strategies for algorithm design.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "ayi7qezU87": {
+        "venue": "ICLR 2025",
+        "title": "PyramidKV: Dynamic KV Cache Compression based on Pyramidal Information Funneling",
+        "link": "https://openreview.net/forum?id=ayi7qezU87",
+        "abstract": "In this study, we investigate whether attention-based information flow inside large language models (LLMs) is aggregated through noticeable patterns for long context processing. Our observations reveal that LLMs aggregate information through Pyramidal Information Funneling where attention is scattering widely in lower layers, progressively consolidating within specific contexts, and ultimately focusing on critical tokens (a.k.a massive activation or attention sink) in higher layers. Motivated by these insights, we developed PyramidKV, a novel and effective KV cache compression method. This approach dynamically adjusts the KV cache size across different layers, allocating more cache in lower layers and less in higher ones, diverging from traditional methods that maintain a uniform KV cache size. Our experimental evaluations, utilizing the LongBench benchmark, show that PyramidKV matches the performance of models with a full KV cache while retaining only 12% of the KV cache, thus significantly reducing memory usage. In scenarios emphasizing memory efficiency, where only 0.7% of the KV cache is maintained, PyramidKV surpasses other KV cache compression techniques, achieving up to a 20.5 absolute accuracy improvement on TREC dataset. In the Needle-in-a-Haystack experiment, PyramidKV outperforms competing methods in maintaining long-context comprehension in LLMs; notably, retaining just 128 KV cache entries enables the LLAMA-3-70B model to achieve 100% Acc. performance, matching that of a full KV cache.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            9,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "4mxQmpnawk": {
+        "venue": "ICLR 2025",
+        "title": "Resona: Improving Context Copying in Linear Recurrence Models with Retrieval",
+        "link": "https://openreview.net/forum?id=4mxQmpnawk",
+        "abstract": "Recent shifts in the space of large language model (LLM) research have shown an increasing focus on novel architectures to compete with prototypical Transformer-based models that have long dominated this space. Linear recurrent models have proven to be a viable competitor due to their computational efficiency. However, such models still demonstrate a sizeable gap compared to Transformers in terms of in-context learning among other tasks that require recalling information from a context. In this work, we introduce __Resona__, a simple and scalable framework for augmenting linear recurrent models with retrieval. __Resona__ augments models with the ability to integrate retrieved information from the provided input context, enabling tailored behaviour to diverse task requirements. Experiments on a variety of linear recurrent models demonstrate that __Resona__-augmented models observe significant performance gains on a variety of synthetic as well as real-world natural language tasks, highlighting its ability to act as a general purpose method to improve the in-context learning and language modelling abilities of linear recurrent LLMs.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            8,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "yxzVanFoij": {
+        "venue": "ICLR 2025",
+        "title": "D\u00e9j\u00e0 Vu: Multilingual LLM Evaluation through the Lens of Machine Translation Evaluation",
+        "link": "https://openreview.net/forum?id=yxzVanFoij",
+        "abstract": "Generation capabilities and language coverage of multilingual large language models (mLLMs) are advancing rapidly. However, evaluation practices for generative abilities of mLLMs are still lacking comprehensiveness, scientific rigor, and consistent adoption across research labs, which undermines their potential to meaningfully guide mLLM development. We draw parallels with machine translation (MT) evaluation, a field that faced similar challenges and has, over decades, developed transparent reporting standards and reliable evaluations for multilingual generative models.\nThrough targeted experiments across key stages of the generative evaluation pipeline, we demonstrate how best practices from MT evaluation can deepen the understanding of quality differences between models. Additionally, we identify essential components for robust meta-evaluation of mLLMs, ensuring the evaluation methods themselves are rigorously assessed. We distill these insights into a checklist of actionable recommendations for mLLM research and development.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            7,
+            8,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "w5DSwn9wTC": {
+        "venue": "ICLR 2025",
+        "title": "How Post-Training Reshapes LLMs: A Mechanistic View on Knowledge, Truthfulness, Refusal, and Confidence",
+        "link": "https://openreview.net/forum?id=w5DSwn9wTC",
+        "abstract": "Post-training is essential for the success of large language models (LLMs), transforming pre-trained base models into more useful and aligned post-trained models. While plenty of works have studied post-training algorithms and evaluated post-training models by their outputs, it remains understudied how post-training reshapes LLMs internally. In this paper, we compare base and post-trained LLMs mechanistically from four perspectives to better understand post-training effects. Our findings across model families and datasets reveal that: (1) Post-training does not change the factual knowledge storage locations, and it adapts knowledge representations from the base model while developing new knowledge representations; (2) Both truthfulness and refusal can be represented by vectors in the hidden representation space. The truthfulness direction is highly similar between the base and post-trained model, and it is effectively transferable for interventions; (3) The refusal direction is different between the base and post-trained models, and it shows limited forward transferability; (4) Differences in confidence between the base and post-trained models cannot be attributed to entropy neurons. Our study provides insights into the fundamental mechanisms preserved and altered during post-training, facilitates downstream tasks like model steering, and could potentially benefit future research in interpretability and LLM post-training. Our code is publicly available at https://github.com/HZD01/post-training-mechanistic-analysis.",
+        "decision": "Accept",
+        "review scores": [
+            9,
+            6,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "ruWC5LIMSo": {
+        "venue": "ICLR 2025",
+        "title": "LongProc: Benchmarking Long-Context Language Models on Long Procedural Generation",
+        "link": "https://openreview.net/forum?id=ruWC5LIMSo",
+        "abstract": "Existing benchmarks for evaluating long-context language models (LCLMs) primarily focus on long-context recall, requiring models to produce short responses based on a few critical snippets while processing thousands of irrelevant tokens.\nWe introduce LongProc (Long Procedural Generation), a new benchmark that requires both the integration of highly dispersed information and long-form generation. LongProc consists of six diverse procedural generation tasks, such as extracting structured information from HTML pages into a TSV format and executing complex search procedures to create travel plans. \nThese tasks challenge LCLMs by testing their ability to follow detailed procedural instructions, synthesize and reason over dispersed information, and generate structured, long-form outputs (up to 8K tokens). \nFurthermore, as these tasks adhere to deterministic procedures and yield structured outputs, they enable reliable rule-based evaluation. \nWe evaluated 23 LCLMs, including instruction-tuned models and recent reasoning models, on LongProc at three difficulty levels, with the maximum number of output tokens set at 500, 2K, and 8K. \nNotably, while all tested models claim a context window size above 32K tokens, open-weight models typically falter on 2K-token tasks, and closed-source models like GPT-4o show significant degradation on 8K-token tasks.\nReasoning models achieve stronger overall performance in long-form generation, benefiting from long CoT training.\nFurther analysis reveals that LCLMs struggle to maintain long-range coherence in long-form generations.\nThese findings highlight critical limitations in current LCLMs and suggest substantial room for improvement.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            8,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "rAR7iPI8Kh": {
+        "venue": "ICLR 2025",
+        "title": "When Splitting Makes Stronger: A Theoretical and Empirical Analysis of Divide-and-Conquer Prompting in LLMs",
+        "link": "https://openreview.net/forum?id=rAR7iPI8Kh",
+        "abstract": "Foundation models, particularly Large Language Models (LLMs), have garnered significant interest due to their wide range of applications.  Yet these models demonstrate notable weaknesses when confronted with tasks involving iterative sub-problems or deliberately misleading content\u2014exemplified by complex arithmetic operations and comprehensive fake news evaluation. \nConventional instructional prompting frequently produces flawed outputs in these scenarios. While research has established that advanced techniques such as Chain-of-Thoughts and Least-to-Most methodologies can dramatically enhance LLM performance, emerging investigation indicates that a more streamlined divide-and-conquer (DaC) approach\u2014which systematically partitions input sequences into discrete components\u2014can yield remarkable improvements for particular problem classes like misinformation assessment. Our investigation rigorously examines the efficacy of DaC prompting strategies and precisely delineates the task characteristics that benefit most from this methodology. Through comprehensive theoretical analysis, we establish formal guarantees for performance enhancement in specifically identified task categories. We validate our theoretical framework through focused empirical studies on large integer multiplication and factual verification tasks, where experimental outcomes robustly confirm our analytical predictions, demonstrating DaC's practical superiority in these challenging domains.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "m4F3kQCfGX": {
+        "venue": "ICLR 2025",
+        "title": "LLM Unlearning Without an Expert Curated Dataset",
+        "link": "https://openreview.net/forum?id=m4F3kQCfGX",
+        "abstract": "Modern large language models often encode sensitive, harmful, or copyrighted knowledge, raising the need for post-hoc unlearning\u2014the ability to remove specific domains of knowledge from a model without full retraining. A major bottleneck in current unlearning pipelines is constructing effective forget sets\u2014datasets that approximate the target domain and guide the model to forget it. In this work, we introduce a scalable, automated approach to generate high-quality forget sets using language models themselves. Our method synthesizes textbook-style data through a structured prompting pipeline, requiring only a domain name as input. Through experiments on unlearning biosecurity, cybersecurity, and Harry Potter novels, we show that our synthetic datasets consistently outperform the baseline synthetic alternatives and are comparable to the expert-curated ones. Additionally, ablation studies reveal that the multi-step generation pipeline significantly boosts data diversity, which in turn improves unlearning utility. Overall, our findings suggest that synthetic datasets offer a promising path toward practical, scalable unlearning for a wide range of emerging domains without the need for manual intervention. We release our code and dataset at [https://github.com/xyzhu123/Synthetic_Textbook](https://github.com/xyzhu123/Synthetic_Textbook).",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            9,
+            7,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "h5SRsDax8v": {
+        "venue": "ICLR 2025",
+        "title": "Both Direct and Indirect Evidence Contribute to Dative Alternation Preferences in Language Models",
+        "link": "https://openreview.net/forum?id=h5SRsDax8v",
+        "abstract": "Language models (LMs) tend to show human-like preferences on a number of syntactic phenomena, but the extent to which these are attributable to direct exposure to the phenomena or more general properties of language is unclear. We explore this with the English dative alternation (DO: \"gave Y the X\" vs. PO: \"gave the X to Y\"), using a controlled rearing paradigm wherein we iteratively train small LMs on systematically manipulated input. We focus on two properties that affect the choice of alternant: length and animacy. Both properties are directly present in datives but also reflect more global tendencies for shorter elements to precede longer ones and animates to precede inanimates. First, by manipulating and ablating datives for these biases in the input, we show that direct evidence of length and animacy matters, but easy-first preferences persist even without such evidence. Then, using LMs trained on systematically perturbed datasets to manipulate global length effects (re-linearizing sentences globally while preserving dependency structure), we find that dative preferences can emerge from indirect evidence. We conclude that LMs' emergent syntactic preferences come from a mix of direct and indirect sources.",
+        "decision": "Accept",
+        "review scores": [
+            6,
+            8,
+            8,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "d9EkgbZZH9": {
+        "venue": "ICLR 2025",
+        "title": "You Cannot Feed Two Birds with One Score: the Accuracy-Naturalness Tradeoff in Translation",
+        "link": "https://openreview.net/forum?id=d9EkgbZZH9",
+        "abstract": "The goal of translation, be it by human or by machine, is, given some text in a source language, to produce text in a target language that simultaneously 1) preserves the meaning of the source text and 2) achieves natural expression in the target language. However, researchers in the machine translation community usually assess translations using a single score intended to capture semantic accuracy and the naturalness of the output simultaneously. In this paper, we build on recent advances in information theory to mathematically prove and empirically demonstrate that such single-score summaries *do not and cannot* give the complete picture of a system's true performance. Concretely, we prove that a tradeoff exists between accuracy and naturalness and demonstrate it by evaluating the submissions to the WMT24 shared task. Our findings help explain well-known empirical phenomena, such as the observation that optimizing translation systems for a specific accuracy metric (like BLEU) initially improves the system's naturalness, while \u201coverfitting\" the system to the metric can significantly degrade its naturalness. Thus, we advocate for a change in how translations are evaluated: rather than comparing systems using a single number, they should be compared on an *accuracy-naturalness plane*.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            7,
+            6,
+            9
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "ayB1PACN5j": {
+        "venue": "ICLR 2025",
+        "title": "RWKV-7 \"Goose\" with Expressive Dynamic State Evolution",
+        "link": "https://openreview.net/forum?id=ayB1PACN5j",
+        "abstract": "We present RWKV-7 \"Goose\", a new sequence modeling architecture with constant memory usage and constant inference time per token. Despite being trained on dramatically fewer tokens than other top models, our 2.9 billion parameter language model achieves a new 3B SoTA on multilingual tasks and matches the current 3B SoTA on English language downstream performance. RWKV-7 introduces a newly generalized formulation of the delta rule with vector-valued gating and in-context learning rates, as well as a relaxed value replacement rule. We show that RWKV-7 can perform state tracking and recognize all regular languages, while retaining parallelizability of training. This exceeds the capabilities of Transformers under standard complexity conjectures, which are limited to $\\mathsf{TC}^0$. To demonstrate RWKV-7's language modeling capability, we also present an extended open source 3.1 trillion token multilingual corpus, and train four RWKV-7 models ranging from 0.19 billion to 2.9 billion parameters on this dataset. To foster openness, reproduction, and adoption, we release our models and dataset component listing at https://huggingface.co/RWKV, and our training and inference code at https://github.com/RWKV/RWKV-LM; all under the Apache 2.0 License.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            8,
+            8,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "SlRtFwBdzP": {
+        "venue": "ICLR 2025",
+        "title": "Assessing Judging Bias in Large Reasoning Models: An Empirical Study",
+        "link": "https://openreview.net/forum?id=SlRtFwBdzP",
+        "abstract": "Large Reasoning Models (LRMs) like DeepSeek-R1 and OpenAI-o1 have demonstrated remarkable reasoning capabilities, raising important questions about their biases in LLM-as-a-judge settings. We present a comprehensive benchmark comparing judging biases between LLMs and LRMs across both subjective preference-alignment datasets and objective fact-based datasets. Through investigation of bandwagon, authority, position, and distraction biases, we uncover four key findings: (1) despite their advanced reasoning capabilities, LRMs remain susceptible to the above biases; (2) LRMs demonstrate better robustness than LLMs specifically on fact-related datasets; (3) LRMs exhibit notable position bias, preferring options in later positions; and (4) we identify a novel \"superficial reflection bias\" where phrases mimicking reasoning (e.g., \"wait, let me think...\") significantly influence model judgments. To address these biases, we design and evaluate three mitigation strategies: specialized system prompts that reduce judging biases by up to 19\\% in preference alignment datasets and 14\\% in fact-related datasets, in-context learning that provides up to 27\\% improvement on preference tasks but shows inconsistent results on factual tasks, and a self-reflection mechanism that reduces biases by up to 10\\% in preference datasets and 16\\% in fact-related datasets, with self-reflection proving particularly effective for LRMs. Our work provides crucial insights for developing more reliable LLM-as-a-Judge frameworks, especially as LRMs become increasingly deployed as automated judges. Our code is available at \\url{https://github.com/Persdre/LRM-bias-evaluation}.",
+        "decision": "Accept",
+        "review scores": [
+            6,
+            9,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "Qu0znWWckM": {
+        "venue": "ICLR 2025",
+        "title": "Do Language Models Agree with Human Perceptions of Suspense in Stories?",
+        "link": "https://openreview.net/forum?id=Qu0znWWckM",
+        "abstract": "Suspense is an affective response to narrative text that is believed to involve complex cognitive processes in humans. Several psychological models have been developed to describe this phenomenon and the circumstances under which text might trigger it. We replicate four seminal psychological studies of human perceptions of suspense, substituting human responses with those of different open-weight and closed-source LMs. We conclude that while LMs can distinguish whether a text is intended to induce suspense in people, LMs cannot accurately estimate the relative amount of suspense within a text sequence as compared to human judgments, nor can LMs properly capture the human perception for the rise and fall of suspense across multiple text segments. We probe the abilities of LM suspense understanding by adversarially permuting the story text to identify what cause human and LM perceptions of suspense to diverge. We conclude that, while LMs can superficially identify and track certain facets of suspense, they do not process suspense in the same way as human readers.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            7,
+            7,
+            9
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "QGJ9ttXLTy": {
+        "venue": "ICLR 2025",
+        "title": "Cognitive Behaviors that Enable Self-Improving Reasoners, or, Four Habits of Highly Effective STaRs",
+        "link": "https://openreview.net/forum?id=QGJ9ttXLTy",
+        "abstract": "Test-time inference has emerged as a powerful paradigm for enabling language models to ``think'' longer and more carefully about complex challenges, much like skilled human experts. While reinforcement learning (RL) can drive self-improvement in language models on verifiable tasks, some models exhibit substantial gains while others quickly plateau. For instance, we find that Qwen-2.5-3B far exceeds Llama-3.2-3B under identical RL training for the game of Countdown. This discrepancy raises a critical question: what intrinsic properties enable effective self-improvement? We introduce a framework to investigate this question by analyzing four key cognitive behaviors --- verification, backtracking, subgoal setting, and backward chaining --- that both expert human problem solvers and successful language models employ. Our study reveals that Qwen naturally exhibits these reasoning behaviors, whereas Llama initially lacks them. In systematic experimentation with controlled behavioral datasets, we find that priming Llama with examples containing these reasoning behaviors enables substantial improvements during RL, matching or exceeding Qwen's performance. Importantly, the presence of reasoning behaviors, rather than correctness of answers, proves to be the critical factor --- models primed with incorrect solutions containing proper reasoning patterns achieve comparable performance to those trained on correct solutions. Finally, leveraging continued pretraining with OpenWebMath data, filtered to amplify reasoning behaviors, enables the Llama model to match Qwen's self-improvement trajectory. Our findings establish a fundamental relationship between initial reasoning behaviors and the capacity for improvement, explaining why some language models effectively utilize additional computation while others plateau.",
+        "decision": "Accept",
+        "review scores": [
+            6,
+            10,
+            7,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "DDtwtoAMjA": {
+        "venue": "ICLR 2025",
+        "title": "On the Effectiveness and Generalization of Race Representations for Debiasing High-Stakes Decisions",
+        "link": "https://openreview.net/forum?id=DDtwtoAMjA",
+        "abstract": "Understanding and mitigating biases is critical for the adoption of large language models (LLMs) in high-stakes decision-making. We introduce Admissions and Hiring, decision tasks with hypothetical applicant profiles where a person's race can be inferred from their name, as simplified test beds for racial bias. We show that Gemma 2B Instruct and LLaMA 3.2 3B Instruct exhibit strong biases. Gemma grants admission to 26% more White than Black applicants, and LLaMA hires 60% more Asian than White applicants. We demonstrate that these biases are resistant to prompt engineering: multiple prompting strategies all fail to promote fairness. In contrast, using distributed alignment search, we can identify \"race subspaces\" within model activations and intervene on them to debias model decisions. Averaging the representation across all races within the subspaces reduces Gemma's bias by 37-57%. Finally, we examine the generalizability of Gemma's race subspaces, and find limited evidence for generalization, where changing the prompt format can affect the race representation. Our work suggests mechanistic approaches may provide a promising venue for improving the fairness of LLMs, but a universal race representation remains elusive.",
+        "decision": "Accept",
+        "review scores": [
+            5,
+            8,
+            7,
+            10
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "8xofWL61S9": {
+        "venue": "ICLR 2025",
+        "title": "CRUST-Bench: A Comprehensive Benchmark for C-to-safe-Rust Transpilation",
+        "link": "https://openreview.net/forum?id=8xofWL61S9",
+        "abstract": "C-to-Rust transpilation is essential for modernizing legacy C code while enhancing safety and interoperability with modern Rust ecosystems. However, no dataset currently exists for evaluating whether a system can transpile C into _safe_ Rust that passes a set of test cases. \nWe introduce CRUST-Bench, a dataset of 100 C repositories, each paired with manually-written interfaces in safe Rust as well as test cases that can be used to validate correctness of the transpilation. By considering entire repositories rather than isolated functions, CRUST-Bench captures the challenges of translating complex projects with dependencies across multiple files. The provided Rust interfaces provide explicit specifications that ensure adherence to idiomatic, memory-safe Rust patterns, while the accompanying test cases enforce functional correctness. We evaluate state-of-the-art large language models (LLMs) on this task and find that safe and idiomatic Rust generation is still a challenging problem for various state-of-the-art methods and techniques. We also provide insights into the errors LLMs usually make in transpiling code from C to safe Rust. The best performing model, OpenAI o3, is able to solve only 19 tasks in a single-shot setting. Improvements on CRUST-Bench would lead to improved transpilation systems that can reason about complex scenarios and help in migrating legacy codebases from C into languages like Rust that ensure memory safety. Code and Data available [here](https://github.com/anirudhkhatry/CRUST-bench).",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            7,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "3vxxB3Ar9r": {
+        "venue": "ICLR 2025",
+        "title": "One ruler to measure them all: Benchmarking multilingual long-context language models",
+        "link": "https://openreview.net/forum?id=3vxxB3Ar9r",
+        "abstract": "We present ONERULER, a multilingual benchmark designed to evaluate long-context language models across 26 languages. ONERULER adapts the English-only RULER benchmark (Hsieh et al., 2024) by including seven synthetic tasks that test both retrieval and aggregation, including new variations of the \"needle-in-a-haystack\" task that allow for the possibility of a nonexistent needle. We create ONERULER through a two-step process, first writing English instructions for each task and then collaborating with native speakers to translate them into 25 additional languages. Experiments with both open-weight and closed LLMs reveal a widening performance gap between low- and high-resource languages as context length increases from 8K to 128K tokens. Surprisingly, English is not the top-performing language on long-context tasks (ranked 6th out of 26), with Polish emerging as the top language. Our experiments also show that many LLMs (particularly OpenAI's o3-mini-high) incorrectly predict the absence of an answer, even in high-resource languages. Finally, in cross-lingual scenarios where instructions and context appear in different languages, performance can fluctuate by up to 20% depending on the instruction language. We hope the release of ONERULER will facilitate future research into improving multilingual and cross-lingual long-context training pipelines.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            9,
+            7,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "mgsS73kvOA": {
+        "venue": "ICLR 2025",
+        "title": "SPIN-Bench: How Well Do LLMs Plan Strategically and Reason Socially?",
+        "link": "https://openreview.net/forum?id=mgsS73kvOA",
+        "abstract": "Reasoning and strategic behavior in social interactions is a hallmark of intelligence. This form of reasoning is significantly more sophisticated than isolated planning or reasoning tasks in static settings (e.g., math problem solving). In this paper, we present Strategic Planning, Interaction, and Negotiation (SPIN-Bench), a new multi-domain evaluation designed to measure the intelligence of strategic planning and social reasoning. While many existing benchmarks focus on narrow planning or single-agent reasoning, SPIN-Bench combines classical PDDL tasks, competitive board games, cooperative card games, and multi-agent negotiation scenarios in one unified framework. The framework includes both a benchmark as well as an arena to simulate and evaluate the variety of social settings to test reasoning and strategic behavior of AI agents. We formulate the benchmark SPIN-Bench by systematically varying action spaces, state complexity, and the number of interacting agents to simulate a variety of social settings where success depends on not only methodical and step-wise decision making, but also conceptual inference of other (adversarial or cooperative) participants. Our experiments reveal that while contemporary LLMs handle basic fact retrieval and short-range planning reasonably well, they encounter significant performance bottlenecks in tasks requiring deep multi-hop reasoning over large state spaces and socially adept coordination under uncertainty. We envision SPIN-Bench as a catalyst for future research on robust multi-agent planning, social reasoning, and human--AI teaming.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "u9JXu4L17I": {
+        "venue": "ICLR 2025",
+        "title": "DeepRetrieval: Hacking Real Search Engines and Retrievers with Large Language Models via Reinforcement Learning",
+        "link": "https://openreview.net/forum?id=u9JXu4L17I",
+        "abstract": "Information retrieval systems are crucial for enabling effective access to large document collections. Recent approaches have leveraged Large Language Models (LLMs) to enhance retrieval performance through query augmentation, but often rely on expensive supervised learning or distillation techniques that require significant computational resources and hand-labeled data. We introduce DeepRetrieval, a reinforcement learning approach that trains LLMs for query generation through trial and error without supervised data for reference query. Using retrieval metrics as rewards, our system generates queries that maximize retrieval performance. DeepRetrieval outperforms state-of-the-art methods on literature search with 65.07\\% (vs.\\ previous SOTA 24.68\\%) recall for publication search and 63.18\\% (vs.\\ previous SOTA 32.11\\%) recall for trial search using real-world search engines. DeepRetrieval also dominates in evidence-seeking retrieval, classic information retrieval and SQL database search. With only 3B parameters, it outperforms industry-leading models like GPT-4o and Claude-3.5-Sonnet on those tasks. These results demonstrate that our reinforcement learning approach offers a more efficient and effective paradigm for information retrieval.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "r61s1FNYlj": {
+        "venue": "ICLR 2025",
+        "title": "TRELLIS: Learning to Compress Key-Value Memory in Attention Models",
+        "link": "https://openreview.net/forum?id=r61s1FNYlj",
+        "abstract": "Transformers, while powerful, suffer from quadratic computational complexity and the ever-growing Key-Value (KV) cache of the attention mechanism. This paper introduces Trellis,  a novel Transformer architecture with bounded memory that learns how to compress its key-value memory dynamically at test time. Trellis replaces the standard KV cache with a fixed-size memory and train a two-pass recurrent compression mechanism to store new keys and values into memory.  To achieve this, it leverages an online gradient descent procedure with a forget gate, enabling the compressed memory to be updated recursively while learning to retain important contextual information from incoming tokens at test time. Extensive experiments on language modeling, common-sense reasoning, recall-intensive tasks, and time series show that the proposed architecture outperforms strong baselines. Notably, its performance gains increase as the sequence length increases, highlighting its potential for long-context applications.",
+        "decision": "Accept",
+        "review scores": [
+            6,
+            10,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "aJDykpJAYF": {
+        "venue": "ICLR 2025",
+        "title": "Shared Global and Local Geometry of Language Model Embeddings",
+        "link": "https://openreview.net/forum?id=aJDykpJAYF",
+        "abstract": "Researchers have recently suggested that models share common representations. In our work, we find numerous geometric similarities across the token embeddings of large language models. First, we find \u201cglobal\u201d similarities: token embeddings often share similar relative orientations. Next, we characterize local geometry in two ways: (1) by using Locally Linear Embeddings, and (2) by defining a simple measure for the intrinsic dimension of each embedding. Both characterizations allow us to find local similarities across token embeddings. Additionally, our intrinsic dimension demonstrates that embeddings lie on a lower dimensional manifold, and that tokens with lower intrinsic dimensions often have semantically coherent clusters, while those with higher intrinsic dimensions do not. Based on our findings, we introduce EMB2EMB, a simple application to linearly transform steering vectors from one language model to another, despite the two models having different dimensions.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "YgwQ7sXPXU": {
+        "venue": "ICLR 2025",
+        "title": "Learning Adaptive Parallel Reasoning with Language Models",
+        "link": "https://openreview.net/forum?id=YgwQ7sXPXU",
+        "abstract": "Scaling inference-time computation has substantially improved the reasoning capabilities of language models. However, existing methods have\nsignificant limitations: serialized chain-of-thought approaches generate\noverly long outputs, leading to increased latency and exhausted context\nwindows, while parallel methods such as self-consistency suffer from insufficient coordination, resulting in redundant computations and limited\nperformance gains. To address these shortcomings, we propose Adaptive Parallel Reasoning (APR), a novel reasoning framework that enables\nlanguage models to orchestrate both serialized and parallel computations\nend-to-end. APR generalizes existing reasoning methods by enabling adaptive multi-threaded inference using spawn() and join() operations. A key\ninnovation is our end-to-end reinforcement learning strategy, optimizing\nboth parent and child inference threads to enhance task success rate without\nrequiring predefined reasoning structures. Experiments on the Countdown\nreasoning task demonstrate significant benefits of APR: (1) higher performance within the same context window (83.4% vs. 60.0% at 4k context);\n(2) superior scalability with increased computation (80.1% vs. 66.6% at 20k\ntotal tokens); (3) improved accuracy at equivalent latency (75.2% vs. 57.3%\nat approximately 5,000ms). APR represents a step towards enabling language models to autonomously optimize their reasoning processes through\nadaptive allocation of computation.",
+        "decision": "Accept",
+        "review scores": [
+            6,
+            9,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "JMxRn7orEk": {
+        "venue": "ICLR 2025",
+        "title": "CUPID: Evaluating Personalized and Contextualized Alignment of LLMs from Interactions",
+        "link": "https://openreview.net/forum?id=JMxRn7orEk",
+        "abstract": "Personalization of Large Language Models (LLMs) often assumes users hold static preferences that reflect globally in all tasks. In reality, humans hold dynamic preferences that change depending on the context. As users interact with an LLM in various contexts, they naturally reveal their contextual preferences, which a model must infer and apply in future contexts to ensure alignment. To assess this, we introduce \ud83c\udff9 CUPID, a benchmark of 756 human-curated interaction session histories between users and LLM-based chat assistants. In each interaction session, the user provides a request in a specific context and expresses their preference through multi-turn feedback. Given a new user request and prior interaction sessions, our benchmark assesses whether LLMs can infer the preference relevant to this request and generate a response that satisfies this preference. With CUPID, we evaluated 10 open and proprietary LLMs, revealing that state-of-the-art LLMs struggle to infer preferences from multi-turn interactions and fail to discern what previous context is relevant to a new request\u2014under 50% precision and 65% recall. Our work highlights the need to advance LLM capabilities for more contextually personalized interactions and proposes CUPID as a resource to drive these improvements.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            8,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "Gu0XSax2YS": {
+        "venue": "ICLR 2025",
+        "title": "Adaptive Layer-skipping in Pre-trained LLMs",
+        "link": "https://openreview.net/forum?id=Gu0XSax2YS",
+        "abstract": "Various layer-skipping methods have been proposed to accelerate token generation in large language models (LLMs). However, limited attention has been paid to a fundamental question: How do computational demands vary across the generation of different tokens? In this work, we introduce FlexiDepth, a method that dynamically adjusts the number of Transformer layers used in text generation. By incorporating a plug-in router and adapter, FlexiDepth enables adaptive computation in LLMs without modifying their original parameters. Applied to Llama-3-8B, it skips 8 out of 32 layers while maintaining full benchmark performance. Our experiments reveal that computational demands in LLMs significantly vary based on token type. Specifically, generating repetitive tokens or fixed phrases requires fewer layers, whereas producing tokens involving computation or high uncertainty requires more layers. Despite the computational savings, FlexiDepth does not yet achieve wall-clock speedup due to varied skipping patterns and I/O overhead. To inspire future work and advance research on practical speedup, we open-sourced FlexiDepth and a dataset documenting its layer allocation patterns.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            8,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "5mICyyD4OF": {
+        "venue": "ICLR 2025",
+        "title": "MixAssist: An Audio-Language Dataset for Co-Creative AI Assistance in Music Mixing",
+        "link": "https://openreview.net/forum?id=5mICyyD4OF",
+        "abstract": "While AI presents significant potential for enhancing music mixing and mastering workflows, current research predominantly emphasizes end-to-end automation or generation, often overlooking the collaborative and instructional dimensions vital for co-creative processes. This gap leaves artists, particularly amateurs seeking to develop expertise, underserved. To bridge this, we introduce MixAssist, a novel audio-language dataset capturing the situated, multi-turn dialogue between expert and amateur music producers during collaborative mixing sessions. Comprising 431 audio-grounded conversational turns derived from 7 in-depth sessions involving 12 producers, MixAssist provides a unique resource for training and evaluating audio-language models that can comprehend and respond to the complexities of real-world music production dialogues. Our evaluations, including automated LLM-as-a-judge assessments and human expert comparisons, demonstrate that fine-tuning models such as Qwen-Audio on MixAssist can yield promising results, with Qwen significantly outperforming other tested models in generating helpful, contextually relevant mixing advice. By focusing on co-creative instruction grounded in audio context, MixAssist enables the development of intelligent AI assistants designed to support and augment the creative process in music mixing.",
+        "decision": "Accept",
+        "review scores": [
+            9,
+            8,
+            5
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "38GehGepDd": {
+        "venue": "ICLR 2025",
+        "title": "RADLADS: Rapid Attention Distillation to Linear Attention Decoders at Scale",
+        "link": "https://openreview.net/forum?id=38GehGepDd",
+        "abstract": "We present Rapid Attention Distillation to Linear Attention Decoders at Scale (RADLADS), a protocol for rapidly converting softmax attention transformers into linear attention decoder models, along with two new RWKV-variant architectures, and models converted from popular Qwen2.5 open source models in 7B, 32B, and 72B sizes. Our conversion process requires only 350-700M tokens, less than 0.005\\% of the token count used to train the original teacher models. Converting to our 72B linear attention model costs less than \\$2,000 USD at today's prices, yet quality at inference remains close to the original transformer. These models achieve state-of-the-art downstream performance across a set of standard benchmarks for linear attention models of their size. We release all our code on GitHub and models on HuggingFace under the Apache 2.0 license, with the exception of our 72B models which are also governed by the Qwen License Agreement.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "zSbecER9il": {
+        "venue": "ICLR 2025",
+        "title": "Can A Society of Generative Agents Simulate Human Behavior and Inform Public Health Policy? A Case Study on Vaccine Hesitancy",
+        "link": "https://openreview.net/forum?id=zSbecER9il",
+        "abstract": "Can we simulate a sandbox society with generative agents to model human behavior, thereby reducing the over-reliance on real human trials for assessing public policies? In this work, we investigate the feasibility of simulating health-related decision-making, using vaccine hesitancy, defined as the delay in acceptance or refusal of vaccines despite the availability of vaccination services (MacDonald, 2015), as a case study. To this end, we introduce the VacSim framework with 100 generative agents powered by Large Language Models (LLMs). VacSim simulates vaccine policy outcomes with the following steps: 1) instantiate a population of agents with demographics based on census data; 2) connect the agents via a social network and model vaccine attitudes as a function of social dynamics and disease-related information; 3) design and evaluate various public health interventions aimed at mitigating vaccine hesitancy. To align with real-world results, we also introduce simulation warmup and attitude modulation to adjust agents' attitudes. We propose a series of evaluations to assess the reliability of various LLM simulations. Experiments indicate that models like Llama and Qwen can simulate aspects of human behavior but also highlight real-world alignment challenges, such as inconsistent responses with demographic profiles. This early exploration of LLM-driven simulations is not meant to serve as definitive policy guidance; instead, it serves as a call for action to examine social simulation for policy development.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "zFz1BJu211": {
+        "venue": "ICLR 2025",
+        "title": "QUDsim: Quantifying Discourse Similarities in LLM-Generated Text",
+        "link": "https://openreview.net/forum?id=zFz1BJu211",
+        "abstract": "As large language models become increasingly capable at various tasks including writing, the need to generate unique and creative content arises. Although LLMs have the ability to generate text covering diverse topics, there is an overall sense of repetitiveness across texts that we aim to formalize. Such familiarity between documents is induced through the persistence of underlying discourse structures. However, existing similarity metrics dependent on lexical overlap and syntactic patterns are overly sensitive to volatility in content overlap, thus making them unsuitable for detecting $\\textit{structural}$ similarities. We introduce an abstraction based on linguistics theories in Questions Under Discussion (QUD) and question semantics to help quantify differences in discourse progression. We then use this framework to build $\\textbf{QUDsim}$, a similarity metric that can detect discursive parallels between documents. Using QUDsim, we find that LLMs often reuse discourse structures (more so than humans) to create seemingly new documents by simply swapping content. Furthermore, LLMs are not only repetitive and structurally uniform, but are also divergent from human authors in the types of structures they use.",
+        "decision": "Accept",
+        "review scores": [
+            6,
+            8,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "vgmiRvpCLA": {
+        "venue": "ICLR 2025",
+        "title": "Agree to Disagree? A Meta-Evaluation of LLM Misgendering",
+        "link": "https://openreview.net/forum?id=vgmiRvpCLA",
+        "abstract": "Numerous methods have been proposed to measure LLM misgendering, including probability-based evaluations (e.g., automatically with templatic sentences) and generation-based evaluations (e.g., with automatic heuristics or human validation).\nHowever, it has gone unexamined whether these evaluation methods have convergent validity, that is, whether their results align.\nTherefore, we conduct a systematic meta-evaluation of these methods across three existing datasets for LLM misgendering.\nWe propose a method to transform each dataset to enable parallel probability- and generation-based evaluation.\nThen, by automatically evaluating a suite of 6 models from 3 families, we find that these methods can disagree with each other at the instance, dataset, and model levels, conflicting on 20.2% of evaluation instances.\nFinally, with a human evaluation of 2400 LLM generations, we show that misgendering behaviour is complex and goes far beyond pronouns, which automatic evaluations are not currently designed to capture, suggesting essential disagreement with human evaluations.\nBased on our findings, we provide recommendations for future evaluations of LLM misgendering.\nOur results are also more widely relevant, as they call into question broader methodological conventions in LLM evaluation, which often assume that different evaluation methods agree.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "vSMCBUgrQj": {
+        "venue": "ICLR 2025",
+        "title": "SimpleRL-Zoo: Investigating and Taming Zero Reinforcement Learning for Open Base Models in the Wild",
+        "link": "https://openreview.net/forum?id=vSMCBUgrQj",
+        "abstract": "DeepSeek-R1 has shown that long chain-of-thought (CoT) reasoning can naturally emerge through a simple reinforcement learning (RL) framework with rule-based rewards, where the training may directly start from the base models\u2014a paradigm referred to as zero RL training. Most recent efforts to reproduce zero RL training have primarily focused on the Qwen2.5 model series, which may not be representative as we find the base models already exhibit strong instruction-following and self-reflection abilities.\nIn this work, we investigate zero RL training across 10 diverse base models, spanning different families and sizes including LLama3-8B, Mistral-7B/24B, DeepSeek-Math-7B, Qwen2.5-math-7B, and all Qwen2.5 models from 0.5B to 32B. \nLeveraging several key design strategies\u2014such as adjusting format reward and controlling query difficulty\u2014we achieve substantial improvements in both reasoning accuracy and response length across most settings.\nHowever, by carefully monitoring the training dynamics, we observe that different base models exhibit distinct patterns during training. For instance, the increased response length does not always correlate with the emergence of certain cognitive behaviors such as verification (i.e., the \"aha moment\"). Notably, we observe the ``aha moment'' for the first time in small models not from the Qwen family.\nWe share the key designs that enable successful zero RL training, along with our findings and practices. \nTo facilitate further research, we open-source the  code, models, and analysis tools.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            6,
+            8,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "nqX9UYW9Af": {
+        "venue": "ICLR 2025",
+        "title": "CITER: Collaborative Inference for Efficient Large Language Model Decoding with Token-Level Routing",
+        "link": "https://openreview.net/forum?id=nqX9UYW9Af",
+        "abstract": "Large language models have achieved remarkable success in various tasks but suffer from high computational costs during inference, limiting their deployment in resource-constrained applications. To address this issue, we propose a novel Collaborative Inference with Token-lEvel Routing (CITER) framework that enables efficient collaboration between small and large language models (SLMs & LLMs) through a token-level routing strategy. Specifically, CITER routes non-critical tokens to an SLM for efficiency and routes critical tokens to an LLM for generalization quality. We formulate router training as a policy optimization, where the router receives rewards based on both the quality of predictions and the inference costs of generation. This allows the router to learn to predict token-level routing scores and make routing decisions based on both the current token and the future impact of its decisions. To further accelerate the reward evaluation process, we introduce a shortcut which significantly reduces the costs of the reward estimation and improving the practicality of our approach. Extensive experiments on five benchmark datasets demonstrate that CITER reduces the inference costs while preserving high-quality generation, offering a promising solution for real-time and resource-constrained applications.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "fcRcl1EXc4": {
+        "venue": "ICLR 2025",
+        "title": "UNVEILING: What Makes Linguistics Olympiad Puzzles Tricky for LLMs?",
+        "link": "https://openreview.net/forum?id=fcRcl1EXc4",
+        "abstract": "Large language models (LLMs) have demonstrated potential in reasoning tasks, but their performance on linguistics puzzles remains consistently poor. These puzzles, often derived from Linguistics Olympiad (LO) contests, provide a minimal contamination environment to assess LLMs' linguistic reasoning abilities across low-resource languages. This work analyses LLMs' performance on 629 problems across 41 low-resource languages by labelling each with linguistically informed features to unveil weaknesses. Our analyses show that LLMs struggle with puzzles involving higher morphological complexity and perform better on puzzles involving linguistic features that are also found in English. We also show that splitting words into morphemes as a pre-processing step improves solvability, indicating a need for more informed and language-specific tokenisers. These findings thus offer insights into some challenges in linguistic reasoning and modelling of low-resource languages.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            7,
+            6,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "akHq1QcqeZ": {
+        "venue": "ICLR 2025",
+        "title": "CLIPPER: Compression enables long-context synthetic data generation",
+        "link": "https://openreview.net/forum?id=akHq1QcqeZ",
+        "abstract": "LLM developers are increasingly reliant on synthetic data, but generating high-quality data for complex long-context reasoning tasks remains challenging. We introduce CLIPPER, a compression-based approach for generating synthetic data tailored to narrative claim verification\u2014a task that requires reasoning over a book to verify a given claim. Instead of generating claims directly from the raw text of the book, which results in artifact-riddled claims, CLIPPER first compresses the book into chapter outlines and book summaries and then uses these intermediate representations to generate complex claims and corresponding chain-of-thoughts. Compared to naive approaches, CLIPPER produces claims that are more valid, grounded, and complex. Using CLIPPER, we synthesize a dataset of 19K claims paired with source books and chain-of-thought reasoning, and use it to fine-tune three open-weight models. Our best model achieves breakthrough results on narrative claim verification (from 28% to 76% accuracy on our test set) and sets a new state-of-the-art for sub-10B models on the NoCha leaderboard. Further analysis shows that our models generate more detailed and grounded chain-of-thought reasoning while also improving performance on other narrative understanding tasks (e.g., NarrativeQA).",
+        "decision": "Accept",
+        "review scores": [
+            6,
+            8,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "ZSMnX3LBva": {
+        "venue": "ICLR 2025",
+        "title": "In-Context Occam\u2019s Razor: How Transformers Prefer Simpler Hypotheses on the Fly",
+        "link": "https://openreview.net/forum?id=ZSMnX3LBva",
+        "abstract": "In-context learning (ICL) enables transformers to adapt to new tasks through contextual examples without parameter updates. While existing research has typically studied ICL in fixed-complexity setups, real-world language models encounter tasks of diverse complexity levels. This paper investigates how transformers navigate hierarchical task structures where higher-complexity categories can perfectly represent any pattern generated by simpler ones. \nWe design testbeds based on Markov chains and linear regression that reveal transformers not only identify the correct complexity level for each task but also accurately infer the corresponding parameters\u2014even when the in-context examples fit multiple complexity hypotheses. Notably, when presented with data generated by simpler processes, transformers consistently favor the least complex sufficient explanation. We theoretically explain this behavior through a Bayesian framework, demonstrating that transformers effectively implement an in-context Bayesian Occam's razor by balancing model fit against complexity penalties.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "XNQHMYsUHf": {
+        "venue": "ICLR 2025",
+        "title": "To Backtrack or Not to Backtrack: When Sequential Search Limits Model Reasoning",
+        "link": "https://openreview.net/forum?id=XNQHMYsUHf",
+        "abstract": "Recent advancements in large language models (LLMs) have significantly improved their reasoning abilities, particularly through techniques involving search and backtracking. Backtracking naturally scales test-time compute by enabling sequential, linearized exploration via long chain-of-thought (CoT) generation. However, this is not the only strategy for scaling test time-compute: parallel sampling with best-of-n selection provides an alternative that generates diverse solutions simultaneously. Despite the growing adoption of sequential search, its advantages over parallel sampling\u2014especially under a fixed compute budget\u2014remain poorly understood. In this paper, we systematically compare these two approaches on two challenging reasoning tasks: CountDown and Sudoku. Surprisingly, we find that sequential search underperforms parallel sampling on CountDown but outperforms it on Sudoku, suggesting that backtracking is not universally beneficial. We identify two factors that can cause backtracking to degrade performance: (1) training on fixed search traces can lock models intro suboptimal strategies, and (2) explicit CoT supervision can discourage \u2018implicit\u2018 (non verbalized) reasoning. Extending our analysis to reinforcement learning (RL), we show that models with backtracking capabilities benefit significantly from RL fine-tuning, while models without backtracking see limited, mixed gains. Together, these findings challenge the assumption that backtracking universally enhances LLM reasoning, instead revealing a complex interaction between task structure, training data, model scale, and learning paradigm.",
+        "decision": "Accept",
+        "review scores": [
+            6,
+            8,
+            6,
+            9
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "TMB9SKqit9": {
+        "venue": "ICLR 2025",
+        "title": "LLM Can be a Dangerous Persuader: Empirical Study of Persuasion Safety in Large Language Models",
+        "link": "https://openreview.net/forum?id=TMB9SKqit9",
+        "abstract": "Recent advancements in Large Language Models (LLMs) have enabled them to approach human-level persuasion capabilities. However, such potential also raises concerns about the safety risks of LLM-driven persuasion, particularly their potential for unethical influence through manipulation, deception, exploitation of vulnerabilities, and many other harmful tactics. In this work, we present a systematic investigation of LLM persuasion safety through two critical aspects: (1) whether LLMs appropriately reject unethical persuasion tasks and avoid unethical strategies during execution, including cases where the initial persuasion goal appears ethically neutral, and (2) how influencing factors like personality traits and external pressures affect their behavior. To this end, we introduce PersuSafety, the first comprehensive framework for the assessment of persuasion safety which consists of three stages, i.e., persuasion scene creation, persuasive conversation simulation, and persuasion safety assessment. PersuSafety covers 6 diverse unethical persuasion topics and 15 common unethical strategies. Through extensive experiments across 8 widely used LLMs, we observe significant safety concerns in most LLMs, including failing to identify harmful persuasion tasks and leveraging various unethical persuasion strategies. Our study calls for more attention to improve safety alignment in progressive and goal-driven conversations such as persuasion.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            6,
+            7,
+            8
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "Rwhi91ideu": {
+        "venue": "ICLR 2025",
+        "title": "Search-R1: Training LLMs to Reason and Leverage Search Engines with Reinforcement Learning",
+        "link": "https://openreview.net/forum?id=Rwhi91ideu",
+        "abstract": "Efficiently acquiring external knowledge and up-to-date information is essential for effective reasoning and text generation in large language models (LLMs). \nPrompting advanced LLMs with reasoning capabilities to use search engines during inference is often suboptimal, as the LLM might not fully possess the capability on how to interact optimally with the search engine. \nThis paper introduces \\Ours, an extension of reinforcement learning (RL) for reasoning frameworks where the LLM learns to autonomously generate (multiple) search queries during step-by-step reasoning with real-time retrieval.\n\\Ours optimizes LLM reasoning trajectories with multi-turn search interactions, leveraging retrieved token masking for stable RL training and a simple outcome-based reward function.\nExperiments on seven question-answering datasets show that \\Ours improves performance by 41\\% (Qwen2.5-7B) and 20\\% (Qwen2.5-3B) over RAG baselines under the same setting. This paper further provides empirical insights into RL optimization methods, LLM choices, and response length dynamics in retrieval-augmented reasoning.",
+        "decision": "Accept",
+        "review scores": [
+            9,
+            7,
+            7,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "NC6G1KCxlt": {
+        "venue": "ICLR 2025",
+        "title": "Phased Training for LLM-powered Text Retrieval Models Beyond Data Scaling",
+        "link": "https://openreview.net/forum?id=NC6G1KCxlt",
+        "abstract": "Current efforts in building large language models (LLMs) based general-purpose text retrieval models primarily focus on architectural design and training data scaling. However, significant challenges remain in effectively modeling diverse retrieval tasks and domains, including multi-task conflict, data imbalance, and training efficiency. To address these challenges, we propose a novel phased training framework for text retrieval, featuring:  (1) robust foundation modeling with core relevance data, (2) progressive specialization through modular task adaptation, and (3) knowledge fusion via weight interpolation based model merging. This framework simultaneously optimizes both embedding and reranking models through a unified architecture. We also present an efficient yet scalable data synthesis pipeline to expand training data, based on open-source LLMs. These synthetic data can be efficiently incorporated into the phased training framework, enhancing model performance. We identify five distinct types of retrieval tasks, \\ie basic relevance retrieval, code retrieval, tool retrieval, complex instruction-based retrieval, as well as reasoning-intensive retrieval, conducting extensive experiments. Our method achieves the best performance across MTEB and various retrieval benchmarks of the five task types. Further analysis demonstrates the effectiveness and efficiency of our proposed training framework and data synthesis pipeline.",
+        "decision": "Accept",
+        "review scores": [
+            7,
+            8,
+            7,
+            7
+        ],
+        "strengths": [],
+        "weaknesses": []
+    },
+    "KtGsJm8bOC": {
+        "venue": "ICLR 2025",
+        "title": "MSRS: Evaluating Multi-Source Retrieval-Augmented Generation",
+        "link": "https://openreview.net/forum?id=KtGsJm8bOC",
+        "abstract": "Retrieval-augmented systems are typically evaluated in settings where information required to answer the query can be found within a single source or the answer is short-form or factoid-based. However, many real-world applications demand the ability to integrate and summarize information scattered across multiple sources, where no single source is sufficient to respond to the user's question. In such settings, the retrieval component of a RAG pipeline must recognize a variety of relevance signals, and the generation component must connect and synthesize information across multiple sources. We present a scalable framework for constructing evaluation benchmarks that challenge RAG systems to integrate information across distinct sources and generate long-form responses. Using our framework, we build two new benchmarks on Multi-Source Retrieval and Synthesis: MSRS-Story and MSRS-Meet, representing narrative synthesis and summarization tasks, respectively, that require retrieval from large collections. Our extensive experiments with various RAG pipelines\u2014including sparse and dense retrievers combined with frontier LLMs\u2014reveal that generation quality is highly dependent on retrieval effectiveness, which varies greatly by task. While multi-source synthesis proves challenging even in an oracle retrieval setting, we find that reasoning models significantly outperform standard LLMs at this distinct step.",
+        "decision": "Accept",
+        "review scores": [
+            8,
+            7,
+            8,
+            6
+        ],
+        "strengths": [],
+        "weaknesses": []
+    }
+}
