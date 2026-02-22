@@ -376,7 +376,7 @@ export default function AiTutorPanel() {
     reviewResult?.metadata
 
   return (
-    <div className="ai-tutor-panel">
+    <div className="ai-tutor-panel" style={{ color: 'var(--content-primary-themed)' }}>
       <RailPanelHeader title="AI Tutor" />
       <div style={{ padding: '12px 16px' }}>
         {/* ── Delete AI Tutor Comments ── */}
@@ -435,16 +435,16 @@ export default function AiTutorPanel() {
         >
           <OLFormLabel>
             Role Model Papers{' '}
-            <span style={{ fontSize: '11px', color: '#6c757d' }}>
+            <span style={{ fontSize: '11px', opacity: 0.65 }}>
               (optional, up to 3 PDFs)
             </span>
           </OLFormLabel>
           <div
             style={{
-              border: '1px dashed #adb5bd',
+              border: '1px dashed var(--border-divider-themed)',
               borderRadius: '6px',
               padding: '10px',
-              backgroundColor: '#fdfdfe',
+              backgroundColor: 'var(--bg-secondary-themed)',
               marginBottom: '4px',
             }}
           >
@@ -463,7 +463,7 @@ export default function AiTutorPanel() {
               style={{ fontSize: '12px', width: '100%' }}
             />
             <p
-              style={{ fontSize: '11px', color: '#6c757d', margin: '6px 0 0 0' }}
+              style={{ fontSize: '11px', color: 'var(--content-secondary-themed)', margin: '6px 0 0 0' }}
             >
               Upload exemplary papers to compare structure and writing style (not
               content).
@@ -471,14 +471,14 @@ export default function AiTutorPanel() {
           </div>
           {isExtracting && (
             <div
-              style={{ fontSize: '12px', color: '#0d6efd', marginTop: '4px' }}
+              style={{ fontSize: '12px', color: 'var(--blue-50)', marginTop: '4px' }}
             >
               Extracting text from PDF(s)...
             </div>
           )}
           {extractionError && (
             <div
-              style={{ fontSize: '12px', color: '#dc3545', marginTop: '4px' }}
+              style={{ fontSize: '12px', color: 'var(--red-50)', marginTop: '4px' }}
             >
               {extractionError}
             </div>
@@ -498,7 +498,7 @@ export default function AiTutorPanel() {
                 >
                   {file.name}
                   {roleModelTexts[i] && (
-                    <span style={{ color: '#6c757d' }}>
+                    <span style={{ opacity: 0.65 }}>
                       {' '}
                       ({(roleModelTexts[i].text.length / 1000).toFixed(0)}K
                       chars)
@@ -512,7 +512,7 @@ export default function AiTutorPanel() {
                       marginLeft: '6px',
                       border: 'none',
                       background: 'none',
-                      color: '#dc3545',
+                      color: 'var(--red-50)',
                       cursor: 'pointer',
                       fontSize: '12px',
                       padding: '0 2px',
@@ -531,9 +531,9 @@ export default function AiTutorPanel() {
           style={{
             marginBottom: '16px',
             padding: '12px',
-            backgroundColor: '#f8f9fa',
+            backgroundColor: 'var(--bg-secondary-themed)',
             borderRadius: '6px',
-            border: '1px solid #dee2e6',
+            border: '1px solid var(--border-divider-themed)',
           }}
         >
           <span
@@ -548,7 +548,7 @@ export default function AiTutorPanel() {
             <strong>Full Paper Review</strong>
           </span>
           <p
-            style={{ fontSize: '13px', color: '#333', margin: '0 0 8px 0' }}
+            style={{ fontSize: '13px', color: 'var(--content-secondary-themed)', margin: '0 0 8px 0' }}
           >
             Analyzes your project structure, classifies your paper type, then
             runs parallel reviewers for each section and aspect.
@@ -568,9 +568,9 @@ export default function AiTutorPanel() {
             <div
               style={{
                 fontSize: '12px',
-                color: '#0d6efd',
+                color: 'var(--blue-50)',
                 padding: '6px 8px',
-                backgroundColor: '#e7f1ff',
+                backgroundColor: 'var(--bg-tertiary-themed)',
                 borderRadius: '4px',
                 marginBottom: '6px',
               }}
@@ -596,9 +596,9 @@ export default function AiTutorPanel() {
                 <div
                   style={{
                     fontSize: '12px',
-                    color: '#0d6efd',
+                    color: 'var(--blue-50)',
                     padding: '6px 8px',
-                    backgroundColor: '#e7f1ff',
+                    backgroundColor: 'var(--bg-tertiary-themed)',
                     borderRadius: '4px',
                     marginBottom: '6px',
                   }}
@@ -610,7 +610,7 @@ export default function AiTutorPanel() {
                 <p
                   style={{
                     fontSize: '12px',
-                    color: '#198754',
+                    color: 'var(--green-50)',
                     margin: '0 0 6px 0',
                   }}
                 >
@@ -624,7 +624,7 @@ export default function AiTutorPanel() {
           {reviewResult && (
             <div style={{ marginTop: '4px', fontSize: '12px' }}>
               <details>
-                <summary style={{ cursor: 'pointer', color: '#222' }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--content-primary-themed)' }}>
                   Review summary ({reviewResult.summary.total} comments)
                 </summary>
                 <div style={{ padding: '6px 0' }}>
@@ -696,7 +696,7 @@ export default function AiTutorPanel() {
                       <p
                         style={{
                           margin: '0 0 4px 0',
-                          color: '#dc3545',
+                          color: 'var(--red-50)',
                         }}
                       >
                         <strong>Skipped agents:</strong>
@@ -726,7 +726,7 @@ export default function AiTutorPanel() {
           {projectMetadata && (
             <div style={{ marginTop: '4px', fontSize: '12px' }}>
               <details>
-                <summary style={{ cursor: 'pointer', color: '#222' }}>
+                <summary style={{ cursor: 'pointer', color: 'var(--content-primary-themed)' }}>
                   File details ({projectMetadata.categories.texFiles.count} TeX,{' '}
                   {projectMetadata.categories.figures.count} figures,{' '}
                   {projectMetadata.mergedTexLength.toLocaleString()} chars
