@@ -101,3 +101,9 @@ Finally, output the improved text altogether.
 - **Bad Example (Critique):** "It is not clear what problem the paper is dealing with... The definition of a 'system' is not clear."
 - **Good Example (Praise):** "The paper clearly lays out the problem of selection bias... and why certain natural approaches are not sufficient."
 
+### 4. One Key Idea Per Paper
+The paper should convey one central message. If there are multiple distinct ideas, they may belong in separate papers rather than one combined paper. The core contribution should be distillable into a single "elevator pitch" sentence that captures what is new. Check whether the introduction clearly establishes this single key idea.
+
+### 5. Clarity on Contributions
+Be extremely clear on contributions. Never blur the lines between what had been done before and what this paper does. The reader should always know whose work is being described. The contributions list should make it unambiguous what is novel.
+

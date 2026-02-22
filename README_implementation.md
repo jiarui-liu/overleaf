@@ -2,7 +2,7 @@
 
 ## Overview
 
-The AI Tutor is an Overleaf plugin that provides automated paper review using a multi-agent architecture. It analyzes the full project structure, classifies the paper type, and runs parallel reviewer subagents — each specialized in a different aspect of academic writing — then posts inline comments to the Overleaf review panel. Users can optionally target a specific venue for venue-aware feedback and upload role model PDFs for structure/style comparison.
+The AI Tutor is an Overleaf plugin that provides automated paper review using a multi-agent architecture. It analyzes the full project structure, classifies the paper type, and runs parallel reviewer subagents — each specialized in a different aspect of academic writing — then deduplicates overlapping comments and posts inline comments to the Overleaf review panel. Users can optionally target a specific venue for venue-aware feedback and upload role model PDFs for structure/style comparison.
 
 ## Architecture
 
@@ -39,8 +39,9 @@ The AI Tutor is an Overleaf plugin that provides automated paper review using a 
 │  │                                                          ││
 │  │  Phase 0: parseSections()     — regex, no LLM            ││
 │  │  Phase 1: classifyPaper()     — 1 LLM call               ││
-│  │  Phase 2: runSubagent() × 11-13 — parallel LLM calls     ││
-│  │           (11 static + paper type + venue)                ││
+│  │  Phase 2: runSubagent() × 10-12+ — parallel LLM calls    ││
+│  │           (10 static + paper type + venue + hybrids)      ││
+│  │  Phase 2.5: deduplicateComments() — overlap + similarity  ││
 │  │  Phase 3: mapCommentsToDocuments() — exact + fuzzy match  ││
 │  │                                                          ││
 │  │ 5. Log results to JSONL + cache review_comments.json      ││
@@ -54,32 +55,37 @@ The AI Tutor is an Overleaf plugin that provides automated paper review using a 
 
 Parses `merged.tex` into a structured list of sections using regex:
 - Extracts `\begin{abstract}...\end{abstract}`
+- Detects `\appendix` boundary position — all `\section` headers after this point are flagged `isAppendix: true`
 - Finds all `\section{}`, `\subsection{}`, `\subsubsection{}` headers
 - For each header, captures the content until the next same-or-higher-level header
-- Returns: `{ title, level, content, charStart, charEnd }[]`
+- Returns: `{ title, level, content, charStart, charEnd, isAppendix }[]`
 
 **Design choice**: Regex is deterministic, free, and fast. LLM section parsing would be unreliable and unnecessary since LaTeX sections are well-structured.
+
+**Design choice**: Appendix detection uses the structural `\appendix` LaTeX command rather than title-based heuristics. Section titles after `\appendix` (e.g., "Dataset Details", "Proof of Proposition 1") don't contain the word "appendix", so title matching would misclassify them into methods/results agents.
 
 ### Phase 1 — Paper Type Classification + Section Assignment (1 LLM call)
 
 Uses `generateObject()` with a Zod schema to classify the paper and produce:
 1. **paperType** — one of: `analysis`, `dataset`, `method_improvement`, `llm_engineering`, `llm_inference_findings`, `css`, `position`, `other`
-2. **sectionAssignments** — an array with one entry per section: `{ sectionTitle, category }`. Every section from Phase 0 must appear exactly once, ensuring complete coverage. Categories are: `abstract`, `introduction`, `related_work`, `methods`, `results`, `conclusion`, `appendix`. After the LLM responds, `buildSectionMapping()` inverts this into the category→titles map the subagents expect, and a safety-net fallback assigns any sections the LLM missed using keyword heuristics.
-3. **typeSpecificGuidance** — dynamically generated review criteria for each subagent, specific to this paper type
+2. **sectionAssignments** — an array with one entry per section: `{ sectionTitle, categories }`. Each section gets an array of 1-2 categories (multi-label, but strongly preferring single). Categories are: `abstract`, `introduction`, `related_work`, `methods`, `results`, `conclusion`, `appendix`. Appendix sections (detected structurally via `\appendix` in Phase 0) are excluded from the LLM prompt and auto-assigned to the `appendix` category. After the LLM responds, `buildSectionMapping()` inverts this into the category→titles map the subagents expect: single-category sections go to the normal mapping, while multi-category sections are collected into a `hybridSections` array for hybrid agent creation. A safety-net fallback assigns any sections the LLM missed using keyword heuristics.
+3. **typeSpecificGuidance** — dynamically generated review criteria specific to this paper type, with keyed entries for individual agents (`abstractFocus`, `introductionFocus`, `methodsFocus`, `resultsFocus`, `overallNotes`). These are injected into every static agent's system prompt: agents with a matching `guidanceKey` receive their targeted guidance, and all agents additionally receive `overallNotes` as general type context.
 
 The classifier receives the **full abstract**, **full introduction**, the section outline, and a numbered list of all sections to assign. All 7 paper type skill files from `03_paper_types/` are loaded into the system prompt. No content is pre-truncated — if the input exceeds the model's context window, `generateObjectWithRetry()` automatically retries with progressively shorter prompts (see [Context Length Handling](#context-length-handling)).
 
-**Design choice**: Per-section assignment (section→category) instead of per-category arrays (category→sections) ensures no section is accidentally left unreviewed. The LLM must produce an assignment for every section in the numbered list.
+**Design choice**: Per-section assignment (section→categories) instead of per-category arrays (category→sections) ensures no section is accidentally left unreviewed. The LLM must produce an assignment for every section in the numbered list.
+
+**Design choice**: Multi-label classification (max 2 categories per section) handles rare sections that genuinely span two concerns (e.g., a "Methods and Results" section). The LLM is prompted to strongly prefer single categories — in practice, gpt-4.1-mini consistently chooses single categories across all tested papers.
 
 **Design choice**: The section mapping is produced by the LLM (not hardcoded regex) because section titles vary wildly across papers (e.g., "RQ1: How Can Training Equip Models..." is a results section, but regex wouldn't know that). The LLM sees the outline and classifies each section correctly.
 
 **Design choice**: Type-specific guidance is generated dynamically rather than using fixed templates, because the Phase 1 LLM can tailor criteria to the specific paper (e.g., for a dataset paper about crowdsourcing, it might emphasize IAA reporting, while a dataset paper about web scraping would emphasize licensing).
 
-### Phase 2 — Parallel Reviewer Subagents (11-13 LLM calls)
+### Phase 2 — Parallel Reviewer Subagents (10-12+ LLM calls)
 
-All subagents run concurrently via `Promise.allSettled()` with 2-minute timeouts. There are 11 static agents plus up to 2 dynamic agents (paper type + venue):
+All subagents run concurrently via `Promise.allSettled()` with 2-minute timeouts. There are 10 static agents plus up to 2 dynamic agents (paper type + venue) and optionally hybrid agents for multi-category sections:
 
-#### Static Agents (11)
+#### Static Agents (10)
 
 | # | Agent | Input | Skills |
 |---|-------|-------|--------|
@@ -89,18 +95,18 @@ All subagents run concurrently via `Promise.allSettled()` with 2-minute timeouts
 | 4 | Methods Reviewer | Methods sections | `methods.md`, `task_formulation.md`, `math_and_formulas.md` |
 | 5 | Results Reviewer | Results/experiments sections | `results_and_analysis.md` |
 | 6 | Conclusion & Supplements Reviewer | Conclusion + limitations | `conclusion.md`, `limitations.md`, `ethical_considerations.md` |
-| 7 | Appendix Reviewer | Appendix sections | `faq_appendix.md` |
+| 7 | Appendix Reviewer | Appendix sections (auto-assigned via `\appendix` detection) | `faq_appendix.md` |
 | 8 | Writing Style Reviewer | Full document | `grammar_and_punctuation.md`, `capitalization_and_acronyms.md`, `general_writing_habits.md`, `citations_and_references.md` |
 | 9 | LaTeX & Formatting Reviewer | Full document | `latex_formatting.md`, `math_and_formulas.md`, `table_formatting.md` |
 | 10 | Figures & Captions Reviewer | Extracted figure/table environments + context | `caption_writing.md`, `figure1_design.md`, `experiment_visualization.md` |
-| 11 | Structure & Narrative Reviewer | Paper skeleton (titles + first sentences) | `general_writing_habits.md` |
 
-#### Dynamic Agents (0-2)
+#### Dynamic Agents (0-2+)
 
 | Agent | Condition | Input | Skills |
 |-------|-----------|-------|--------|
-| Paper Type Reviewer | Always added if a guideline file exists for the classified type | Full document | `03_paper_types/{type}_paper.md` |
-| Venue Reviewer | Added when user selects a venue other than arXiv | Full document | `02_venues/{venue}.md` |
+| Paper Type Reviewer | Always added if a guideline file exists for the classified type. Reviews against the full paper type skill file. (Separate from the `typeSpecificGuidance` that is injected into all static agents.) | Full document | `03_paper_types/{type}_paper.md` |
+| Venue Reviewer | Added when user selects a venue other than arXiv. Standalone — venue info is not injected into static agents. | Full document | `02_venues/{venue}.md` |
+| Hybrid Reviewer(s) | Created for each unique multi-category combination from Phase 1 | Relevant sections | Merged skill files from all component agents |
 
 Each subagent receives:
 - **System prompt**: Skill file content + type-specific guidance from Phase 1 + role model paper injection (if provided)
@@ -109,11 +115,20 @@ Each subagent receives:
 
 Each comment has: `{ highlightText, comment, severity }` where `highlightText` is an exact verbatim quote (20-200 chars) from the paper.
 
+#### Hybrid Agents
+
+When a section is assigned to 2 categories (e.g., methods + results), the orchestrator creates a hybrid agent:
+1. Groups multi-category sections by their sorted category combination (e.g., `"methods+results"`)
+2. Merges skill files from all component agents (deduplicated, preserving order)
+3. Combines system preambles from each component agent
+4. Collects all `guidanceKeys` so type-specific guidance from multiple categories is injected
+5. Adds the hybrid section titles to `sectionMapping` under the combo key
+
 #### Role Model Paper Injection
 
 When the user uploads role model PDFs, `buildRoleModelInjection()` appends a section to each subagent's system prompt containing:
 - Instructions to study STRUCTURE/ORGANIZATION/WRITING STYLE only, not content
-- Agent-specific comparison hints from `ROLE_MODEL_AGENT_HINTS` (13 entries, one per agent type)
+- Agent-specific comparison hints from `ROLE_MODEL_AGENT_HINTS` (10 entries, one per agent type)
 - Full extracted text of each role model paper
 
 Example hint for the abstract agent: *"Compare abstract structure: Does the user follow a similar sentence pattern (context → problem → method → results → impact)?"*
@@ -123,6 +138,24 @@ Example hint for the abstract agent: *"Compare abstract structure: Does the user
 **Design choice**: Section-specific agents receive only their section's text (not the whole paper) to focus the LLM's attention. Full-document agents (writing style, LaTeX) receive the entire `merged.tex`. If any call exceeds the context window, `generateObjectWithRetry()` handles it automatically.
 
 **Design choice**: `Promise.allSettled()` (not `Promise.all()`) ensures that if one agent fails or times out, the others still complete successfully.
+
+### Phase 2.5 — Comment Deduplication
+
+After all agents return, overlapping comments from different agents are deduplicated:
+
+1. **Find positions**: Locate each comment's `highlightText` in `mergedTex`
+2. **Detect overlaps**: For each pair of comments, check if their highlighted regions overlap ≥ 50% of the shorter highlight
+3. **Compare similarity**: Use Dice coefficient (bigram similarity) on the comment text
+   - Similarity ≥ 0.4: same concern raised by two agents → remove one
+   - Similarity < 0.4: genuinely different feedback → keep both
+4. **Tiebreaking** (which to remove):
+   - Keep higher severity (`critical` > `warning` > `suggestion`)
+   - Same severity: prefer section-specific agent over full-document agent
+   - Same type: keep the longer (more detailed) comment
+
+**Impact**: Testing across 18 cached projects showed deduplication removes ~24% of comments (479/1988), with 97% of overlapping pairs being true duplicates (similar feedback from different agents).
+
+**Design choice**: Post-hoc deduplication (rather than preventing overlap upstream) preserves each agent's independence and allows agents to run in parallel without coordination. The dedup step is fast (pure string matching, no LLM calls).
 
 ### Phase 3 — Comment Position Mapping (exact + fuzzy)
 
@@ -208,6 +241,10 @@ All procedural progress is logged to the web container's stdout (viewable via `d
 - Per agent: each validated comment (severity, highlightText preview, comment preview)
 - Overall: all agents returned, per-agent status (OK/SKIPPED/FAILED), total raw comments
 
+### Phase 2.5
+- Dedup pairs: which comment was removed (highlightText preview, agent name, similarity score, overlap ratio), which was kept
+- Summary: N duplicate(s) removed (X → Y comments)
+
 ### Phase 3
 - Inline map region details (file, char ranges)
 - Per-comment: direct match, fuzzy match (with similarity score), fallback to other file, or unmapped
@@ -239,19 +276,19 @@ All paths are relative to `/home/ubuntu/overleaf/`.
 
 - **[`services/web/app/src/Features/Chat/AiTutorReviewOrchestrator.mjs`](services/web/app/src/Features/Chat/AiTutorReviewOrchestrator.mjs)**
   The core multi-agent engine. Contains:
-  - `parseSections(mergedTex)` — Phase 0: regex-based LaTeX section parsing
+  - `parseSections(mergedTex)` — Phase 0: regex-based LaTeX section parsing with `\appendix` boundary detection
   - `generateObjectWithRetry(options, label)` — wrapper around `generateObject()` that retries with progressively truncated prompts on context-length-exceeded errors
-  - `classifyPaper(openai, model, sections)` — Phase 1: LLM paper type classification, per-section assignment to reviewer categories, dynamic guidance generation
-  - `buildSectionMapping(sectionAssignments, sections)` — converts per-section LLM assignments into category→titles map, with fallback heuristics
-  - `runSubagent(...)` — runs a single reviewer subagent with skill files, section text, type-specific guidance, and role model injection
+  - `classifyPaper(openai, model, sections)` — Phase 1: LLM paper type classification, multi-label per-section assignment to reviewer categories, dynamic guidance generation. Returns `{ paperType, paperTypeSummary, sectionMapping, hybridSections, typeSpecificGuidance }`
+  - `buildSectionMapping(sectionAssignments, sections)` — converts per-section LLM assignments into category→titles map. Forces `isAppendix` sections to appendix category. Returns `{ mapping, hybridSections }` where hybridSections contains multi-category sections
+  - `runSubagent(...)` — runs a single reviewer subagent with skill files, section text, type-specific guidance (supports multiple `guidanceKeys` for hybrid agents), and role model injection
+  - `deduplicateComments(comments, mergedTex)` — Phase 2.5: removes overlapping comments from different agents using position overlap detection + Dice coefficient similarity
   - `buildRoleModelInjection(roleModelTexts, agentId)` — builds role model prompt section with agent-specific comparison hints
-  - `ROLE_MODEL_AGENT_HINTS` — lookup table with comparison focus hints for all 13 agent types
-  - `SUBAGENT_DEFS` — the 11 static subagent definitions (id, name, skills, section categories, system preamble, `textOnly` flag)
+  - `ROLE_MODEL_AGENT_HINTS` — lookup table with comparison focus hints for all 10 agent types
+  - `SUBAGENT_DEFS` — the 10 static subagent definitions (id, name, skills, section categories, system preamble, `textOnly` flag)
   - `extractFigureTableEnvironments(mergedTex)` — extracts `\begin{figure}` / `\begin{table}` environments with surrounding context
-  - `buildSkeleton(sections)` — builds section titles + first sentences for the Structure reviewer
   - `fuzzyFindInText(needle, haystack)` — sliding-window fuzzy string matching with configurable threshold
   - `mapCommentsToDocuments(...)` — Phase 3: maps `highlightText` strings back to original source files using exact + fuzzy matching
-  - `runFullReview({...})` — main entry point that orchestrates all 4 phases, dynamically adds paper type + venue agents
+  - `runFullReview({...})` — main entry point that orchestrates all phases (0→1→2→2.5→3), dynamically adds paper type + venue + hybrid agents
 
 ### Backend — Route Handlers
 
@@ -276,14 +313,14 @@ All paths are relative to `/home/ubuntu/overleaf/`.
 ### Backend — Skill Library
 
 - **[`services/web/app/src/Features/Chat/ai-tutor-skills/`](services/web/app/src/Features/Chat/ai-tutor-skills/)**
-  42 markdown skill files organized in 7 directories. Loaded at review time by the orchestrator and injected into subagent system prompts.
+  41 markdown skill files organized in 7 directories. Loaded at review time by the orchestrator and injected into subagent system prompts.
   - [`CONTENTS.md`](services/web/app/src/Features/Chat/ai-tutor-skills/CONTENTS.md) — master index with modality tags (`[TEXT]` vs `[MULTIMODAL]`)
   - [`01_setup/`](services/web/app/src/Features/Chat/ai-tutor-skills/01_setup/) — prototype paper search strategies + review sets guide (3 files)
   - [`02_venues/`](services/web/app/src/Features/Chat/ai-tutor-skills/02_venues/) — 8 venue-specific guidelines (ICML 2026, ICLR 2026, NeurIPS 2025, AAAI 2026, ACL 2026, EMNLP 2025, COLM 2026, arXiv default). Each includes page limits, required sections, formatting rules, and reviewer criteria.
   - [`03_paper_types/`](services/web/app/src/Features/Chat/ai-tutor-skills/03_paper_types/) — 7 paper type definitions (analysis, dataset, method_improvement, llm_engineering, llm_inference_findings, css, position). All loaded into Phase 1 classifier.
   - [`04_paper_sections/`](services/web/app/src/Features/Chat/ai-tutor-skills/04_paper_sections/) — 10 section-specific writing guides (abstract, introduction, task_formulation, related_work, methods, results_and_analysis, conclusion, limitations, ethical_considerations, faq_appendix). Loaded per-subagent based on which sections they review.
   - [`05_figures_and_tables/`](services/web/app/src/Features/Chat/ai-tutor-skills/05_figures_and_tables/) — 6 visual element guides (figure1_design, experiment_visualization, color_palettes, data_visualization, table_formatting, caption_writing). Loaded by Figures & Captions reviewer.
-  - [`06_writing_style/`](services/web/app/src/Features/Chat/ai-tutor-skills/06_writing_style/) — 6 formatting and language guides (grammar_and_punctuation, citations_and_references, latex_formatting, math_and_formulas, capitalization_and_acronyms, general_writing_habits). Loaded by Writing Style, LaTeX Formatting, and Structure reviewers.
+  - [`06_writing_style/`](services/web/app/src/Features/Chat/ai-tutor-skills/06_writing_style/) — 6 formatting and language guides (grammar_and_punctuation, citations_and_references, latex_formatting, math_and_formulas, capitalization_and_acronyms, general_writing_habits). Loaded by Writing Style and LaTeX Formatting reviewers.
 
 ### Backend — Review Sets
 
@@ -416,6 +453,7 @@ When a venue is selected, a dynamic Venue Reviewer agent is added that checks ag
 | Section title fuzzy mismatch | `collectSectionContent()` falls back to partial string matching |
 | Skill file not found | Logs warning, continues with placeholder text |
 | Comment position out of range | CodeMirror bounds checking skips invalid decorations |
+| Duplicate comments across agents | Phase 2.5 deduplication via position overlap + text similarity |
 | Duplicate severity tags | Regex strip before prefixing `[AI Tutor] [severity]` |
 | Document switching race condition | Position bounds checking at decoration, highlight, and selection levels |
 | PDF extraction fails (scanned/image PDF) | Error shown in UI, review proceeds without role models |

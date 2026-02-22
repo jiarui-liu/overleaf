@@ -151,3 +151,14 @@ Then, suggest improvements, such as:
 - **Bad Example (Critique):** "No code is provided... making the results hard to reproduce and inaccessible."
 - **Good Example (Praise):** "Open-sourced model weights, training data, code, and logs." "Comprehensive experimentation... demonstrating generalizability."
 
+## Scientific Claims
+
+- Be precise and evidence-based:
+  - "200 references and 2 annotators" is not sufficient unless proved by a systematic study.
+  - Use hedging language when appropriate: "most standard way" should be "one of the most common ways."
+- Remove qualifying hedge words like "rather," "somewhat," and "arguably" — express claims more directly instead.
+- Do not describe research as "interesting," "fascinating," or "groundbreaking." Avoid "It is important..." statements without supporting arguments. Explain noteworthy results by specifying achievements directly.
+- Minimize "in recent years," "has become popular," "nowadays." When necessary, cite evidence.
+- Avoid subjective claims — adjectives are usually red flags. Cite any claim that is not supported by the paper's own experiments.
+- Avoid grandiose language or overly broad claims — it makes it easy for reviewers to attack the paper for no good reason.
+

@@ -75,7 +75,12 @@ export function parseSections(mergedTex)
     })
   }
 
-  // 2. Collect all \section / \subsection / \subsubsection headers
+  // 2. Find the \appendix boundary (if any).
+  // All \section commands after \appendix are appendix sections, regardless of title.
+  const appendixMatch = /^\\appendix\b/m.exec(mergedTex)
+  const appendixPos = appendixMatch ? appendixMatch.index : Infinity
+
+  // 3. Collect all \section / \subsection / \subsubsection headers
   const hdrRe = /^\\(section|subsection|subsubsection)\*?\{([^}]+)\}/gm
   const headers = []
   let m
@@ -83,17 +88,31 @@ export function parseSections(mergedTex)
   {
     const level =
       m[1] === 'section' ? 1 : m[1] === 'subsection' ? 2 : 3
-    headers.push({ title: m[2].trim(), level, pos: m.index })
+    headers.push({
+      title: m[2].trim(),
+      level,
+      pos: m.index,
+      isAppendix: m.index > appendixPos,
+    })
   }
 
-  // 3. Turn headers into sections (content runs until next same-or-higher-level header)
+  // 3. Turn headers into sections.
+  // Sections at levels 1-2 (\section, \subsection) are independently assigned
+  // to reviewer categories by the LLM. To prevent overlapping content between
+  // agents, each section's content runs only until the next header that is also
+  // independently assignable (level <= 2). This means a \section only captures
+  // its preamble text before the first \subsection, not all child content.
+  // \subsubsection (level 3) content is included in its parent \subsection
+  // since level 3 headers are not independently assigned.
   for (let i = 0; i < headers.length; i++)
   {
     let endPos
-    // Find the next header at same or higher (lower number) level
+    // For levels 1-2: stop at the next level 1 or 2 header (independently assigned).
+    // For level 3: stop at the next header at any level.
+    const endLevel = Math.max(headers[i].level, 2)
     for (let j = i + 1; j < headers.length; j++)
     {
-      if (headers[j].level <= headers[i].level)
+      if (headers[j].level <= endLevel)
       {
         endPos = headers[j].pos
         break
@@ -107,6 +126,7 @@ export function parseSections(mergedTex)
       content: mergedTex.slice(headers[i].pos, endPos),
       charStart: headers[i].pos,
       charEnd: endPos,
+      isAppendix: headers[i].isAppendix,
     })
   }
 
@@ -469,10 +489,16 @@ const REVIEW_CATEGORIES = [
 
 const SectionAssignmentSchema = z.object({
   sectionTitle: z.string().describe('The EXACT section title from the outline'),
-  category: z
-    .enum(REVIEW_CATEGORIES)
+  categories: z
+    .array(z.enum(REVIEW_CATEGORIES))
+    .min(1)
+    .max(2)
     .describe(
-      'Which reviewer this section should be assigned to. ' +
+      'Which reviewer(s) this section should be assigned to. ' +
+      'STRONGLY prefer a SINGLE category — most sections belong to exactly one. ' +
+      'Use TWO categories only in rare cases where a section genuinely spans two concerns — ' +
+      'e.g., a section that presents both methodology AND experimental results together. ' +
+      'Never assign more than 2 categories. When in doubt, pick the single best fit. ' +
       'abstract = abstract, introduction = introduction, ' +
       'related_work = related work / background / prior work, ' +
       'methods = methods / approach / methodology / dataset construction / task formulation / preliminaries, ' +
@@ -491,7 +517,9 @@ const ClassificationSchema = z.object({
     .array(SectionAssignmentSchema)
     .describe(
       'An assignment for EVERY section in the outline. Each section title must appear exactly once. ' +
-      'No section should be left unassigned — every section gets a reviewer.'
+      'No section should be left unassigned — every section gets at least one reviewer. ' +
+      'The vast majority of sections should have exactly one category. ' +
+      'Only use two categories for a section that truly cannot be separated into one concern.'
     ),
   typeSpecificGuidance: z
     .object({
@@ -517,8 +545,16 @@ const ClassificationSchema = z.object({
 /**
  * Convert the per-section assignments array into the category→titles map
  * that the rest of the pipeline expects.
+ *
+ * Sections with a single category go into the normal mapping.
+ * Sections with multiple categories are tracked separately as "hybrid sections"
+ * so that a single hybrid agent can review them with combined guidelines.
+ *
+ * Returns { mapping, hybridSections } where:
+ * - mapping: { category: [titles] } for single-category sections
+ * - hybridSections: [ { title, categories: string[] } ] for multi-category sections
  */
-function buildSectionMapping(sectionAssignments, sections)
+export function buildSectionMapping(sectionAssignments, sections)
 {
   const mapping = {}
   for (const cat of REVIEW_CATEGORIES)
@@ -526,18 +562,66 @@ function buildSectionMapping(sectionAssignments, sections)
     mapping[cat] = []
   }
 
+  const hybridSections = [] // { title, categories }
+
+  // Build a set of section titles that are structurally in the appendix
+  // (i.e., appear after \appendix in the LaTeX source).
+  // These are forced to the appendix category regardless of LLM assignment.
+  const appendixTitles = new Set(
+    sections
+      .filter(s => s.isAppendix)
+      .map(s => s.title.toLowerCase().trim())
+  )
+  if (appendixTitles.size > 0)
+  {
+    console.log(
+      `[AI Tutor] Detected \\appendix boundary: ${appendixTitles.size} section(s) are structurally in appendix`
+    )
+  }
+
   // Add all assigned sections
   for (const assignment of sectionAssignments)
   {
-    const cat = assignment.category
-    if (mapping[cat])
+    const titleLower = assignment.sectionTitle.toLowerCase().trim()
+
+    // Force sections that are structurally after \appendix to appendix category
+    if (appendixTitles.has(titleLower))
     {
-      mapping[cat].push(assignment.sectionTitle)
+      const cats = assignment.categories
+      if (cats.length !== 1 || cats[0] !== 'appendix')
+      {
+        console.log(
+          `[AI Tutor] Section "${assignment.sectionTitle}" is after \\appendix — ` +
+          `overriding LLM assignment [${cats.join(', ')}] → appendix`
+        )
+      }
+      mapping['appendix'].push(assignment.sectionTitle)
+      continue
+    }
+
+    const cats = assignment.categories
+    if (cats.length === 1)
+    {
+      // Single category — assign normally
+      if (mapping[cats[0]])
+      {
+        mapping[cats[0]].push(assignment.sectionTitle)
+      }
+    } else
+    {
+      // Multiple categories — track for hybrid agent creation
+      hybridSections.push({
+        title: assignment.sectionTitle,
+        categories: [...cats].sort(),
+      })
+      console.log(
+        `[AI Tutor] Section "${assignment.sectionTitle}" assigned to multiple categories: [${cats.join(', ')}] — will use hybrid agent`
+      )
     }
   }
 
   // Safety net: find any sections from Phase 0 that the LLM missed
-  // and assign them to the closest matching category
+  // and assign them to the closest matching category (single category)
   const assignedTitles = new Set(
     sectionAssignments.map(a => a.sectionTitle.toLowerCase().trim())
   )
@@ -545,6 +629,17 @@ function buildSectionMapping(sectionAssignments, sections)
   {
     if (sec.title.toLowerCase() === 'abstract') continue // handled separately
     if (assignedTitles.has(sec.title.toLowerCase().trim())) continue
+
+    // Structurally after \appendix → always appendix
+    if (sec.isAppendix)
+    {
+      mapping['appendix'].push(sec.title)
+      console.warn(
+        `[AI Tutor] Section "${sec.title}" was not assigned by LLM, but is after \\appendix — assigned to appendix`
+      )
+      continue
+    }
+
     // Unassigned section — heuristic fallback
     const lower = sec.title.toLowerCase()
     let fallbackCat = 'results' // default: most sections are results-like
@@ -571,10 +666,10 @@ function buildSectionMapping(sectionAssignments, sections)
     )
   }
 
-  return mapping
+  return { mapping, hybridSections }
 }
 
-async function classifyPaper(openai, model, sections)
+export async function classifyPaper(openai, model, sections)
 {
   const abstractSection = sections.find(
     s => s.title.toLowerCase() === 'abstract'
@@ -590,19 +685,24 @@ async function classifyPaper(openai, model, sections)
 
   const sectionTitles = sections
     .filter(s => s.level <= 2)
-    .map(s => `${'  '.repeat(s.level)}${s.title}`)
+    .map(s => `${'  '.repeat(s.level)}${s.isAppendix ? '[APPENDIX] ' : ''}${s.title}`)
     .join('\n')
 
-  // Build a numbered list so the LLM can see exactly which sections to assign
+  // Build a numbered list of non-appendix sections for the LLM to assign.
+  // Appendix sections are auto-assigned based on \appendix boundary detection
+  // and don't need LLM classification.
   const nonAbstractSections = sections.filter(
-    s => s.level >= 1 && s.level <= 2
+    s => s.level >= 1 && s.level <= 2 && !s.isAppendix
+  )
+  const appendixSections = sections.filter(
+    s => s.level >= 1 && s.level <= 2 && s.isAppendix
   )
   const numberedSections = nonAbstractSections
     .map((s, i) => `${i + 1}. ${s.title}`)
     .join('\n')
 
   console.log(
-    `[AI Tutor] Phase 1: ${nonAbstractSections.length} sections to assign:\n${numberedSections}`
+    `[AI Tutor] Phase 1: ${nonAbstractSections.length} sections to assign (${appendixSections.length} appendix sections auto-assigned):\n${numberedSections}`
   )
 
   const paperTypeDefinitions = loadSkill('01_setup/paper_type_definitions.md')
@@ -618,11 +718,15 @@ ${paperTypeDefinitions}`
   const abstractContent = abstractSection?.content || '(not found)'
   const introContent = introSection?.content || '(not found)'
 
+  const appendixNote = appendixSections.length > 0
+    ? `\n\nNote: ${appendixSections.length} section(s) after \\appendix have been auto-assigned to "appendix" and are NOT in the list above. Do NOT include them in sectionAssignments.`
+    : ''
+
   const classifierPrompt = `## Section Outline
 ${sectionTitles}
 
-## All Sections to Assign (you MUST assign every one of these)
-${numberedSections}
+## Sections to Assign (you MUST assign every one of these)
+${numberedSections}${appendixNote}
 
 ## Abstract
 ${abstractContent}
@@ -632,7 +736,7 @@ ${introContent}
 
 Based on the above:
 1. Classify the paper type.
-2. In sectionAssignments, assign EVERY section from the numbered list above to exactly one review category. Use the EXACT section titles. Do not skip any section.
+2. In sectionAssignments, assign EVERY section from the numbered list above to a review category. Use the EXACT section titles. Do not skip any. Almost all sections should get exactly ONE category. Only assign TWO categories when a section truly spans two concerns (e.g., it presents both methodology AND experimental results in the same section). Never assign more than two. When in doubt, pick the single best fit.
 3. Generate type-specific guidance for each reviewer.`
 
   // Build log-friendly versions: full template but embedded content previewed
@@ -645,8 +749,8 @@ ${previewText(paperTypeDefinitions)}`
   const logPrompt = `## Section Outline
 ${sectionTitles}
 
-## All Sections to Assign (you MUST assign every one of these)
-${numberedSections}
+## Sections to Assign (you MUST assign every one of these)
+${numberedSections}${appendixNote}
 
 ## Abstract
 ${previewText(abstractContent)}
@@ -656,7 +760,7 @@ ${previewText(introContent)}
 
 Based on the above:
 1. Classify the paper type.
-2. In sectionAssignments, assign EVERY section from the numbered list above to exactly one review category. Use the EXACT section titles. Do not skip any section.
+2. In sectionAssignments, assign EVERY section from the numbered list above to a review category. Use the EXACT section titles. Do not skip any. Almost all sections should get exactly ONE category. Only assign TWO categories when a section truly spans two concerns. When in doubt, pick the single best fit.
 3. Generate type-specific guidance for each reviewer.`
 
   const result = await generateObjectWithRetry({
@@ -676,10 +780,10 @@ Based on the above:
   )
   for (const a of raw.sectionAssignments)
   {
-    console.log(`[AI Tutor]   -> "${a.sectionTitle}" => ${a.category}`)
+    console.log(`[AI Tutor]   -> "${a.sectionTitle}" => [${a.categories.join(', ')}]`)
   }
 
-  const sectionMapping = buildSectionMapping(
+  const { mapping: sectionMapping, hybridSections } = buildSectionMapping(
     raw.sectionAssignments,
     sections
   )
@@ -713,11 +817,20 @@ Based on the above:
   {
     console.log(`[AI Tutor]   ${cat}: [${titles.join(', ')}]`)
   }
+  if (hybridSections.length > 0)
+  {
+    console.log(`[AI Tutor] Phase 1: ${hybridSections.length} hybrid section(s):`)
+    for (const hs of hybridSections)
+    {
+      console.log(`[AI Tutor]   "${hs.title}" => [${hs.categories.join(' + ')}]`)
+    }
+  }
 
   return {
     paperType: raw.paperType,
     paperTypeSummary: raw.paperTypeSummary,
     sectionMapping,
+    hybridSections,
     typeSpecificGuidance: raw.typeSpecificGuidance,
   }
 }
@@ -757,7 +870,7 @@ const CommentArraySchema = z.object({
  * fallbackToFullDoc: if true and no matching sections found, receive full doc
  * textOnly: if false in the future, could receive images (multimodal interface)
  */
-const SUBAGENT_DEFS = [
+export const SUBAGENT_DEFS = [
   {
     id: 'abstract',
     name: 'Abstract Reviewer',
@@ -857,7 +970,8 @@ const SUBAGENT_DEFS = [
     guidanceKey: null,
     textOnly: true,
     systemPreamble:
-      'Review the writing style: grammar, tense consistency, pronoun clarity, vague language, formality, active voice, filler words, and capitalization.',
+      'Review the writing style: grammar, tense consistency, pronoun clarity, vague language, formality, active voice, filler words, capitalization, ' +
+      'and overall structure — one key idea, storytelling flow, whether first sentences of paragraphs tell the whole story, heading frequency (~every 10-15 lines), and consistency in presentation.',
   },
   {
     id: 'latex_formatting',
@@ -886,16 +1000,6 @@ const SUBAGENT_DEFS = [
     textOnly: true, // future: set to false for multimodal
     systemPreamble:
       'Review figure and table captions for self-containedness, first-sentence-as-statement, abbreviation definitions, and whether the surrounding text properly explains each figure/table.',
-  },
-  {
-    id: 'structure',
-    name: 'Structure & Narrative Reviewer',
-    skillFiles: ['06_writing_style/general_writing_habits.md'],
-    sectionCategories: null, // receives section skeleton
-    guidanceKey: 'overallNotes',
-    textOnly: true,
-    systemPreamble:
-      'Review overall paper structure: one key idea, storytelling flow, whether first sentences of paragraphs tell the whole story, section ordering, heading frequency (~every 10-15 lines), and consistency.',
   },
 ]
 
@@ -931,34 +1035,6 @@ function extractFigureTableEnvironments(mergedTex)
   return results.join('\n\n---\n\n')
 }
 
-/**
- * Build a "skeleton" of the paper: section titles + first sentence of each paragraph.
- */
-function buildSkeleton(sections)
-{
-  const lines = []
-  for (const sec of sections)
-  {
-    if (sec.level <= 2)
-    {
-      lines.push(`${'#'.repeat(sec.level + 1)} ${sec.title}`)
-      // Extract first sentence of each non-empty paragraph
-      const paragraphs = sec.content
-        .split(/\n\n+/)
-        .map(p => p.replace(/^\s*\\(?:sub)*section\*?\{[^}]+\}\s*/, '').trim())
-        .filter(p => p.length > 20 && !p.startsWith('%'))
-      for (const para of paragraphs.slice(0, 10))
-      {
-        const firstSentence = para.match(/^[^.!?]*[.!?]/)
-        if (firstSentence)
-        {
-          lines.push(`  - ${firstSentence[0].trim()}`)
-        }
-      }
-    }
-  }
-  return lines.join('\n')
-}
 
 // ---------------------------------------------------------------------------
 // Role Model Prompt Injection Builder
@@ -975,7 +1051,6 @@ const ROLE_MODEL_AGENT_HINTS = {
   writing_style: 'Compare writing style: sentence length variation, active vs. passive voice usage, transition patterns between paragraphs, formality level, and use of hedging language.',
   latex_formatting: 'Compare LaTeX formatting conventions: reference style, equation formatting, table structure, and overall typographic quality.',
   figures_tables: 'Compare figure/table captions: Are captions similarly self-contained? Do they follow similar patterns (statement + evidence + interpretation)?',
-  structure: 'Compare overall structure: section ordering, heading density, paragraph length distribution, and the "first sentences tell the story" pattern.',
   paper_type: 'Compare overall paper organization against the role model(s) for this paper type.',
   venue: 'Compare adherence to venue conventions visible in the role model(s).',
 }
@@ -1068,6 +1143,124 @@ function collectSectionContent(sections, titleList)
   return deduped.map(s => s.content).join('\n\n')
 }
 
+// ---------------------------------------------------------------------------
+// Comment deduplication
+// ---------------------------------------------------------------------------
+
+const SEVERITY_RANK = { critical: 3, warning: 2, suggestion: 1 }
+
+/**
+ * Deduplicate comments from multiple agents that highlight overlapping text.
+ *
+ * Strategy:
+ *  1. Find each comment's position in mergedTex via its highlightText.
+ *  2. Detect pairs of comments whose highlighted regions overlap.
+ *  3. For overlapping pairs, compare comment text similarity (Dice coefficient).
+ *     - High similarity (≥ 0.5): same concern raised by two agents → keep only
+ *       the higher-severity one (or the one from the section-specific agent).
+ *     - Low similarity (< 0.5): genuinely different feedback → keep both.
+ *
+ * This removes redundancy while preserving diverse feedback.
+ */
+function deduplicateComments(comments, mergedTex)
+{
+  if (comments.length <= 1) return comments
+
+  // 1. Find positions of each comment's highlightText in mergedTex
+  const positioned = comments.map((c, idx) => {
+    const pos = mergedTex.indexOf(c.highlightText)
+    return {
+      comment: c,
+      idx,
+      start: pos,
+      end: pos >= 0 ? pos + c.highlightText.length : -1,
+    }
+  })
+
+  // 2. Find which comments to remove
+  const toRemove = new Set()
+
+  for (let i = 0; i < positioned.length; i++)
+  {
+    if (toRemove.has(i)) continue
+    if (positioned[i].start < 0) continue // highlightText not found
+
+    for (let j = i + 1; j < positioned.length; j++)
+    {
+      if (toRemove.has(j)) continue
+      if (positioned[j].start < 0) continue
+
+      // Check if highlights overlap
+      const a = positioned[i]
+      const b = positioned[j]
+      const overlapStart = Math.max(a.start, b.start)
+      const overlapEnd = Math.min(a.end, b.end)
+
+      if (overlapStart >= overlapEnd) continue // no overlap
+
+      // Calculate overlap ratio relative to the shorter highlight
+      const overlapLen = overlapEnd - overlapStart
+      const shorterLen = Math.min(a.end - a.start, b.end - b.start)
+      const overlapRatio = overlapLen / shorterLen
+
+      if (overlapRatio < 0.5) continue // less than 50% overlap — not really the same region
+
+      // Highlights overlap significantly — check if comments are similar
+      const commentSim = diceCoefficient(
+        normalizeWhitespace(a.comment.comment.toLowerCase()),
+        normalizeWhitespace(b.comment.comment.toLowerCase())
+      )
+
+      if (commentSim < 0.4) continue // genuinely different feedback — keep both
+
+      // Similar comments on overlapping text — keep the better one
+      const sevA = SEVERITY_RANK[a.comment.severity] || 0
+      const sevB = SEVERITY_RANK[b.comment.severity] || 0
+
+      let removeIdx
+      if (sevA !== sevB)
+      {
+        // Keep higher severity
+        removeIdx = sevA > sevB ? j : i
+      } else
+      {
+        // Same severity — prefer section-specific agent over full-doc agent
+        // Full-doc agents have sectionCategories === null (writing_style, latex_formatting, etc.)
+        const aIsFullDoc = a.comment.category === 'writing_style' ||
+          a.comment.category === 'latex_formatting' ||
+          a.comment.category === 'figures_tables'
+        const bIsFullDoc = b.comment.category === 'writing_style' ||
+          b.comment.category === 'latex_formatting' ||
+          b.comment.category === 'figures_tables'
+
+        if (aIsFullDoc && !bIsFullDoc)
+        {
+          removeIdx = i
+        } else if (bIsFullDoc && !aIsFullDoc)
+        {
+          removeIdx = j
+        } else
+        {
+          // Both are same type — keep whichever has a longer comment (more detailed)
+          removeIdx = a.comment.comment.length >= b.comment.comment.length ? j : i
+        }
+      }
+
+      console.log(
+        `[AI Tutor] Dedup: removing "${positioned[removeIdx].comment.highlightText.slice(0, 50)}..." ` +
+        `from [${positioned[removeIdx].comment.agentName}] (sim=${commentSim.toFixed(2)}, overlap=${overlapRatio.toFixed(2)}) — ` +
+        `keeping [${positioned[removeIdx === i ? j : i].comment.agentName}]`
+      )
+      toRemove.add(removeIdx)
+
+      // If i was removed, stop comparing i against further j's
+      if (removeIdx === i) break
+    }
+  }
+
+  return comments.filter((_, idx) => !toRemove.has(idx))
+}
+
 /**
  * Run a single reviewer subagent.
  */
@@ -1096,10 +1289,6 @@ async function runSubagent(
       console.log(`[AI Tutor] [${def.name}] Skipped: no figures/tables found in document`)
       return { id: def.id, comments: [], skipped: true, reason: 'No figures/tables found' }
     }
-  } else if (def.id === 'structure')
-  {
-    reviewText = buildSkeleton(sections)
-    textSource = 'paper skeleton'
   } else if (def.sectionCategories === null)
   {
     // Full document agents (writing_style, latex_formatting)
@@ -1144,12 +1333,17 @@ async function runSubagent(
     .join('\n\n')
 
   // 3. Build type-specific guidance injection
+  // Support both single guidanceKey and array guidanceKeys (for hybrid agents)
   let guidanceInjection = ''
-  if (def.guidanceKey && typeGuidance && typeGuidance[def.guidanceKey])
+  const gKeys = def.guidanceKeys || (def.guidanceKey ? [def.guidanceKey] : [])
+  for (const key of gKeys)
   {
-    guidanceInjection = `\n\n## Type-Specific Review Focus\n${typeGuidance[def.guidanceKey]}`
+    if (typeGuidance && typeGuidance[key])
+    {
+      guidanceInjection += `\n\n## Type-Specific Review Focus (${key})\n${typeGuidance[key]}`
+    }
   }
-  if (typeGuidance?.overallNotes && def.guidanceKey !== 'overallNotes')
+  if (typeGuidance?.overallNotes && !gKeys.includes('overallNotes'))
   {
     guidanceInjection += `\n\n## General Type Notes\n${typeGuidance.overallNotes}`
   }
@@ -1765,6 +1959,85 @@ export async function runFullReview({
     console.log('[AI Tutor] No specific venue selected, skipping Venue Reviewer')
   }
 
+  // Create hybrid agents for multi-category sections
+  // Group hybrid sections by their unique category combination
+  if (classification.hybridSections && classification.hybridSections.length > 0)
+  {
+    const combos = {} // e.g. "methods+results" → { categories: [...], titles: [...] }
+    for (const hs of classification.hybridSections)
+    {
+      const key = hs.categories.join('+')
+      if (!combos[key])
+      {
+        combos[key] = { categories: hs.categories, titles: [] }
+      }
+      combos[key].titles.push(hs.title)
+    }
+
+    for (const [comboKey, combo] of Object.entries(combos))
+    {
+      // Find the SUBAGENT_DEFS for each category in this combo
+      const relevantDefs = SUBAGENT_DEFS.filter(
+        d =>
+          d.sectionCategories &&
+          d.sectionCategories.some(c => combo.categories.includes(c))
+      )
+
+      // Merge skill files (deduplicated, preserving order)
+      const seenSkills = new Set()
+      const mergedSkills = []
+      for (const d of relevantDefs)
+      {
+        for (const sf of d.skillFiles)
+        {
+          if (!seenSkills.has(sf))
+          {
+            seenSkills.add(sf)
+            mergedSkills.push(sf)
+          }
+        }
+      }
+
+      // Combine system preambles
+      const preambleParts = relevantDefs.map(
+        d => `[${d.name}] ${d.systemPreamble}`
+      )
+      const combinedPreamble =
+        `This is a hybrid reviewer combining expertise from: ${combo.categories.join(', ')}.\n` +
+        `Review the section(s) from ALL of these perspectives simultaneously:\n` +
+        preambleParts.join('\n')
+
+      // Collect guidance keys from all relevant agents
+      const guidanceKeys = relevantDefs
+        .map(d => d.guidanceKey)
+        .filter(k => k != null)
+
+      // Pretty name: "Methods + Results" from category names
+      const prettyName = combo.categories
+        .map(c => c.charAt(0).toUpperCase() + c.slice(1).replace('_', ' '))
+        .join(' + ')
+
+      // Add the hybrid section titles to the sectionMapping under the combo key
+      classification.sectionMapping[comboKey] = combo.titles
+
+      agentDefs.push({
+        id: `hybrid_${comboKey}`,
+        name: `${prettyName} Reviewer (hybrid)`,
+        skillFiles: mergedSkills,
+        sectionCategories: [comboKey],
+        guidanceKey: null, // use guidanceKeys instead
+        guidanceKeys,
+        textOnly: true,
+        systemPreamble: combinedPreamble,
+      })
+
+      console.log(
+        `[AI Tutor] Created hybrid agent "${prettyName} Reviewer" for ${combo.titles.length} section(s): ` +
+        `[${combo.titles.join(', ')}] with ${mergedSkills.length} skill files from [${combo.categories.join(', ')}]`
+      )
+    }
+  }
+
   // Phase 2: Run subagents in parallel
   console.log('-'.repeat(60))
   console.log(
@@ -1854,12 +2127,28 @@ export async function runFullReview({
     `Total raw comments: ${allComments.length}, failed/skipped agents: ${failedAgents.length}`
   )
 
+  // Phase 2.5: Deduplicate overlapping comments across agents
+  const dedupStart = Date.now()
+  const dedupedComments = deduplicateComments(allComments, mergedTex)
+  const dedupElapsed = ((Date.now() - dedupStart) / 1000).toFixed(2)
+  const removed = allComments.length - dedupedComments.length
+  if (removed > 0)
+  {
+    console.log(
+      `[AI Tutor] Phase 2.5: Deduplication removed ${removed} duplicate comment(s) ` +
+      `(${allComments.length} → ${dedupedComments.length}) in ${dedupElapsed}s`
+    )
+  } else
+  {
+    console.log(`[AI Tutor] Phase 2.5: No duplicates found (${allComments.length} comments) in ${dedupElapsed}s`)
+  }
+
   // Phase 3: Map comments to original documents
   console.log('-'.repeat(60))
   console.log('[AI Tutor] Phase 3: Mapping comments to original documents...')
   const phase3Start = Date.now()
   const mappedComments = mapCommentsToDocuments(
-    allComments,
+    dedupedComments,
     mergedTex,
     docContentMap,
     rootDocPath
@@ -1867,7 +2156,7 @@ export async function runFullReview({
   const phase3Elapsed = ((Date.now() - phase3Start) / 1000).toFixed(2)
   console.log(
     `[AI Tutor] Phase 3 complete in ${phase3Elapsed}s. ` +
-    `Mapped ${mappedComments.length}/${allComments.length} comments to original documents`
+    `Mapped ${mappedComments.length}/${dedupedComments.length} comments to original documents`
   )
 
   // Prefix all comments with [AI Tutor] [severity] [agent]
