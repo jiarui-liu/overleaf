@@ -2,39 +2,51 @@
 
 ## Overview
 
-The AI Tutor is an Overleaf plugin that provides automated paper review using a multi-agent architecture. It analyzes the full project structure, classifies the paper type, and runs parallel reviewer subagents — each specialized in a different aspect of academic writing — then posts inline comments to the Overleaf review panel.
+The AI Tutor is an Overleaf plugin that provides automated paper review using a multi-agent architecture. It analyzes the full project structure, classifies the paper type, and runs parallel reviewer subagents — each specialized in a different aspect of academic writing — then posts inline comments to the Overleaf review panel. Users can optionally target a specific venue for venue-aware feedback and upload role model PDFs for structure/style comparison.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend (React)                      │
-│  ai-tutor-panel.tsx                                      │
-│  ┌────────────┐  ┌──────────┐  ┌───────────────────┐   │
-│  │ Model      │  │ Run Full │  │ Apply Comments to │   │
-│  │ Dropdown   │→ │ Review   │→ │ Current Document  │   │
-│  └────────────┘  └──────────┘  └───────────────────┘   │
-└──────────────────────┬──────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Frontend (React)                          │
+│  ai-tutor-panel.tsx                                         │
+│  ┌────────────┐  ┌─────────┐  ┌────────────────┐           │
+│  │ Model      │  │ Target  │  │ Role Model     │           │
+│  │ Dropdown   │  │ Venue   │  │ PDFs (0-3)     │           │
+│  └────────────┘  └─────────┘  └──────┬─────────┘           │
+│       │               │              │ pdfjs-dist           │
+│       │               │         extract-pdf-text.ts         │
+│  ┌────▼───────────────▼──────────────▼──────────────────┐   │
+│  │ Run Full Review                                      │   │
+│  └──────────────────────┬───────────────────────────────┘   │
+│                         │                                   │
+│  ┌──────────────────────▼───────────────────────────────┐   │
+│  │ Apply Comments to All Files   │  Delete All Comments │   │
+│  └──────────────────────────────────────────────────────┘   │
+└──────────────────────┬──────────────────────────────────────┘
                        │
                   POST /ai-tutor-review
+                  (model, venue, roleModelTexts)
                        │
-┌──────────────────────▼──────────────────────────────────┐
-│                    Backend (Node.js)                      │
-│  ChatController.mjs — reviewWholeProject()               │
-│  ┌──────────────────────────────────────────────────────┐│
-│  │ 1. Inline-expand all \input/\include → merged.tex    ││
-│  │ 2. Categorize files → metadata.json                  ││
-│  │ 3. Call AiTutorReviewOrchestrator.runFullReview()     ││
-│  │                                                      ││
-│  │  Phase 0: parseSections()     — regex, no LLM        ││
-│  │  Phase 1: classifyPaper()     — 1 LLM call           ││
-│  │  Phase 2: runSubagent() × 10  — parallel LLM calls   ││
-│  │  Phase 3: mapCommentsToDocuments() — string matching  ││
-│  └──────────────────────────────────────────────────────┘│
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────▼──────────────────────────────────────┐
+│                    Backend (Node.js)                          │
+│  ChatController.mjs — reviewWholeProject()                   │
+│  ┌──────────────────────────────────────────────────────────┐│
+│  │ 1. Inline-expand all \input/\include → merged.tex        ││
+│  │ 2. Categorize files → metadata.json                      ││
+│  │ 3. Save role model text to cache                         ││
+│  │ 4. Call AiTutorReviewOrchestrator.runFullReview()         ││
+│  │                                                          ││
+│  │  Phase 0: parseSections()     — regex, no LLM            ││
+│  │  Phase 1: classifyPaper()     — 1 LLM call               ││
+│  │  Phase 2: runSubagent() × 11-13 — parallel LLM calls     ││
+│  │           (11 static + paper type + venue)                ││
+│  │  Phase 3: mapCommentsToDocuments() — exact + fuzzy match  ││
+│  │                                                          ││
+│  │ 5. Log results to JSONL + cache review_comments.json      ││
+│  └──────────────────────────────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────┘
 ```
-
-The frontend has a single "Run Full Review" button. When clicked, the backend performs project structure analysis (merging TeX files, categorizing project files) and then runs the full multi-agent review pipeline — all in one HTTP request.
 
 ## Pipeline Phases
 
@@ -52,10 +64,10 @@ Parses `merged.tex` into a structured list of sections using regex:
 
 Uses `generateObject()` with a Zod schema to classify the paper and produce:
 1. **paperType** — one of: `analysis`, `dataset`, `method_improvement`, `llm_engineering`, `llm_inference_findings`, `css`, `position`, `other`
-2. **sectionAssignments** — an array with one entry per section: `{ sectionTitle, category }`. Every section from Phase 0 must appear exactly once, ensuring complete coverage. Categories are: `abstract`, `introduction`, `related_work`, `methods`, `results`, `conclusion`. After the LLM responds, `buildSectionMapping()` inverts this into the category→titles map the subagents expect, and a safety-net fallback assigns any sections the LLM missed using keyword heuristics.
+2. **sectionAssignments** — an array with one entry per section: `{ sectionTitle, category }`. Every section from Phase 0 must appear exactly once, ensuring complete coverage. Categories are: `abstract`, `introduction`, `related_work`, `methods`, `results`, `conclusion`, `appendix`. After the LLM responds, `buildSectionMapping()` inverts this into the category→titles map the subagents expect, and a safety-net fallback assigns any sections the LLM missed using keyword heuristics.
 3. **typeSpecificGuidance** — dynamically generated review criteria for each subagent, specific to this paper type
 
-The classifier receives the **full abstract**, **full introduction**, the section outline, and a numbered list of all sections to assign. All 7 paper type skill files from `02_paper_types/` are loaded into the system prompt. No content is pre-truncated — if the input exceeds the model's context window, `generateObjectWithRetry()` automatically retries with progressively shorter prompts (see [Context Length Handling](#context-length-handling)).
+The classifier receives the **full abstract**, **full introduction**, the section outline, and a numbered list of all sections to assign. All 7 paper type skill files from `03_paper_types/` are loaded into the system prompt. No content is pre-truncated — if the input exceeds the model's context window, `generateObjectWithRetry()` automatically retries with progressively shorter prompts (see [Context Length Handling](#context-length-handling)).
 
 **Design choice**: Per-section assignment (section→category) instead of per-category arrays (category→sections) ensures no section is accidentally left unreviewed. The LLM must produce an assignment for every section in the numbered list.
 
@@ -63,9 +75,11 @@ The classifier receives the **full abstract**, **full introduction**, the sectio
 
 **Design choice**: Type-specific guidance is generated dynamically rather than using fixed templates, because the Phase 1 LLM can tailor criteria to the specific paper (e.g., for a dataset paper about crowdsourcing, it might emphasize IAA reporting, while a dataset paper about web scraping would emphasize licensing).
 
-### Phase 2 — Parallel Reviewer Subagents (10 LLM calls)
+### Phase 2 — Parallel Reviewer Subagents (11-13 LLM calls)
 
-All 10 subagents run concurrently via `Promise.allSettled()` with 2-minute timeouts:
+All subagents run concurrently via `Promise.allSettled()` with 2-minute timeouts. There are 11 static agents plus up to 2 dynamic agents (paper type + venue):
+
+#### Static Agents (11)
 
 | # | Agent | Input | Skills |
 |---|-------|-------|--------|
@@ -74,18 +88,35 @@ All 10 subagents run concurrently via `Promise.allSettled()` with 2-minute timeo
 | 3 | Related Work Reviewer | Related work section | `related_work.md`, `citations_and_references.md` |
 | 4 | Methods Reviewer | Methods sections | `methods.md`, `task_formulation.md`, `math_and_formulas.md` |
 | 5 | Results Reviewer | Results/experiments sections | `results_and_analysis.md` |
-| 6 | Conclusion Reviewer | Conclusion + limitations | `conclusion.md`, `limitations.md`, `ethical_considerations.md`, `faq_appendix.md` |
-| 7 | Writing Style Reviewer | Full document | `grammar_and_punctuation.md`, `capitalization_and_acronyms.md`, `general_writing_habits.md` |
-| 8 | LaTeX Formatting Reviewer | Full document | `latex_formatting.md`, `math_and_formulas.md`, `table_formatting.md` |
-| 9 | Figures & Captions Reviewer | Extracted figure/table environments + context | `caption_writing.md`, `figure1_design.md`, `experiment_visualization.md` |
-| 10 | Structure Reviewer | Paper skeleton (titles + first sentences) | `general_writing_habits.md` |
+| 6 | Conclusion & Supplements Reviewer | Conclusion + limitations | `conclusion.md`, `limitations.md`, `ethical_considerations.md` |
+| 7 | Appendix Reviewer | Appendix sections | `faq_appendix.md` |
+| 8 | Writing Style Reviewer | Full document | `grammar_and_punctuation.md`, `capitalization_and_acronyms.md`, `general_writing_habits.md`, `citations_and_references.md` |
+| 9 | LaTeX & Formatting Reviewer | Full document | `latex_formatting.md`, `math_and_formulas.md`, `table_formatting.md` |
+| 10 | Figures & Captions Reviewer | Extracted figure/table environments + context | `caption_writing.md`, `figure1_design.md`, `experiment_visualization.md` |
+| 11 | Structure & Narrative Reviewer | Paper skeleton (titles + first sentences) | `general_writing_habits.md` |
+
+#### Dynamic Agents (0-2)
+
+| Agent | Condition | Input | Skills |
+|-------|-----------|-------|--------|
+| Paper Type Reviewer | Always added if a guideline file exists for the classified type | Full document | `03_paper_types/{type}_paper.md` |
+| Venue Reviewer | Added when user selects a venue other than arXiv | Full document | `02_venues/{venue}.md` |
 
 Each subagent receives:
-- **System prompt**: Skill file content + type-specific guidance from Phase 1
+- **System prompt**: Skill file content + type-specific guidance from Phase 1 + role model paper injection (if provided)
 - **User prompt**: The full relevant text (no pre-truncation)
 - **Output**: Structured JSON via `generateObject()` + Zod schema
 
 Each comment has: `{ highlightText, comment, severity }` where `highlightText` is an exact verbatim quote (20-200 chars) from the paper.
+
+#### Role Model Paper Injection
+
+When the user uploads role model PDFs, `buildRoleModelInjection()` appends a section to each subagent's system prompt containing:
+- Instructions to study STRUCTURE/ORGANIZATION/WRITING STYLE only, not content
+- Agent-specific comparison hints from `ROLE_MODEL_AGENT_HINTS` (13 entries, one per agent type)
+- Full extracted text of each role model paper
+
+Example hint for the abstract agent: *"Compare abstract structure: Does the user follow a similar sentence pattern (context → problem → method → results → impact)?"*
 
 **Design choice**: `generateObject()` with Zod schemas is used instead of raw JSON parsing. This ensures the LLM output always conforms to the expected structure — no fragile regex/JSON extraction from free-text responses.
 
@@ -93,19 +124,23 @@ Each comment has: `{ highlightText, comment, severity }` where `highlightText` i
 
 **Design choice**: `Promise.allSettled()` (not `Promise.all()`) ensures that if one agent fails or times out, the others still complete successfully.
 
-### Phase 3 — Comment Position Mapping
+### Phase 3 — Comment Position Mapping (exact + fuzzy)
 
 Maps each comment's `highlightText` back to the correct original source file:
 
 1. **Build inline map** from `% ========== INLINED FROM: ... ==========` markers in merged.tex
-2. **Find `highlightText`** in merged.tex to determine the merged position
+2. **Find `highlightText`** in merged.tex (exact match, then fuzzy match via sliding-window similarity) to determine the merged position
 3. **Use inline map** to find which original file that position belongs to
-4. **Search for `highlightText`** in the original file to get the true offset
-5. **Fallback**: If the direct mapping fails, search all documents for the text
+4. **Search for `highlightText`** in the original file (exact, then fuzzy) to get the true offset
+5. **Fallback**: If the direct mapping fails, search all documents for the text (exact, then fuzzy)
+
+Fuzzy matching uses a configurable similarity threshold (default 0.85, overridable via `AI_TUTOR_FUZZY_THRESHOLD` env var).
+
+A duplicate severity tag is stripped before prefixing comments: if the LLM echoes `[critical]` in the comment text and the severity field is also `critical`, the redundant tag is removed.
 
 **Design choice**: Text search (not character offsets from the LLM) is used because LLMs cannot reliably count characters. The `highlightText` approach is robust — the LLM quotes exact text, and we search for it.
 
-**Design choice**: Fallback to searching all documents handles edge cases where the inline map doesn't perfectly align (e.g., text near INLINED FROM markers).
+**Design choice**: Fuzzy matching handles cases where the LLM slightly misquotes text (adds/removes whitespace, changes punctuation). The sliding-window approach finds the best approximate match above the threshold.
 
 ## Context Length Handling
 
@@ -121,23 +156,38 @@ Non-context errors are thrown immediately without retry.
 
 ## Comment Application (Frontend)
 
-The frontend applies comments using Overleaf's ShareJS/OT comment system:
+The frontend applies comments across **all project documents** automatically using a queue-based batch system:
 
-1. Gets the current document snapshot via `currentDocument.getSnapshot()`
-2. For each comment, searches for `highlightText` via `indexOf()`
-3. Creates a thread via `POST /project/{id}/thread/{threadId}/messages`
-4. Applies the comment operation: `{ c: highlightText, p: position, t: threadId }`
+1. Builds a queue of `(docPath, docId, comments[])` entries from `reviewResult.commentsByDoc`
+2. Opens the first document via `openDocWithId()`
+3. For each comment in the current document:
+   - Re-fetches the snapshot via `currentDocument.getSnapshot()` to account for position shifts from previous operations
+   - Searches for `highlightText` via `indexOf()`
+   - Validates the position is within document bounds
+   - Creates a thread via `POST /project/{id}/thread/{threadId}/messages`
+   - Applies the comment operation: `{ c: highlightText, p: position, t: threadId }` via `submitOp()`
+4. Advances to the next document in the queue and repeats
+5. Reports total applied/skipped counts when done
 
-Comments are applied to whichever document is currently open. Since the main .tex file typically contains most of the paper content (with `\input` used for figures/tables/preamble), most comments will match the root document. Users can switch to other files and click "Apply Comments" again to apply remaining comments.
+A "Delete All AI Tutor Comments" button removes all comments with the `[AI Tutor]` prefix by scanning all threads and deleting matching ones via the backend.
+
+### CodeMirror Position Safety
+
+Comment decorations in CodeMirror can encounter out-of-range positions during document switching (the ranges tracker may dispatch positions from a previous document before CodeMirror has fully switched to the new one). Defensive bounds checking is applied at multiple levels:
+
+- `createChangeRange()` — skips decorations where `from > docLength`, clamps `to`
+- `buildHighlightDecorations()` — skips highlights where position >= docLength
+- `updateDeleteWidgetHighlight()` — filters out widgets beyond docLength
+- `ReviewPanelEntry` — skips `EditorSelection.cursor()` if position > doc.length; wraps hover highlight/clear dispatches in try/catch
 
 ## Logging
 
 All procedural progress is logged to the web container's stdout (viewable via `docker compose logs web`). Logs use the `[AI Tutor]` prefix throughout. Key log points:
 
 ### Per-phase timing
-- Overall start/end banners with `=====` separators, including project ID, model, merged.tex size, docContentMap files
+- Overall start/end banners with `=====` separators, including project ID, model, venue, merged.tex size, docContentMap files
 - Phase separators with `-----`, each phase logs elapsed time
-- Final summary: per-phase timing breakdown, total elapsed
+- Final summary: per-phase timing breakdown, total elapsed, comments by document
 
 ### Phase 0
 - Each parsed section: level, title, char count, position range
@@ -152,7 +202,7 @@ All procedural progress is logged to the web container's stdout (viewable via `d
 - Fallback assignments (sections the LLM missed, assigned via keyword heuristics)
 
 ### Phase 2
-- Per agent: starting, text source + size, system prompt size, skill files loaded
+- Per agent: starting, text source + size, system prompt size, skill files loaded, role model count
 - Per agent LLM call: attempt, sizes, elapsed time, response preview
 - Per agent validation: X/Y comments kept, discarded comments with highlightText + comment preview
 - Per agent: each validated comment (severity, highlightText preview, comment preview)
@@ -160,79 +210,129 @@ All procedural progress is logged to the web container's stdout (viewable via `d
 
 ### Phase 3
 - Inline map region details (file, char ranges)
-- Per-comment warnings: not found in merged.tex, fallback to other file, unmapped
-- Summary: direct/fallback/notFoundInMerged/unmapped counts
+- Per-comment: direct match, fuzzy match (with similarity score), fallback to other file, or unmapped
+- Summary: direct/fallback/fuzzy/notFoundInMerged/unmapped counts
 
-### Helpers
-- Skill file loading: file name + size on success, warning on failure
-- Skill directory loading: file count + names
-- `generateObjectWithRetry`: before/after each attempt with sizes, elapsed time, response preview; context length retries with truncation percentages; failures with error messages
-- `collectSectionContent`: warns on fuzzy fallback (no exact match) or no match at all
+### JSONL Review Logs
+
+Each completed review is appended to a daily JSONL file at `/var/lib/overleaf/ai-tutor-logs/ai-tutor-YYYY-MM-DD.jsonl` with:
+- Timestamp, project ID, user ID, model, venue
+- Role model paper names (if any)
+- Paper type classification
+- Summary (totals by category and severity)
+- Failed agents list
+- All comments with highlightText, comment, severity, category, agentName, docPath
+
+### Cache Files
+
+Per-project cache at `/var/lib/overleaf/ai-tutor-cache/{projectId}/`:
+- `merged.tex` — inlined LaTeX with `INLINED FROM` markers
+- `metadata.json` — project structure and file categorization
+- `review_comments.json` — full review output
+- `role_model_*.txt` — extracted text from uploaded role model PDFs (for debugging)
 
 ## File Reference
 
-All paths are relative to `/home/ubuntu/.jiarui/overleaf/`.
+All paths are relative to `/home/ubuntu/overleaf/`.
 
 ### Backend — Agent Orchestration
 
 - **[`services/web/app/src/Features/Chat/AiTutorReviewOrchestrator.mjs`](services/web/app/src/Features/Chat/AiTutorReviewOrchestrator.mjs)**
   The core multi-agent engine. Contains:
   - `parseSections(mergedTex)` — Phase 0: regex-based LaTeX section parsing
-  - `generateObjectWithRetry(options, label)` — wrapper around `generateObject()` that retries with progressively truncated prompts on context-length-exceeded errors. Logs before/after each attempt with sizes, elapsed time, and response preview
+  - `generateObjectWithRetry(options, label)` — wrapper around `generateObject()` that retries with progressively truncated prompts on context-length-exceeded errors
   - `classifyPaper(openai, model, sections)` — Phase 1: LLM paper type classification, per-section assignment to reviewer categories, dynamic guidance generation
-  - `buildSectionMapping(sectionAssignments, sections)` — converts per-section LLM assignments into category→titles map, with fallback heuristics for any sections the LLM missed
-  - `runSubagent(...)` — runs a single reviewer subagent with skill files, section text, and type-specific guidance
-  - `SUBAGENT_DEFS` — the 10 subagent definitions (id, skills, section categories, system preamble, `textOnly` flag for future multimodal)
-  - `extractFigureTableEnvironments(mergedTex)` — extracts `\begin{figure}` / `\begin{table}` environments with surrounding context for the Figures & Captions reviewer
+  - `buildSectionMapping(sectionAssignments, sections)` — converts per-section LLM assignments into category→titles map, with fallback heuristics
+  - `runSubagent(...)` — runs a single reviewer subagent with skill files, section text, type-specific guidance, and role model injection
+  - `buildRoleModelInjection(roleModelTexts, agentId)` — builds role model prompt section with agent-specific comparison hints
+  - `ROLE_MODEL_AGENT_HINTS` — lookup table with comparison focus hints for all 13 agent types
+  - `SUBAGENT_DEFS` — the 11 static subagent definitions (id, name, skills, section categories, system preamble, `textOnly` flag)
+  - `extractFigureTableEnvironments(mergedTex)` — extracts `\begin{figure}` / `\begin{table}` environments with surrounding context
   - `buildSkeleton(sections)` — builds section titles + first sentences for the Structure reviewer
-  - `mapCommentsToDocuments(...)` — Phase 3: maps `highlightText` strings back to original source files using the `% ========== INLINED FROM: ... ==========` markers
-  - `runFullReview({...})` — main entry point that orchestrates all 4 phases
+  - `fuzzyFindInText(needle, haystack)` — sliding-window fuzzy string matching with configurable threshold
+  - `mapCommentsToDocuments(...)` — Phase 3: maps `highlightText` strings back to original source files using exact + fuzzy matching
+  - `runFullReview({...})` — main entry point that orchestrates all 4 phases, dynamically adds paper type + venue agents
 
 ### Backend — Route Handlers
 
 - **[`services/web/app/src/Features/Chat/ChatController.mjs`](services/web/app/src/Features/Chat/ChatController.mjs)**
   Express route handlers for all AI Tutor endpoints:
-  - `reviewWholeProject` — the main endpoint. Gathers all project docs/files, finds root doc, inline-expands `\input`/`\include`, categorizes files into 5 categories, writes `merged.tex` + `metadata.json` to cache, then calls `runFullReview()` from the orchestrator. Returns review results with `metadata` attached so the frontend can display file details.
-  - `analyzeWholeProject` — standalone project analysis endpoint (same logic as the first half of `reviewWholeProject`, kept for backward compatibility)
+  - `reviewWholeProject` — the main endpoint. Gathers all project docs/files, finds root doc, inline-expands `\input`/`\include`, categorizes files, validates and saves role model texts to cache, writes `merged.tex` + `metadata.json`, then calls `runFullReview()`. Logs results to JSONL. Returns review results with `metadata` and `docPathToId` mapping.
+  - `deleteAiTutorComments` — scans all threads in a project, deletes those with `[AI Tutor]` prefix, returns count of deleted threads.
+  - `analyzeWholeProject` — standalone project analysis endpoint (kept for backward compatibility)
   - `logAITutorSuggestions` — logs AI tutor activity to daily JSONL files
   - `sendThreadMessage` — posts a thread message and emits `new-comment` socket event for real-time UI updates
 
 ### Backend — Route Definitions
 
-- **[`services/web/app/src/router.mjs`](services/web/app/src/router.mjs)** (lines ~1076–1098)
+- **[`services/web/app/src/router.mjs`](services/web/app/src/router.mjs)** (lines ~1076–1110)
   Defines the AI Tutor HTTP endpoints:
   - `POST /project/:project_id/ai-tutor-log` → `ChatController.logAITutorSuggestions`
   - `POST /project/:project_id/ai-tutor-analyze` → `ChatController.analyzeWholeProject`
   - `POST /project/:project_id/ai-tutor-review` → `ChatController.reviewWholeProject`
+  - `DELETE /project/:project_id/ai-tutor-delete-comments` → `ChatController.deleteAiTutorComments`
   All routes are protected by `blockRestrictedUserFromProject` + `ensureUserCanReadProject` middleware.
 
 ### Backend — Skill Library
 
 - **[`services/web/app/src/Features/Chat/ai-tutor-skills/`](services/web/app/src/Features/Chat/ai-tutor-skills/)**
-  31 markdown skill files organized in 5 directories. Loaded at review time by the orchestrator and injected into subagent system prompts.
+  42 markdown skill files organized in 7 directories. Loaded at review time by the orchestrator and injected into subagent system prompts.
   - [`CONTENTS.md`](services/web/app/src/Features/Chat/ai-tutor-skills/CONTENTS.md) — master index with modality tags (`[TEXT]` vs `[MULTIMODAL]`)
-  - [`01_setup/`](services/web/app/src/Features/Chat/ai-tutor-skills/01_setup/) — prototype paper search strategies (2 files)
-  - [`02_paper_types/`](services/web/app/src/Features/Chat/ai-tutor-skills/02_paper_types/) — 7 paper type definitions (analysis, dataset, method_improvement, llm_engineering, llm_inference_findings, css, position). All loaded into Phase 1 classifier.
-  - [`03_paper_sections/`](services/web/app/src/Features/Chat/ai-tutor-skills/03_paper_sections/) — 10 section-specific writing guides (abstract, introduction, task_formulation, related_work, methods, results_and_analysis, conclusion, limitations, ethical_considerations, faq_appendix). Loaded per-subagent based on which sections they review.
-  - [`04_figures_and_tables/`](services/web/app/src/Features/Chat/ai-tutor-skills/04_figures_and_tables/) — 6 visual element guides (figure1_design, experiment_visualization, color_palettes, data_visualization, table_formatting, caption_writing). Loaded by Figures & Captions reviewer.
-  - [`05_writing_style/`](services/web/app/src/Features/Chat/ai-tutor-skills/05_writing_style/) — 6 formatting and language guides (grammar_and_punctuation, citations_and_references, latex_formatting, math_and_formulas, capitalization_and_acronyms, general_writing_habits). Loaded by Writing Style, LaTeX Formatting, and Structure reviewers.
+  - [`01_setup/`](services/web/app/src/Features/Chat/ai-tutor-skills/01_setup/) — prototype paper search strategies + review sets guide (3 files)
+  - [`02_venues/`](services/web/app/src/Features/Chat/ai-tutor-skills/02_venues/) — 8 venue-specific guidelines (ICML 2026, ICLR 2026, NeurIPS 2025, AAAI 2026, ACL 2026, EMNLP 2025, COLM 2026, arXiv default). Each includes page limits, required sections, formatting rules, and reviewer criteria.
+  - [`03_paper_types/`](services/web/app/src/Features/Chat/ai-tutor-skills/03_paper_types/) — 7 paper type definitions (analysis, dataset, method_improvement, llm_engineering, llm_inference_findings, css, position). All loaded into Phase 1 classifier.
+  - [`04_paper_sections/`](services/web/app/src/Features/Chat/ai-tutor-skills/04_paper_sections/) — 10 section-specific writing guides (abstract, introduction, task_formulation, related_work, methods, results_and_analysis, conclusion, limitations, ethical_considerations, faq_appendix). Loaded per-subagent based on which sections they review.
+  - [`05_figures_and_tables/`](services/web/app/src/Features/Chat/ai-tutor-skills/05_figures_and_tables/) — 6 visual element guides (figure1_design, experiment_visualization, color_palettes, data_visualization, table_formatting, caption_writing). Loaded by Figures & Captions reviewer.
+  - [`06_writing_style/`](services/web/app/src/Features/Chat/ai-tutor-skills/06_writing_style/) — 6 formatting and language guides (grammar_and_punctuation, citations_and_references, latex_formatting, math_and_formulas, capitalization_and_acronyms, general_writing_habits). Loaded by Writing Style, LaTeX Formatting, and Structure reviewers.
+
+### Backend — Review Sets
+
+- **[`services/web/app/src/Features/Chat/ai-tutor-skills/review_sets/`](services/web/app/src/Features/Chat/ai-tutor-skills/review_sets/)**
+  Curated JSON files containing accepted papers from recent top conferences, with full reviewer feedback (scores, strengths, weaknesses). Referenced by venue skill files to help agents find topically relevant exemplar papers.
+  - `ICLR2025_50_high_quality_papers.json` — 50 papers with avg reviewer score ≥ 8
+  - `ICLR2025_50_low_quality_papers.json` — 50 lower-scored papers (negative reference)
+  - `NeurIPS2025_100_high_quality_papers.json` — 100 high-quality accepts
+  - `NeurIPS2025_100_low_quality_papers.json` — 100 lower-scored papers
+  - `COLM2025_50_high_quality_papers.json` — 50 high-quality COLM accepts
 
 ### Frontend — Service Layer
 
 - **[`services/web/frontend/js/features/editor-left-menu/utils/ai-tutor-service.ts`](services/web/frontend/js/features/editor-left-menu/utils/ai-tutor-service.ts)**
   TypeScript API functions and type definitions:
-  - `runFullReview(projectId, model)` — calls `POST /ai-tutor-review`, returns `ReviewResult` with `commentsByDoc`, `summary`, `classification`, `failedAgents`, `metadata`
+  - `runFullReview(projectId, model, venue, roleModelTexts)` — calls `POST /ai-tutor-review`, returns `ReviewResult` with `commentsByDoc`, `summary`, `classification`, `failedAgents`, `metadata`, `docPathToId`, `roleModelPapers`
+  - `deleteAiTutorComments(projectId)` — calls `DELETE /ai-tutor-delete-comments`, returns `{ deleted: number }`
   - Type interfaces: `WholeProjectMetadata`, `FileCategory`, `ReviewComment`, `ReviewResult`
 
 ### Frontend — UI Panel
 
 - **[`services/web/frontend/js/features/ide-redesign/components/ai-tutor/ai-tutor-panel.tsx`](services/web/frontend/js/features/ide-redesign/components/ai-tutor/ai-tutor-panel.tsx)**
   The React component for the AI Tutor sidebar panel. Contains:
-  - **Model dropdown** — lets user select GPT-4o, GPT-4o-mini, GPT-4.1, GPT-4.1-mini
-  - **"Run Full Review" button** (`handleFullReview`) — triggers the combined project analysis + multi-agent review in one call. Shows progress message during the request, then displays review summary (paper type, comments by category/severity/document, skipped agents)
-  - **"Apply Comments" button** (`handleApplyComments`) — applies review comments to the currently open document by searching for each `highlightText` via `indexOf()`, creating thread via `postJSON`, and applying `CommentOperation` via `currentDocument.submitOp()`
-  - **Review summary** (collapsible) — paper type, comments by category/severity/document, failed agents
-  - **File details** (collapsible) — extracted from `metadata` in the review response: TeX files, figures, bib files, merged char count
+  - **Model dropdown** — GPT-4o, GPT-4o Mini, GPT-4.1, GPT-4.1 Mini, GPT-5.2, GPT-5.2 Chat (default: GPT-5.2 Chat)
+  - **Venue dropdown** — arXiv (default), COLM 2026, ICML 2026, ACL 2026, AAAI 2026, ICLR 2026, EMNLP 2025, NeurIPS 2025
+  - **Role model PDF upload** — up to 3 PDFs with client-side text extraction, file list with char counts and remove buttons
+  - **"Run Full Review" button** (`handleFullReview`) — triggers the combined project analysis + multi-agent review. Shows progress message during the request, then displays review summary
+  - **"Apply Comments" button** (`handleApplyComments`) — batch-applies review comments across all documents by switching between files automatically via a queue
+  - **"Delete All AI Tutor Comments" button** (`handleDeleteComments`) — removes all AI Tutor comments from the project
+  - **Review summary** (collapsible) — paper type, role model papers used, comments by category/severity/document, failed agents
+  - **File details** (collapsible) — TeX files, figures, bib files, merged char count
+
+### Frontend — PDF Text Extraction
+
+- **[`services/web/frontend/js/features/ide-redesign/components/ai-tutor/extract-pdf-text.ts`](services/web/frontend/js/features/ide-redesign/components/ai-tutor/extract-pdf-text.ts)**
+  Client-side PDF text extraction using pdfjs-dist (already installed in Overleaf). Configures its own worker via `workerSrc` to avoid conflicting with Overleaf's PDF viewer (which uses `workerPort`). Truncates at 60K chars per paper. Exports `extractTextFromPdf(file: File)` and `RoleModelPaper` interface.
+
+### Frontend — CodeMirror Position Safety
+
+- **[`services/web/frontend/js/features/source-editor/extensions/ranges.ts`](services/web/frontend/js/features/source-editor/extensions/ranges.ts)**
+  CodeMirror extension that creates decorations from comment/change positions. Modified to accept `docLength` parameter and bounds-check all positions before creating decorations.
+
+- **[`services/web/frontend/js/features/review-panel/components/review-panel-entry.tsx`](services/web/frontend/js/features/review-panel/components/review-panel-entry.tsx)**
+  Review panel entry component. Modified to skip out-of-range cursor positions and wrap hover highlight dispatches in try/catch.
+
+### Frontend — Styles
+
+- **[`services/web/frontend/stylesheets/pages/editor/ai-tutor.scss`](services/web/frontend/stylesheets/pages/editor/ai-tutor.scss)**
+  Theme-aware styles for the AI Tutor panel. Overrides form label/control colors to use `--content-primary-themed`, `--bg-secondary-themed`, `--border-divider-themed` CSS variables so text is visible in both light and dark editor themes.
 
 ### Configuration & Infrastructure
 
@@ -250,8 +350,9 @@ All paths are relative to `/home/ubuntu/.jiarui/overleaf/`.
   - `merged.tex` — all .tex files inlined via recursive `\input`/`\include` replacement, with `% ========== INLINED FROM: ... ==========` markers
   - `metadata.json` — project name, root doc path, file categorization (tex, figures, bib, useful, irrelevant), merged tex length
   - `review_comments.json` — cached output of the full review: classification, commentsByDoc, summary, failedAgents
+  - `role_model_*.txt` — extracted text from uploaded role model PDFs
 
-- **`develop/ai-tutor-logs/`** — daily JSONL log files (`ai-tutor-YYYY-MM-DD.jsonl`) recording each AI tutor invocation with timestamps, suggestions, and model info
+- **`develop/ai-tutor-logs/`** — daily JSONL log files (`ai-tutor-YYYY-MM-DD.jsonl`) recording each review with timestamps, project/user IDs, model, venue, role model papers, classification, all comments
 
 ## API Endpoints
 
@@ -260,6 +361,7 @@ All paths are relative to `/home/ubuntu/.jiarui/overleaf/`.
 | POST | `/project/:id/ai-tutor-review` | `reviewWholeProject` | Analyzes project + runs full multi-agent review |
 | POST | `/project/:id/ai-tutor-analyze` | `analyzeWholeProject` | Standalone project analysis (backward compat) |
 | POST | `/project/:id/ai-tutor-log` | `logAITutorSuggestions` | Log AI suggestions to disk |
+| DELETE | `/project/:id/ai-tutor-delete-comments` | `deleteAiTutorComments` | Delete all AI Tutor comments from project |
 
 ## Configuration
 
@@ -272,13 +374,31 @@ OPENAI_API_KEY=sk-...
 
 Passed to the web container via `env_file: ../.env` in `docker-compose.yml`.
 
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OPENAI_API_KEY` | (required) | OpenAI API key |
+| `AI_TUTOR_FUZZY_THRESHOLD` | `0.85` | Fuzzy matching similarity threshold (0.0–1.0) for Phase 3 |
+| `AI_TUTOR_LOG_PROMPTS` | `false` | Set to `true` to log full LLM prompts and responses |
+
 ### Model Selection
 
 Users select the model from a dropdown in the AI Tutor panel. Options:
-- GPT-4o (default, best quality)
-- GPT-4o Mini (faster, cheaper)
+- GPT-4o
+- GPT-4o Mini
 - GPT-4.1
 - GPT-4.1 Mini
+- GPT-5.2
+- GPT-5.2 Chat (default)
+
+### Venue Selection
+
+Users can optionally select a target venue:
+- arXiv / No Specific Venue (default — no venue agent)
+- COLM 2026, ICML 2026, ACL 2026, AAAI 2026, ICLR 2026, EMNLP 2025, NeurIPS 2025
+
+When a venue is selected, a dynamic Venue Reviewer agent is added that checks against that conference's page limits, required sections, and reviewer criteria.
 
 ## Robustness
 
@@ -287,17 +407,22 @@ Users select the model from a dropdown in the AI Tutor panel. Options:
 | LLM returns malformed output | `generateObject()` with Zod schema enforces structure |
 | Subagent timeout | `Promise.race()` with 2-minute timeout per agent |
 | One agent fails | `Promise.allSettled()` — other agents continue |
-| `highlightText` not found in doc | Comment skipped with console warning |
+| `highlightText` not found in doc (exact) | Fuzzy matching with configurable threshold |
+| `highlightText` not in expected file | Fallback search across all documents |
 | API rate limit | Failed agents reported in `failedAgents` array |
 | Input exceeds context window | `generateObjectWithRetry()` retries with 50%, then 25% of prompt |
 | No matching sections for an agent | Agent skipped gracefully with reason |
 | Section not assigned by LLM | `buildSectionMapping()` fallback assigns via keyword heuristics |
 | Section title fuzzy mismatch | `collectSectionContent()` falls back to partial string matching |
 | Skill file not found | Logs warning, continues with placeholder text |
+| Comment position out of range | CodeMirror bounds checking skips invalid decorations |
+| Duplicate severity tags | Regex strip before prefixing `[AI Tutor] [severity]` |
+| Document switching race condition | Position bounds checking at decoration, highlight, and selection levels |
+| PDF extraction fails (scanned/image PDF) | Error shown in UI, review proceeds without role models |
 
 ## Multimodal Interface (Future)
 
-Each subagent definition has a `textOnly: boolean` field. Currently all agents are text-only. The `04_figures_and_tables/` skills have `[MULTIMODAL]` tags. When multimodal support is added:
+Each subagent definition has a `textOnly: boolean` field. Currently all agents are text-only. The `05_figures_and_tables/` skills have `[MULTIMODAL]` tags. When multimodal support is added:
 1. Set `textOnly: false` on the Figures & Captions Reviewer
 2. Pass compiled PDF page images alongside the LaTeX source
 3. The agent can then review actual figure appearance, color palettes, chart types, etc.
@@ -307,3 +432,4 @@ Each subagent definition has a `textOnly: boolean` field. Currently all agents a
 - **Vercel AI SDK** (`ai` v6.0.2) — `generateObject()` for structured LLM output
 - **@ai-sdk/openai** (v3.0.0) — OpenAI provider with `createOpenAI({ apiKey })`
 - **zod** — Schema validation for LLM output structure
+- **pdfjs-dist** (v5.1.91) — Client-side PDF text extraction for role model papers (already installed in Overleaf)

@@ -87,6 +87,11 @@ export const ReviewPanelEntry: FC<
         openDocWithId(docId, { gotoOffset: position, keepCurrentView: true })
       } else {
         setTimeout(() => {
+          // Skip if position is beyond the document length
+          if (position > view.state.doc.length) {
+            return
+          }
+
           const selection = EditorSelection.cursor(position)
 
           // if the position is outside the viewport, so could be estimated,
@@ -140,7 +145,11 @@ export const ReviewPanelEntry: FC<
     return () => {
       if (hoverRanges) {
         setTimeout(() => {
-          view.dispatch(clearHighlightRanges(op))
+          try {
+            view.dispatch(clearHighlightRanges(op))
+          } catch {
+            // ignore out-of-range positions during cleanup
+          }
         })
       }
     }
@@ -168,12 +177,20 @@ export const ReviewPanelEntry: FC<
       }}
       onMouseEnter={() => {
         if (hoverRanges) {
-          view.dispatch(highlightRanges(op))
+          try {
+            view.dispatch(highlightRanges(op))
+          } catch {
+            // ignore out-of-range positions
+          }
         }
       }}
       onMouseLeave={() => {
         if (hoverRanges) {
-          view.dispatch(clearHighlightRanges(op))
+          try {
+            view.dispatch(clearHighlightRanges(op))
+          } catch {
+            // ignore out-of-range positions
+          }
         }
       }}
       role="button"

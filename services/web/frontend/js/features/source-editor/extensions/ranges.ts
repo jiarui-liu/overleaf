@@ -101,7 +101,7 @@ export const ranges = () => [
 
             for (const effect of transaction.effects) {
               if (effect.is(updateRangesEffect)) {
-                this.decorations = buildChangeDecorations(effect.value)
+                this.decorations = buildChangeDecorations(effect.value, update.state.doc.length)
               } else if (
                 effect.is(highlightRangesEffect) &&
                 isDeleteOperation(effect.value)
@@ -111,7 +111,8 @@ export const ranges = () => [
                   widget =>
                     widget.change.op.p === effect.value.p &&
                     widget.highlightType !== 'focus',
-                  'highlight'
+                  'highlight',
+                  update.state.doc.length
                 )
               } else if (
                 effect.is(clearHighlightRangesEffect) &&
@@ -122,7 +123,8 @@ export const ranges = () => [
                   widget =>
                     widget.change.op.p === effect.value.p &&
                     widget.highlightType !== 'focus',
-                  null
+                  null,
+                  update.state.doc.length
                 )
               }
             }
@@ -132,13 +134,15 @@ export const ranges = () => [
                 this.decorations,
                 ({ change }) =>
                   isSelectionWithinOp(change.op, update.state.selection.main),
-                'focus'
+                'focus',
+                update.state.doc.length
               )
               this.decorations = updateDeleteWidgetHighlight(
                 this.decorations,
                 ({ change }) =>
                   !isSelectionWithinOp(change.op, update.state.selection.main),
-                null
+                null,
+                update.state.doc.length
               )
             }
           }
@@ -167,7 +171,8 @@ export const ranges = () => [
               if (effect.is(highlightRangesEffect)) {
                 this.decorations = buildHighlightDecorations(
                   'ol-cm-change-highlight',
-                  effect.value
+                  effect.value,
+                  update.state.doc.length
                 )
               } else if (effect.is(clearHighlightRangesEffect)) {
                 this.decorations = Decoration.none
@@ -223,7 +228,8 @@ export const ranges = () => [
             if (isSelectionWithinOp(range.op, update.state.selection.main)) {
               this.decorations = buildHighlightDecorations(
                 'ol-cm-change-focus',
-                range.op
+                range.op,
+                update.state.doc.length
               )
               break
             }
@@ -240,7 +246,7 @@ export const ranges = () => [
   trackChangesTheme,
 ]
 
-const buildChangeDecorations = (data: RangesData) => {
+const buildChangeDecorations = (data: RangesData, docLength?: number) => {
   if (!data.ranges) {
     return Decoration.none
   }
@@ -251,7 +257,7 @@ const buildChangeDecorations = (data: RangesData) => {
 
   for (const change of changes) {
     try {
-      decorations.push(...createChangeRange(change, data))
+      decorations.push(...createChangeRange(change, data, docLength))
     } catch (error) {
       // ignore invalid changes
       debugConsole.debug('invalid change position', error)
@@ -264,7 +270,8 @@ const buildChangeDecorations = (data: RangesData) => {
 const updateDeleteWidgetHighlight = (
   decorations: DecorationSet,
   predicate: (widget: ChangeDeletedWidget) => boolean,
-  highlightType?: 'focus' | 'highlight' | null
+  highlightType?: 'focus' | 'highlight' | null,
+  docLength?: number
 ) => {
   const widgetsToReplace: ChangeDeletedWidget[] = []
   const cursor = decorations.iter()
@@ -281,19 +288,21 @@ const updateDeleteWidgetHighlight = (
     filter: (from, to, decoration) => {
       return !widgetsToReplace.includes(decoration.spec?.widget)
     },
-    add: widgetsToReplace.map(({ change }) =>
-      Decoration.widget({
-        widget: new ChangeDeletedWidget(change, highlightType),
-        side: 1,
-        opType: 'd',
-        id: change.id,
-        metadata: change.metadata,
-      }).range(change.op.p, change.op.p)
-    ),
+    add: widgetsToReplace
+      .filter(({ change }) => docLength == null || change.op.p <= docLength)
+      .map(({ change }) =>
+        Decoration.widget({
+          widget: new ChangeDeletedWidget(change, highlightType),
+          side: 1,
+          opType: 'd',
+          id: change.id,
+          metadata: change.metadata,
+        }).range(change.op.p, change.op.p)
+      ),
   })
 }
 
-const buildHighlightDecorations = (className: string, op: AnyOperation) => {
+const buildHighlightDecorations = (className: string, op: AnyOperation, docLength?: number) => {
   if (isDeleteOperation(op)) {
     // delete indicators are handled in change decorations
     return Decoration.none
@@ -307,10 +316,17 @@ const buildHighlightDecorations = (className: string, op: AnyOperation) => {
     return Decoration.none
   }
 
+  // Skip if position is beyond document length
+  if (docLength != null && opFrom >= docLength) {
+    return Decoration.none
+  }
+
+  const opTo = docLength != null ? Math.min(opFrom + opLength, docLength) : opFrom + opLength
+
   return Decoration.set(
     Decoration.mark({
       class: `${className} ${className}-${opType}`,
-    }).range(opFrom, opFrom + opLength),
+    }).range(opFrom, opTo),
     true
   )
 }
@@ -338,10 +354,16 @@ class ChangeDeletedWidget extends WidgetType {
   }
 }
 
-const createChangeRange = (change: Change, data: RangesData) => {
+const createChangeRange = (change: Change, data: RangesData, docLength?: number) => {
   const { id, metadata, op } = change
 
   const from = op.p
+
+  // Skip ranges that are out of bounds for the current document
+  if (docLength != null && from > docLength) {
+    debugConsole.debug('skipping out-of-range decoration', { from, docLength })
+    return []
+  }
 
   if (isDeleteOperation(op)) {
     const opType = 'd'
@@ -368,7 +390,12 @@ const createChangeRange = (change: Change, data: RangesData) => {
 
   const opType = _isCommentOperation ? 'c' : 'i'
   const changedText = _isCommentOperation ? op.c : op.i
-  const to = from + changedText.length
+  let to = from + changedText.length
+
+  // Clamp the end position to the document length
+  if (docLength != null && to > docLength) {
+    to = docLength
+  }
 
   // Mark decorations must not be empty
   if (from === to) {
