@@ -804,12 +804,13 @@ async function deleteAiTutorComments(req, res) {
     // 1. Fetch all threads for this project
     const threads = await ChatApiHandler.promises.getThreads(projectId)
 
-    // 2. Find threads whose first message starts with [AI Tutor]
+    // 2. Find threads whose first message starts with [AI Tutor] or [critical]/[warning]/[suggestion]
+    const aiTutorRe = /^\[(AI Tutor|critical|warning|suggestion)\]/
     const aiTutorThreadIds = []
     for (const [threadId, thread] of Object.entries(threads)) {
       if (thread.messages && thread.messages.length > 0) {
         const firstMsg = thread.messages[0].content || ''
-        if (firstMsg.startsWith('[AI Tutor]')) {
+        if (aiTutorRe.test(firstMsg)) {
           aiTutorThreadIds.push(threadId)
         }
       }
