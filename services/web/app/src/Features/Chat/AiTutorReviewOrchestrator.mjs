@@ -2,10 +2,12 @@
  * AiTutorReviewOrchestrator.mjs
  *
  * Multi-agent paper review system. Orchestrates:
- *   Phase 0 — Regex-based section parsing of merged.tex
- *   Phase 1 — LLM-based paper type classification + section-to-category mapping
- *   Phase 2 — Parallel reviewer subagents (one per review aspect)
- *   Phase 3 — Comment deduplication and position mapping back to original docs
+ *   Phase 1 — Regex-based section parsing of merged.tex
+ *   Phase 2 — LLM-based paper type classification + section-to-category mapping
+ *   Phase 3 — Parallel reviewer subagents (one per review aspect)
+ *   Phase 4 — Comment deduplication
+ *   Phase 5 — Strict-mode comment pruning (LLM-based top-N selection)
+ *   Phase 6 — Comment position mapping back to original docs
  */
 
 import { createOpenAI } from '@ai-sdk/openai'
@@ -56,7 +58,7 @@ function loadSkill(relativePath)
 
 
 // ---------------------------------------------------------------------------
-// Phase 0 — Section parsing (pure regex, no LLM)
+// Phase 1 — Section parsing (pure regex, no LLM)
 // ---------------------------------------------------------------------------
 
 /**
@@ -472,7 +474,7 @@ async function generateObjectWithRetry(options, label = 'LLM call', logOverrides
 }
 
 // ---------------------------------------------------------------------------
-// Phase 1 — Paper type classification + section mapping
+// Phase 2 — Paper type classification + section mapping
 // ---------------------------------------------------------------------------
 
 const PAPER_TYPES = [
@@ -628,7 +630,7 @@ export function buildSectionMapping(sectionAssignments, sections)
     }
   }
 
-  // Safety net: find any sections from Phase 0 that the LLM missed
+  // Safety net: find any sections from Phase 1 that the LLM missed
   // and assign them to the closest matching category (single category)
   const assignedTitles = new Set(
     sectionAssignments.map(a => a.sectionTitle.toLowerCase().trim())
@@ -687,7 +689,7 @@ export async function classifyPaper(openai, model, sections)
   )
 
   console.log(
-    `[AI Tutor] Phase 1: Abstract found: ${!!abstractSection} (${abstractSection?.content?.length || 0} chars), ` +
+    `[AI Tutor] Phase 2: Abstract found: ${!!abstractSection} (${abstractSection?.content?.length || 0} chars), ` +
     `Introduction found: ${!!introSection} (${introSection?.content?.length || 0} chars)`
   )
 
@@ -710,12 +712,12 @@ export async function classifyPaper(openai, model, sections)
     .join('\n')
 
   console.log(
-    `[AI Tutor] Phase 1: ${nonAbstractSections.length} sections to assign (${appendixSections.length} appendix sections auto-assigned):\n${numberedSections}`
+    `[AI Tutor] Phase 2: ${nonAbstractSections.length} sections to assign (${appendixSections.length} appendix sections auto-assigned):\n${numberedSections}`
   )
 
   const paperTypeDefinitions = loadSkill('01_setup/paper_type_definitions.md')
 
-  console.log(`[AI Tutor] Phase 1: Paper type definitions: ${paperTypeDefinitions.length} chars`)
+  console.log(`[AI Tutor] Phase 2: Paper type definitions: ${paperTypeDefinitions.length} chars`)
 
   const classifierSystem = `You are a paper type classifier for an academic writing tutor.
 Given a paper's abstract, introduction, and section outline, classify its type
@@ -782,7 +784,7 @@ Based on the above:
   // Convert per-section assignments → category→titles map
   const raw = result.object
   console.log(
-    `[AI Tutor] Phase 1 result: paperType="${raw.paperType}", ` +
+    `[AI Tutor] Phase 2 result: paperType="${raw.paperType}", ` +
     `${raw.sectionAssignments.length} section assignments, ` +
     `summary: "${raw.paperTypeSummary}"`
   )
@@ -820,14 +822,14 @@ Based on the above:
     }
   }
 
-  console.log('[AI Tutor] Phase 1: Final section mapping:')
+  console.log('[AI Tutor] Phase 2: Final section mapping:')
   for (const [cat, titles] of Object.entries(sectionMapping))
   {
     console.log(`[AI Tutor]   ${cat}: [${titles.join(', ')}]`)
   }
   if (hybridSections.length > 0)
   {
-    console.log(`[AI Tutor] Phase 1: ${hybridSections.length} hybrid section(s):`)
+    console.log(`[AI Tutor] Phase 2: ${hybridSections.length} hybrid section(s):`)
     for (const hs of hybridSections)
     {
       console.log(`[AI Tutor]   "${hs.title}" => [${hs.categories.join(' + ')}]`)
@@ -844,7 +846,7 @@ Based on the above:
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — Reviewer subagents
+// Phase 3 — Reviewer subagents
 // ---------------------------------------------------------------------------
 
 const CommentArraySchema = z.object({
@@ -872,7 +874,7 @@ const CommentArraySchema = z.object({
 /**
  * Definition for each reviewer subagent.
  * skillFiles: paths relative to ai-tutor-skills/
- * sectionCategories: which categories from Phase 1 mapping this agent reviews
+ * sectionCategories: which categories from Phase 2 mapping this agent reviews
  * guidanceKey: which key from typeSpecificGuidance to inject (or null)
  * systemPreamble: additional system instructions
  * fallbackToFullDoc: if true and no matching sections found, receive full doc
@@ -1090,7 +1092,7 @@ ${roleModelSections}`
 }
 
 /**
- * Collect sections matching a list of title strings from the Phase 1 mapping.
+ * Collect sections matching a list of title strings from the Phase 2 mapping.
  *
  * Deduplicates overlapping sections: if a parent section (e.g., \section{Methodology})
  * and its child subsections (e.g., \subsection{Game-Theoretic Preliminaries}) are both
@@ -1293,7 +1295,7 @@ async function pruneCommentsWithLLM(openai, model, comments)
   const toRemove = comments.length - STRICT_MAX_COMMENTS
   console.log('-'.repeat(60))
   console.log(
-    `[AI Tutor] Phase 2.75: Strict mode pruning — ${comments.length} comments exceeds limit of ${STRICT_MAX_COMMENTS}, ` +
+    `[AI Tutor] Phase 5: Strict mode pruning — ${comments.length} comments exceeds limit of ${STRICT_MAX_COMMENTS}, ` +
     `asking LLM to select ${toRemove} least important comment(s) to remove...`
   )
 
@@ -1344,14 +1346,14 @@ async function pruneCommentsWithLLM(openai, model, comments)
     if (removeSet.size !== toRemove)
     {
       console.warn(
-        `[AI Tutor] Phase 2.75: LLM returned ${removeSet.size} indices instead of ${toRemove}, ` +
+        `[AI Tutor] Phase 5: LLM returned ${removeSet.size} indices instead of ${toRemove}, ` +
         `falling back to severity-based pruning`
       )
       return severityFallbackPrune(comments, STRICT_MAX_COMMENTS)
     }
 
     // Log removed comments
-    console.log(`[AI Tutor] Phase 2.75: LLM selected ${removeSet.size} comment(s) to remove:`)
+    console.log(`[AI Tutor] Phase 5: LLM selected ${removeSet.size} comment(s) to remove:`)
     for (const idx of [...removeSet].sort((a, b) => a - b))
     {
       const c = comments[idx]
@@ -1363,7 +1365,7 @@ async function pruneCommentsWithLLM(openai, model, comments)
 
     // Log kept comments
     const kept = comments.filter((_, i) => !removeSet.has(i))
-    console.log(`[AI Tutor] Phase 2.75: ${kept.length} comment(s) kept:`)
+    console.log(`[AI Tutor] Phase 5: ${kept.length} comment(s) kept:`)
     for (let i = 0; i < kept.length; i++)
     {
       const c = kept[i]
@@ -1374,14 +1376,14 @@ async function pruneCommentsWithLLM(openai, model, comments)
     }
 
     console.log(
-      `[AI Tutor] Phase 2.75: Pruning complete — ${comments.length} → ${kept.length} comments`
+      `[AI Tutor] Phase 5: Pruning complete — ${comments.length} → ${kept.length} comments`
     )
 
     return kept
   } catch (err)
   {
     console.error(
-      `[AI Tutor] Phase 2.75: LLM pruning failed (${err.message}), falling back to severity-based pruning`
+      `[AI Tutor] Phase 5: LLM pruning failed (${err.message}), falling back to severity-based pruning`
     )
     return severityFallbackPrune(comments, STRICT_MAX_COMMENTS)
   }
@@ -1405,7 +1407,7 @@ function severityFallbackPrune(comments, maxCount)
   const kept = scored.slice(0, maxCount).sort((a, b) => a.idx - b.idx).map(s => s.comment)
   const removed = scored.slice(maxCount)
 
-  console.log(`[AI Tutor] Phase 2.75: Severity-based fallback pruning — ${comments.length} → ${kept.length} comments`)
+  console.log(`[AI Tutor] Phase 5: Severity-based fallback pruning — ${comments.length} → ${kept.length} comments`)
   for (const r of removed)
   {
     console.log(
@@ -1689,7 +1691,7 @@ ${roleModelLogNote}`
 }
 
 // ---------------------------------------------------------------------------
-// Phase 3 — Comment position mapping
+// Phase 6 — Comment position mapping
 // ---------------------------------------------------------------------------
 
 /**
@@ -1772,7 +1774,7 @@ export function mapCommentsToDocuments(
     : rootDocPath
 
   console.log(
-    `[AI Tutor] Phase 3: Mapping ${comments.length} comments to documents. ` +
+    `[AI Tutor] Phase 6: Mapping ${comments.length} comments to documents. ` +
     `Inline map: ${inlineMap.length} regions, root: ${normalizedRoot}, ` +
     `docContentMap: ${Object.keys(docContentMap).length} files`
   )
@@ -1780,7 +1782,7 @@ export function mapCommentsToDocuments(
   {
     for (const r of inlineMap)
     {
-      console.log(`[AI Tutor] Phase 3:   inline region: ${r.file} (chars ${r.start}-${r.end})`)
+      console.log(`[AI Tutor] Phase 6:   inline region: ${r.file} (chars ${r.start}-${r.end})`)
     }
   }
 
@@ -1802,7 +1804,7 @@ export function mapCommentsToDocuments(
       if (fuzzyResult)
       {
         console.log(
-          `[AI Tutor] Phase 3: Fuzzy-matched in merged.tex (sim=${fuzzyResult.similarity.toFixed(3)}): ` +
+          `[AI Tutor] Phase 6: Fuzzy-matched in merged.tex (sim=${fuzzyResult.similarity.toFixed(3)}): ` +
           `"${fuzzyResult.matchedText.slice(0, 80)}..." [${comment.agentName}]`
         )
         comment.highlightText = fuzzyResult.matchedText
@@ -1811,7 +1813,7 @@ export function mapCommentsToDocuments(
       else
       {
         console.warn(
-          `[AI Tutor] Phase 3: WARN: highlightText not found in merged.tex (exact + fuzzy): ` +
+          `[AI Tutor] Phase 6: WARN: highlightText not found in merged.tex (exact + fuzzy): ` +
           `"${comment.highlightText.slice(0, 80)}..." [${comment.agentName}]`
         )
         notFoundInMerged++
@@ -1845,7 +1847,7 @@ export function mapCommentsToDocuments(
           })
           found = true
           console.warn(
-            `[AI Tutor] Phase 3: WARN: Original file "${originalFile}" not in docContentMap. ` +
+            `[AI Tutor] Phase 6: WARN: Original file "${originalFile}" not in docContentMap. ` +
             `Fallback found in "${docPath}" for: "${comment.highlightText.slice(0, 50)}..."`
           )
           fallbackMapped++
@@ -1877,7 +1879,7 @@ export function mapCommentsToDocuments(
           })
           found = true
           console.log(
-            `[AI Tutor] Phase 3: Fuzzy fallback across docs (sim=${bestFuzzy.similarity.toFixed(3)}): ` +
+            `[AI Tutor] Phase 6: Fuzzy fallback across docs (sim=${bestFuzzy.similarity.toFixed(3)}): ` +
             `found in "${bestDocPath}" for: "${comment.highlightText.slice(0, 50)}..." [${comment.agentName}]`
           )
           fuzzyMapped++
@@ -1886,7 +1888,7 @@ export function mapCommentsToDocuments(
       if (!found)
       {
         console.warn(
-          `[AI Tutor] Phase 3: WARN: Could not map comment to any document (exact + fuzzy): ` +
+          `[AI Tutor] Phase 6: WARN: Could not map comment to any document (exact + fuzzy): ` +
           `"${comment.highlightText.slice(0, 60)}..." [${comment.agentName}]`
         )
         unmapped++
@@ -1903,7 +1905,7 @@ export function mapCommentsToDocuments(
       if (fuzzyResult)
       {
         console.log(
-          `[AI Tutor] Phase 3: Fuzzy-matched in original file "${originalFile}" (sim=${fuzzyResult.similarity.toFixed(3)}): ` +
+          `[AI Tutor] Phase 6: Fuzzy-matched in original file "${originalFile}" (sim=${fuzzyResult.similarity.toFixed(3)}): ` +
           `"${fuzzyResult.matchedText.slice(0, 80)}..." [${comment.agentName}]`
         )
         comment.highlightText = fuzzyResult.matchedText
@@ -1932,7 +1934,7 @@ export function mapCommentsToDocuments(
           })
           found = true
           console.warn(
-            `[AI Tutor] Phase 3: WARN: highlightText not in expected file "${originalFile}", ` +
+            `[AI Tutor] Phase 6: WARN: highlightText not in expected file "${originalFile}", ` +
             `fallback found in "${docPath}": "${comment.highlightText.slice(0, 50)}..."`
           )
           fallbackMapped++
@@ -1964,7 +1966,7 @@ export function mapCommentsToDocuments(
           })
           found = true
           console.log(
-            `[AI Tutor] Phase 3: Fuzzy fallback across docs (sim=${bestFuzzy.similarity.toFixed(3)}): ` +
+            `[AI Tutor] Phase 6: Fuzzy fallback across docs (sim=${bestFuzzy.similarity.toFixed(3)}): ` +
             `found in "${bestDocPath}" for: "${comment.highlightText.slice(0, 50)}..." [${comment.agentName}]`
           )
           fuzzyMapped++
@@ -1973,7 +1975,7 @@ export function mapCommentsToDocuments(
       if (!found)
       {
         console.warn(
-          `[AI Tutor] Phase 3: WARN: highlightText not in any original file (exact + fuzzy): ` +
+          `[AI Tutor] Phase 6: WARN: highlightText not in any original file (exact + fuzzy): ` +
           `"${comment.highlightText.slice(0, 60)}..." (expected: ${originalFile}) [${comment.agentName}]`
         )
         unmapped++
@@ -1991,7 +1993,7 @@ export function mapCommentsToDocuments(
   }
 
   console.log(
-    `[AI Tutor] Phase 3: Mapping complete — ` +
+    `[AI Tutor] Phase 6: Mapping complete — ` +
     `${directMapped} direct, ${fallbackMapped} fallback, ${fuzzyMapped} fuzzy, ` +
     `${notFoundInMerged} not in merged.tex, ${unmapped} unmapped. ` +
     `Total mapped: ${mapped.length}/${comments.length}`
@@ -2058,12 +2060,12 @@ export async function runFullReview({
   }
   console.log('='.repeat(80))
 
-  // Phase 0: Parse sections
-  const phase0Start = Date.now()
+  // Phase 1: Parse sections
+  const phase1Start = Date.now()
   const sections = parseSections(mergedTex)
-  const phase0Elapsed = ((Date.now() - phase0Start) / 1000).toFixed(2)
+  const phase1Elapsed = ((Date.now() - phase1Start) / 1000).toFixed(2)
   console.log(
-    `[AI Tutor] Phase 0: Parsed ${sections.length} sections in ${phase0Elapsed}s:`
+    `[AI Tutor] Phase 1: Parsed ${sections.length} sections in ${phase1Elapsed}s:`
   )
   for (const sec of sections)
   {
@@ -2073,14 +2075,14 @@ export async function runFullReview({
     )
   }
 
-  // Phase 1: Classify paper type + map sections
+  // Phase 2: Classify paper type + map sections
   console.log('-'.repeat(60))
-  console.log('[AI Tutor] Phase 1: Classifying paper type + assigning sections...')
-  const phase1Start = Date.now()
+  console.log('[AI Tutor] Phase 2: Classifying paper type + assigning sections...')
+  const phase2Start = Date.now()
   const classification = await classifyPaper(openai, model, sections)
-  const phase1Elapsed = ((Date.now() - phase1Start) / 1000).toFixed(1)
+  const phase2Elapsed = ((Date.now() - phase2Start) / 1000).toFixed(1)
   console.log(
-    `[AI Tutor] Phase 1 complete in ${phase1Elapsed}s — ` +
+    `[AI Tutor] Phase 2 complete in ${phase2Elapsed}s — ` +
     `Paper type: ${classification.paperType} — ${classification.paperTypeSummary}`
   )
 
@@ -2231,12 +2233,12 @@ export async function runFullReview({
     }
   }
 
-  // Phase 2: Run subagents in parallel
+  // Phase 3: Run subagents in parallel
   console.log('-'.repeat(60))
   console.log(
-    `[AI Tutor] Phase 2: Launching ${agentDefs.length} reviewer subagents in parallel...`
+    `[AI Tutor] Phase 3: Launching ${agentDefs.length} reviewer subagents in parallel...`
   )
-  const phase2Start = Date.now()
+  const phase3Start = Date.now()
 
   const AGENT_TIMEOUT = 120_000 // 2 minutes per agent
   const subagentPromises = agentDefs.map(def =>
@@ -2269,13 +2271,13 @@ export async function runFullReview({
   })
 
   const results = await Promise.allSettled(subagentPromises)
-  const phase2Elapsed = ((Date.now() - phase2Start) / 1000).toFixed(1)
+  const phase3Elapsed = ((Date.now() - phase3Start) / 1000).toFixed(1)
 
   // Collect results
   const allComments = []
   const failedAgents = []
 
-  console.log(`[AI Tutor] Phase 2: All agents returned after ${phase2Elapsed}s. Collecting results:`)
+  console.log(`[AI Tutor] Phase 3: All agents returned after ${phase3Elapsed}s. Collecting results:`)
 
   for (let i = 0; i < results.length; i++)
   {
@@ -2316,51 +2318,51 @@ export async function runFullReview({
   }
 
   console.log(
-    `[AI Tutor] Phase 2 complete in ${phase2Elapsed}s. ` +
+    `[AI Tutor] Phase 3 complete in ${phase3Elapsed}s. ` +
     `Total raw comments: ${allComments.length}, failed/skipped agents: ${failedAgents.length}`
   )
 
-  // Phase 2.5: Deduplicate overlapping comments across agents
-  const dedupStart = Date.now()
+  // Phase 4: Deduplicate overlapping comments across agents
+  const phase4Start = Date.now()
   const dedupedComments = deduplicateComments(allComments, mergedTex)
-  const dedupElapsed = ((Date.now() - dedupStart) / 1000).toFixed(2)
+  const phase4Elapsed = ((Date.now() - phase4Start) / 1000).toFixed(2)
   const removed = allComments.length - dedupedComments.length
   if (removed > 0)
   {
     console.log(
-      `[AI Tutor] Phase 2.5: Deduplication removed ${removed} duplicate comment(s) ` +
-      `(${allComments.length} → ${dedupedComments.length}) in ${dedupElapsed}s`
+      `[AI Tutor] Phase 4: Deduplication removed ${removed} duplicate comment(s) ` +
+      `(${allComments.length} → ${dedupedComments.length}) in ${phase4Elapsed}s`
     )
   } else
   {
-    console.log(`[AI Tutor] Phase 2.5: No duplicates found (${allComments.length} comments) in ${dedupElapsed}s`)
+    console.log(`[AI Tutor] Phase 4: No duplicates found (${allComments.length} comments) in ${phase4Elapsed}s`)
   }
 
-  // Phase 2.75: Strict mode pruning — if too many comments, ask LLM to pick least important
-  const phase275Start = Date.now()
+  // Phase 5: Strict mode pruning — if too many comments, ask LLM to pick least important
+  const phase5Start = Date.now()
   const prunedComments = await pruneCommentsWithLLM(openai, model, dedupedComments)
-  const phase275Elapsed = ((Date.now() - phase275Start) / 1000).toFixed(2)
+  const phase5Elapsed = ((Date.now() - phase5Start) / 1000).toFixed(2)
   if (prunedComments.length < dedupedComments.length)
   {
     console.log(
-      `[AI Tutor] Phase 2.75 complete in ${phase275Elapsed}s — ` +
+      `[AI Tutor] Phase 5 complete in ${phase5Elapsed}s — ` +
       `pruned ${dedupedComments.length - prunedComments.length} comment(s)`
     )
   }
 
-  // Phase 3: Map comments to original documents
+  // Phase 6: Map comments to original documents
   console.log('-'.repeat(60))
-  console.log('[AI Tutor] Phase 3: Mapping comments to original documents...')
-  const phase3Start = Date.now()
+  console.log('[AI Tutor] Phase 6: Mapping comments to original documents...')
+  const phase6Start = Date.now()
   const mappedComments = mapCommentsToDocuments(
     prunedComments,
     mergedTex,
     docContentMap,
     rootDocPath
   )
-  const phase3Elapsed = ((Date.now() - phase3Start) / 1000).toFixed(2)
+  const phase6Elapsed = ((Date.now() - phase6Start) / 1000).toFixed(2)
   console.log(
-    `[AI Tutor] Phase 3 complete in ${phase3Elapsed}s. ` +
+    `[AI Tutor] Phase 6 complete in ${phase6Elapsed}s. ` +
     `Mapped ${mappedComments.length}/${prunedComments.length} comments to original documents`
   )
 
@@ -2428,7 +2430,7 @@ export async function runFullReview({
   console.log(`[AI Tutor]   By severity: ${JSON.stringify(reviewResult.summary.bySeverity)}`)
   console.log(`[AI Tutor]   By document: ${Object.entries(commentsByDoc).map(([d, c]) => `${d}(${c.length})`).join(', ')}`)
   console.log(`[AI Tutor]   Failed/skipped agents: ${failedAgents.length > 0 ? failedAgents.map(a => `${a.name}: ${a.reason}`).join('; ') : 'none'}`)
-  console.log(`[AI Tutor]   Timing: Phase 0: ${phase0Elapsed}s, Phase 1: ${phase1Elapsed}s, Phase 2: ${phase2Elapsed}s, Phase 2.5: ${dedupElapsed}s, Phase 2.75: ${phase275Elapsed}s, Phase 3: ${phase3Elapsed}s`)
+  console.log(`[AI Tutor]   Timing: Phase 1: ${phase1Elapsed}s, Phase 2: ${phase2Elapsed}s, Phase 3: ${phase3Elapsed}s, Phase 4: ${phase4Elapsed}s, Phase 5: ${phase5Elapsed}s, Phase 6: ${phase6Elapsed}s`)
   console.log('='.repeat(80))
 
   return reviewResult
