@@ -32,23 +32,7 @@ An LLM engineering paper (e.g., optimizations, systems, scaling) typically follo
 -   **Insight**: IO-aware tiling to reduce memory access.
 -   **Evaluation**: Shows speedup *and* memory reduction, allowing longer context lengths.
 
-## Improvement Prompting Template
-
-```
-Your task is to critique and improve the following LLM Engineering paper section:
-<<section_content>>
-
-Here is the guidance for LLM Engineering papers:
-- **Measurable Problem**: Is the bottleneck quantified?
-- **Ablation**: Are the sources of improvement isolated?
-- **Scale**: Is the evaluation realistic for the claimed contribution?
-- **Baselines**: Are comparisons fair?
-
-Critique the section based on these criteria.
-Suggest improvements, specifically asking for missing metrics or ablations if applicable.
-```
-
-## How to Critique Engineering Papers (Based on ICLR 2025 Reviews)
+## How to Critique Engineering Papers
 
 ### 1. The Value of "Openness" and Reproducibility
 **Reviewer Insight:** For engineering papers, releasing the artifact *is* the contribution.

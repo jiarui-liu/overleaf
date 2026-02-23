@@ -14,7 +14,7 @@ For dataset papers, reviewers judge from the following criteria:
 
 ## Visualization
 
-See `04_figures_and_tables/data_visualization.md` for required visual elements (table of examples, statistics tables, data construction figure).
+See `05_figures_and_tables/data_visualization.md` for required visual elements (table of examples, statistics tables, data construction figure).
 
 ## Writing About Data Collection
 
