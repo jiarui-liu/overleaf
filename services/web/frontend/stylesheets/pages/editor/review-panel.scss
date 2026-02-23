@@ -84,7 +84,31 @@ $rp-type-blue: #6b7797;
   position: relative;
 }
 
+.review-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  background-color: transparent;
+  transition: background-color 0.15s;
+  // Default: panel on the right, handle on its left edge
+  left: 0;
+
+  &:hover {
+    background-color: #4582ec66;
+  }
+}
+
+// In new editor, panel is on the left side, so handle on its right edge
+.ide-redesign-main .review-panel-resize-handle {
+  left: auto;
+  right: 0;
+}
+
 .review-panel-inner {
+  position: relative;
   z-index: 6;
   flex-shrink: 0;
   background-color: var(--review-panel-bg-color);
@@ -781,5 +805,100 @@ del.review-panel-content-highlight {
     .review-mode-switcher-toggle-label {
       display: block;
     }
+  }
+}
+
+.annotation-ratings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-02);
+  padding: var(--spacing-04) 0 var(--spacing-02);
+  border-top: 1px solid var(--review-panel-border-color);
+  margin-top: var(--spacing-02);
+}
+
+.annotation-rating-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-04);
+}
+
+.annotation-rating-label {
+  font-size: var(--font-size-01);
+  color: var(--content-secondary);
+  min-width: 90px;
+  font-weight: 600;
+}
+
+.annotation-rating-buttons {
+  display: flex;
+  gap: var(--spacing-01);
+}
+
+.annotation-rating-btn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: var(--font-size-01);
+  border-radius: var(--border-radius-base);
+  border: 1px solid var(--border-primary);
+  color: var(--content-secondary);
+  cursor: pointer;
+  transition:
+    background-color 0.1s,
+    color 0.1s;
+
+  &:hover {
+    background-color: var(--bg-light-secondary);
+    color: var(--content-primary);
+  }
+
+  &.active {
+    background-color: var(--bg-accent-01);
+    color: white;
+    border-color: var(--bg-accent-01);
+  }
+}
+
+.annotation-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.annotation-panel-body {
+  padding: var(--spacing-06);
+  overflow-y: auto;
+  flex: 1;
+  font-size: var(--font-size-02);
+  color: var(--ide-rail-color, var(--content-primary-themed, #333));
+
+  h5 {
+    margin-top: var(--spacing-06);
+    margin-bottom: var(--spacing-02);
+    font-weight: 700;
+    color: var(--ide-rail-color, var(--content-primary-themed, #222));
+    font-size: var(--font-size-03);
+  }
+
+  ul {
+    padding-left: var(--spacing-06);
+    margin-bottom: var(--spacing-04);
+  }
+
+  li {
+    margin-bottom: var(--spacing-01);
+  }
+
+  p {
+    margin-bottom: var(--spacing-04);
+    line-height: 1.5;
+  }
+
+  strong {
+    font-weight: 700;
   }
 }

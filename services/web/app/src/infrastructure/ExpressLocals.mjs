@@ -268,6 +268,19 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function (req, res, next) {
+    const annotationEmail = process.env.AI_TUTOR_ANNOTATION_EMAIL
+    if (annotationEmail) {
+      const currentUser = SessionManager.getSessionUser(req.session)
+      const userEmail = currentUser?.email || ''
+      res.locals.isAnnotationAccount =
+        userEmail.toLowerCase() === annotationEmail.toLowerCase()
+    } else {
+      res.locals.isAnnotationAccount = false
+    }
+    next()
+  })
+
+  webRouter.use(function (req, res, next) {
     res.locals.getLoggedInUserId = () =>
       SessionManager.getLoggedInUserId(req.session)
     res.locals.getSessionUser = () => SessionManager.getSessionUser(req.session)

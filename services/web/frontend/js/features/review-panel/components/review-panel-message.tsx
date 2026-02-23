@@ -15,6 +15,7 @@ import { useUserContext } from '@/shared/context/user-context'
 import ReviewPanelEntryUser from './review-panel-entry-user'
 import { usePermissionsContext } from '@/features/ide-react/context/permissions-context'
 import { PreventSelectingEntry } from './review-panel-prevent-selecting'
+import useIsAnnotationAccount from '@/shared/hooks/use-is-annotation-account'
 
 export const ReviewPanelMessage: FC<{
   message: ReviewPanelCommentThreadMessage
@@ -41,13 +42,15 @@ export const ReviewPanelMessage: FC<{
   const [content, setContent] = useState(message.content)
   const user = useUserContext()
   const permissions = usePermissionsContext()
+  const isAnnotationAccount = useIsAnnotationAccount()
 
   const isCommentAuthor = Boolean(message.user && user.id === message.user.id)
-  const canEdit = isCommentAuthor && permissions.comment
-  const canResolve =
-    permissions.resolveAllComments ||
-    (permissions.resolveOwnComments && isCommentAuthor)
-  const canDelete = canResolve
+  const canEdit = isAnnotationAccount ? false : isCommentAuthor && permissions.comment
+  const canResolve = isAnnotationAccount
+    ? false
+    : permissions.resolveAllComments ||
+      (permissions.resolveOwnComments && isCommentAuthor)
+  const canDelete = isAnnotationAccount ? false : canResolve
 
   const handleEditOption = useCallback(() => setEditing(true), [])
   const showDeleteModal = useCallback(() => setDeleting(true), [])

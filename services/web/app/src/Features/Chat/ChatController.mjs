@@ -836,6 +836,90 @@ async function deleteAiTutorComments(req, res) {
   }
 }
 
+async function getAnnotations(req, res) {
+  const { project_id: projectId } = req.params
+
+  const annotationsPath = path.join(
+    '/var/lib/overleaf/ai-tutor-cache',
+    projectId,
+    'annotations.json'
+  )
+
+  try {
+    if (fs.existsSync(annotationsPath)) {
+      const data = fs.readFileSync(annotationsPath, 'utf-8')
+      res.json(JSON.parse(data))
+    } else {
+      res.json({})
+    }
+  } catch (error) {
+    console.error('[Annotations] Failed to read annotations:', error)
+    res.json({})
+  }
+}
+
+async function saveAnnotation(req, res) {
+  const { project_id: projectId } = req.params
+  const { threadId, commentContent, ratings } = req.body
+  const user = SessionManager.getSessionUser(req.session)
+
+  if (!user) {
+    return res.sendStatus(401)
+  }
+
+  // Verify this is the annotation account
+  const annotationEmail = process.env.AI_TUTOR_ANNOTATION_EMAIL
+  if (
+    !annotationEmail ||
+    user.email.toLowerCase() !== annotationEmail.toLowerCase()
+  ) {
+    return res.sendStatus(403)
+  }
+
+  // Validate ratings
+  if (!ratings || typeof ratings !== 'object') {
+    return res.status(400).json({ error: 'Invalid ratings' })
+  }
+
+  for (const key of ['validity', 'actionability', 'conciseness']) {
+    const val = ratings[key]
+    if (val !== null && (typeof val !== 'number' || val < 1 || val > 5)) {
+      return res.status(400).json({ error: `Invalid rating for ${key}` })
+    }
+  }
+
+  const cacheDir = path.join('/var/lib/overleaf/ai-tutor-cache', projectId)
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true })
+  }
+
+  const annotationsPath = path.join(cacheDir, 'annotations.json')
+
+  let annotations = {}
+  try {
+    if (fs.existsSync(annotationsPath)) {
+      annotations = JSON.parse(fs.readFileSync(annotationsPath, 'utf-8'))
+    }
+  } catch {
+    annotations = {}
+  }
+
+  annotations[threadId] = {
+    threadId,
+    commentContent: commentContent || '',
+    ratings: {
+      validity: ratings.validity ?? null,
+      actionability: ratings.actionability ?? null,
+      conciseness: ratings.conciseness ?? null,
+    },
+    timestamp: new Date().toISOString(),
+    annotatorEmail: user.email,
+  }
+
+  fs.writeFileSync(annotationsPath, JSON.stringify(annotations, null, 2), 'utf-8')
+  res.json(annotations[threadId])
+}
+
 export default {
   sendMessage: expressify(sendMessage),
   getMessages: expressify(getMessages),
@@ -852,4 +936,6 @@ export default {
   analyzeWholeProject: expressify(analyzeWholeProject),
   reviewWholeProject: expressify(reviewWholeProject),
   deleteAiTutorComments: expressify(deleteAiTutorComments),
+  getAnnotations: expressify(getAnnotations),
+  saveAnnotation: expressify(saveAnnotation),
 }

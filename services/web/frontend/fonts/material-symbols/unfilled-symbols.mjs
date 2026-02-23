@@ -6,6 +6,7 @@
 export default /** @type {const} */ ([
   'account_balance',
   'arrow_back_ios_new',
+  'assignment',
   'arrow_circle_up',
   'auto_delete',
   'autorenew',

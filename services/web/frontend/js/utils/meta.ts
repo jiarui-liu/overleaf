@@ -181,6 +181,7 @@ export interface Meta {
   'ol-isProfessional': boolean
   'ol-isRegisteredViaGoogle': boolean
   'ol-isRestrictedTokenMember': boolean
+  'ol-isAnnotationAccount': boolean
   'ol-isSaas': boolean
   'ol-isUserGroupManager': boolean
   'ol-itm_campaign': string

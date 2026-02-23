@@ -1105,6 +1105,20 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
       AuthorizationMiddleware.ensureUserCanReadProject,
       ChatController.deleteAiTutorComments
     )
+
+    // Annotation endpoints
+    webRouter.get(
+      '/project/:project_id/annotations',
+      AuthorizationMiddleware.blockRestrictedUserFromProject,
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      ChatController.getAnnotations
+    )
+    webRouter.post(
+      '/project/:project_id/annotations',
+      AuthorizationMiddleware.blockRestrictedUserFromProject,
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      ChatController.saveAnnotation
+    )
   }
 
   webRouter.post(
