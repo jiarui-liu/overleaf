@@ -221,6 +221,7 @@ async function logAITutorSuggestions(req, res) {
 }
 
 async function analyzeWholeProject(req, res) {
+  try {
   const { project_id: projectId } = req.params
   const userId = SessionManager.getLoggedInUserId(req.session)
 
@@ -525,9 +526,16 @@ async function analyzeWholeProject(req, res) {
 
   // Phase 8: Return metadata to frontend
   res.json(metadata)
+  } catch (err) {
+    console.error('[AI Tutor] Project analysis failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message })
+    }
+  }
 }
 
 async function reviewWholeProject(req, res) {
+  try {
   const { project_id: projectId } = req.params
   const { model = 'gpt-5.2-chat-latest', venue = 'arxiv', roleModelTexts: rawRoleModelTexts = [] } = req.body
   const userId = SessionManager.getLoggedInUserId(req.session)
@@ -734,7 +742,6 @@ async function reviewWholeProject(req, res) {
   }
 
   // Step 2: Run multi-agent review
-  try {
     const result = await runFullReview({
       projectId,
       model,
@@ -794,7 +801,9 @@ async function reviewWholeProject(req, res) {
     res.json(result)
   } catch (err) {
     console.error('[AI Tutor] Review failed:', err)
-    res.status(500).json({ error: err.message })
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message })
+    }
   }
 }
 

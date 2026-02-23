@@ -819,7 +819,7 @@ del.review-panel-content-highlight {
 
 .annotation-instruction {
   font-size: var(--font-size-01);
-  color: var(--content-secondary);
+  color: var(--review-panel-color);
   font-style: italic;
 }
 
@@ -840,13 +840,13 @@ del.review-panel-content-highlight {
 
 .annotation-rating-label {
   font-size: var(--font-size-01);
-  color: var(--content-primary);
+  color: var(--review-panel-color);
   font-weight: 600;
 }
 
 .annotation-rating-description {
   font-size: 11px;
-  color: var(--content-secondary);
+  color: var(--review-panel-color);
   line-height: 1.3;
 }
 
@@ -867,7 +867,7 @@ del.review-panel-content-highlight {
   font-size: var(--font-size-01);
   border-radius: var(--border-radius-base);
   border: 1px solid var(--border-primary);
-  color: var(--content-secondary);
+  color: var(--review-panel-color);
   cursor: pointer;
   transition:
     background-color 0.1s,
