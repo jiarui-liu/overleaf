@@ -1541,6 +1541,11 @@ ${def.systemPreamble}
 
 Your task: Read the provided LaTeX text and produce specific, actionable inline feedback that helps the author strengthen their paper.
 
+Every comment you produce will be evaluated on three criteria:
+1. **Validity** — Is the feedback factually correct and relevant to the highlighted text? Only flag real issues; do not hallucinate problems or misinterpret the text.
+2. **Actionability** — Does the feedback clearly tell the author what to change? Every comment must answer: "What exactly should the author *do* to make this part stronger?" Avoid vague observations; instead, suggest a concrete rewrite, addition, deletion, or restructuring.
+3. **Conciseness** — Is the feedback brief and to the point? Each comment should be 1-3 sentences. Do not pad with unnecessary hedging, repetition, or background the author already knows.
+
 Each piece of feedback must:
 - Reference an EXACT substring from the text (1-200 chars) as highlightText. The highlightText MUST appear verbatim — do not paraphrase or shorten it.
 - Be one of two types:
@@ -1549,11 +1554,11 @@ Each piece of feedback must:
 
 Do NOT produce:
 - Generic praise ("Good point here")
-- Vague observations ("This could be improved")
+- Vague observations ("This could be improved") — these fail actionability
+- Factually incorrect claims about the text — these fail validity
 - Comments about negligible LaTeX syntax
 - Summaries of what the text already says
-
-Every comment should answer the question: "What should the author *do* to make this part of the paper stronger?"
+- Verbose explanations when a short, direct suggestion suffices — these fail conciseness
 
 ${defaultInstructions}
 ${strictBlock}
@@ -1574,6 +1579,11 @@ ${def.systemPreamble}
 
 Your task: Read the provided LaTeX text and produce specific, actionable inline feedback that helps the author strengthen their paper.
 
+Every comment you produce will be evaluated on three criteria:
+1. **Validity** — Is the feedback factually correct and relevant to the highlighted text? Only flag real issues; do not hallucinate problems or misinterpret the text.
+2. **Actionability** — Does the feedback clearly tell the author what to change? Every comment must answer: "What exactly should the author *do* to make this part stronger?" Avoid vague observations; instead, suggest a concrete rewrite, addition, deletion, or restructuring.
+3. **Conciseness** — Is the feedback brief and to the point? Each comment should be 1-3 sentences. Do not pad with unnecessary hedging, repetition, or background the author already knows.
+
 Each piece of feedback must:
 - Reference an EXACT substring from the text (1-200 chars) as highlightText. The highlightText MUST appear verbatim — do not paraphrase or shorten it.
 - Be one of two types:
@@ -1582,18 +1592,13 @@ Each piece of feedback must:
 
 Do NOT produce:
 - Generic praise ("Good point here")
-- Vague observations ("This could be improved")
+- Vague observations ("This could be improved") — these fail actionability
+- Factually incorrect claims about the text — these fail validity
 - Comments about negligible LaTeX syntax
 - Summaries of what the text already says
+- Verbose explanations when a short, direct suggestion suffices — these fail conciseness
 
-Every comment should answer the question: "What should the author *do* to make this part of the paper stronger?"
-
-Produce at most 10 comments. Prioritize fewer, deeper comments over many shallow ones. Label each comment as one of:
-[suggestion] (nice to have),
-[warning] (should fix), or
-[critical] (must fix).
-
-Avoid including too many low impact [suggestion] comments. If there are only a few meaningful issues, generate fewer comments. Your comments must be concise, limited to 1 to 3 sentences to ensure readability.
+${defaultInstructions}
 
 ## Writing Skills Reference
 ${previewText(skillContent)}
