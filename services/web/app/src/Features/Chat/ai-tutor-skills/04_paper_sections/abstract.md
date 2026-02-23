@@ -61,7 +61,7 @@ Here is an example of a well written abstract which conforms to the guidance:
 Make improvements to this abstract in line with the guidance. First, provide a bullet list of the improvements that have been made. Finally, output the improved abstract.
 ```
 
-## How to Critique the Abstract (Based on ICLR 2025 Reviews)
+## How to Critique the Abstract
 
 Use the following real-world examples from ICLR 2025 to guide your feedback.
 
