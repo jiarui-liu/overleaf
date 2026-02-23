@@ -12,6 +12,7 @@ import DocumentHelper from '../Documents/DocumentHelper.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runFullReview } from './AiTutorReviewOrchestrator.mjs'
+import { isAnnotatorEmail } from './AnnotatorConfig.mjs'
 
 async function sendMessage(req, res) {
   const { project_id: projectId } = req.params
@@ -867,12 +868,8 @@ async function saveAnnotation(req, res) {
     return res.sendStatus(401)
   }
 
-  // Verify this is the annotation account
-  const annotationEmail = process.env.AI_TUTOR_ANNOTATION_EMAIL
-  if (
-    !annotationEmail ||
-    user.email.toLowerCase() !== annotationEmail.toLowerCase()
-  ) {
+  // Verify this is an annotation account
+  if (!isAnnotatorEmail(user.email)) {
     return res.sendStatus(403)
   }
 
@@ -883,7 +880,7 @@ async function saveAnnotation(req, res) {
 
   for (const key of ['validity', 'actionability', 'conciseness']) {
     const val = ratings[key]
-    if (val !== null && (typeof val !== 'number' || val < 1 || val > 5)) {
+    if (val !== null && (typeof val !== 'number' || (val !== 0 && val !== 1))) {
       return res.status(400).json({ error: `Invalid rating for ${key}` })
     }
   }

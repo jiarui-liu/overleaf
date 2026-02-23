@@ -155,6 +155,7 @@ services:
       - ../services/web/app:/overleaf/services/web/app
       - ./ai-tutor-logs:/var/lib/overleaf/ai-tutor-logs
       - ./ai-tutor-cache:/var/lib/overleaf/ai-tutor-cache
+      - /home/ubuntu/iclr2026-arxiv-sampler/papers_unzipped_flattened:/var/lib/overleaf/papers_source:ro
     depends_on:
       - mongo
       - redis

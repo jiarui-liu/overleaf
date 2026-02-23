@@ -6,83 +6,58 @@ export default function AnnotationPanel() {
       <RailPanelHeader title="Annotation Guide" />
       <div className="annotation-panel-body">
         <p>
-          Rate each AI Tutor comment on the following three dimensions using a
-          1-5 Likert scale.
+          For each AI Tutor comment, answer <strong>Yes</strong> or{' '}
+          <strong>No</strong> on the following three questions.
         </p>
 
-        <h5>Validity</h5>
-        <p>
-          Is the comment factually correct and relevant to the text it
-          highlights?
-        </p>
+        <h5>Valid</h5>
+        <p>Is the feedback factually correct and relevant to the text?</p>
         <ul>
           <li>
-            <strong>1</strong> — Completely wrong or irrelevant
+            <strong>Yes</strong> — The comment accurately identifies a real issue
+            or makes a correct observation about the highlighted text.
           </li>
           <li>
-            <strong>2</strong> — Mostly incorrect
-          </li>
-          <li>
-            <strong>3</strong> — Partially correct
-          </li>
-          <li>
-            <strong>4</strong> — Mostly correct
-          </li>
-          <li>
-            <strong>5</strong> — Fully correct and relevant
+            <strong>No</strong> — The comment is factually wrong, misinterprets
+            the text, or is irrelevant to the highlighted passage.
           </li>
         </ul>
 
-        <h5>Actionability</h5>
-        <p>
-          Does the comment provide clear, specific guidance that the author can
-          act on?
-        </p>
+        <h5>Actionable</h5>
+        <p>Does the feedback clearly suggest what the author should change?</p>
         <ul>
           <li>
-            <strong>1</strong> — No actionable guidance
+            <strong>Yes</strong> — The comment provides specific guidance that
+            the author can follow to improve the paper.
           </li>
           <li>
-            <strong>2</strong> — Vague suggestion
-          </li>
-          <li>
-            <strong>3</strong> — Somewhat actionable
-          </li>
-          <li>
-            <strong>4</strong> — Clear and actionable
-          </li>
-          <li>
-            <strong>5</strong> — Highly specific and immediately actionable
+            <strong>No</strong> — The comment is vague, merely points out a
+            problem without suggesting how to fix it, or the suggested action is
+            unclear.
           </li>
         </ul>
 
-        <h5>Conciseness</h5>
+        <h5>Concise</h5>
         <p>
-          Is the comment appropriately concise without omitting important
-          information?
+          Is the feedback brief and to the point without unnecessary detail?
         </p>
         <ul>
           <li>
-            <strong>1</strong> — Extremely verbose or too terse
+            <strong>Yes</strong> — The comment conveys its message efficiently
+            without excessive verbosity or repetition.
           </li>
           <li>
-            <strong>2</strong> — Could be significantly shorter/longer
-          </li>
-          <li>
-            <strong>3</strong> — Acceptable length
-          </li>
-          <li>
-            <strong>4</strong> — Well-balanced
-          </li>
-          <li>
-            <strong>5</strong> — Perfectly concise
+            <strong>No</strong> — The comment is unnecessarily long, repetitive,
+            or includes irrelevant information.
           </li>
         </ul>
 
         <h5>Instructions</h5>
         <ul>
-          <li>Click a number (1-5) to set a rating</li>
-          <li>Click the same number again to clear it</li>
+          <li>
+            Click <strong>Yes</strong> or <strong>No</strong> for each question
+          </li>
+          <li>Click the same button again to clear your selection</li>
           <li>Ratings are saved automatically</li>
           <li>Only AI Tutor comments show rating buttons</li>
         </ul>

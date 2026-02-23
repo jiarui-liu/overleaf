@@ -15,6 +15,7 @@ import AdminAuthorizationHelper from '../Features/Helpers/AdminAuthorizationHelp
 import { addOptionalCleanupHandlerAfterDrainingConnections } from './GracefulShutdown.mjs'
 import { sanitizeSessionUserForFrontEnd } from './FrontEndUser.mjs'
 import { expressify } from '@overleaf/promise-utils'
+import { isAnnotatorEmail } from '../Features/Chat/AnnotatorConfig.mjs'
 
 const {
   canRedirectToAdminDomain,
@@ -268,15 +269,9 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function (req, res, next) {
-    const annotationEmail = process.env.AI_TUTOR_ANNOTATION_EMAIL
-    if (annotationEmail) {
-      const currentUser = SessionManager.getSessionUser(req.session)
-      const userEmail = currentUser?.email || ''
-      res.locals.isAnnotationAccount =
-        userEmail.toLowerCase() === annotationEmail.toLowerCase()
-    } else {
-      res.locals.isAnnotationAccount = false
-    }
+    const currentUser = SessionManager.getSessionUser(req.session)
+    const userEmail = currentUser?.email || ''
+    res.locals.isAnnotationAccount = isAnnotatorEmail(userEmail)
     next()
   })
 
