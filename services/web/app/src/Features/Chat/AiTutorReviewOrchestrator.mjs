@@ -31,6 +31,27 @@ const STRICT_MODE = process.env.AI_TUTOR_STRICT_MODE === 'true'
 // Set AI_TUTOR_SHOW_PREFIX=false in .env to hide it. Default: true.
 const SHOW_PREFIX = process.env.AI_TUTOR_SHOW_PREFIX !== 'false'
 
+// Comma-separated list of agent IDs to skip entirely.
+// Set AI_TUTOR_DISABLED_AGENTS in .env to disable specific reviewers.
+// Available agent IDs: abstract, introduction, related_work, methods, results,
+//   conclusion, appendix, writing_style, latex_formatting, figures_tables,
+//   paper_type (dynamic), venue (dynamic)
+// Example: AI_TUTOR_DISABLED_AGENTS=latex_formatting,venue
+const DISABLED_AGENTS = new Set(
+  (process.env.AI_TUTOR_DISABLED_AGENTS || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+)
+
+// Content-focus flags — when true, suppress non-content comments.
+// AI_TUTOR_SKIP_ANONYMITY=true  → agents won't flag anonymity / double-blind violations
+// AI_TUTOR_SKIP_SOURCE_COMMENTS=true → agents won't flag author's % comments / TODOs
+// AI_TUTOR_CONTENT_FOCUS=true   → pruning phase strongly deprioritises formalism issues
+const SKIP_ANONYMITY = process.env.AI_TUTOR_SKIP_ANONYMITY === 'true'
+const SKIP_SOURCE_COMMENTS = process.env.AI_TUTOR_SKIP_SOURCE_COMMENTS === 'true'
+const CONTENT_FOCUS = process.env.AI_TUTOR_CONTENT_FOCUS === 'true'
+
 // Fuzzy matching threshold (0.0–1.0). Higher = stricter. Default 0.85.
 // Set AI_TUTOR_FUZZY_THRESHOLD in .env to override.
 const FUZZY_THRESHOLD_ENV = parseFloat(process.env.AI_TUTOR_FUZZY_THRESHOLD)
@@ -1315,8 +1336,15 @@ async function pruneCommentsWithLLM(openai, model, comments)
     `- Prefer removing comments about minor stylistic preferences, cosmetic issues, or nitpicks.\n` +
     `- Prefer removing comments that are vague or less actionable.\n` +
     `- If two comments address similar concerns, the less specific one can be removed.\n` +
-    `- Comments about core methodology, claims, and experimental validity are more important than formatting or wording.\n\n` +
-    `Output exactly ${toRemove} indices of comments to remove.`
+    `- Comments about core methodology, claims, and experimental validity are more important than formatting or wording.\n` +
+    (CONTENT_FOCUS
+      ? `- STRONGLY prefer removing comments about: LaTeX formatting issues, anonymous submission violations, ` +
+        `author-identifying information in source code or comments, compilation warnings, package usage, ` +
+        `or other mechanical/formalism issues that do not affect the paper's scientific content or writing quality.\n` +
+        `- Focus the kept comments on substantive feedback: clarity of arguments, strength of evidence, ` +
+        `missing content, logical gaps, and writing quality that affects comprehension.\n`
+      : '') +
+    `\nOutput exactly ${toRemove} indices of comments to remove.`
 
   const userPrompt = `Here are all ${comments.length} comments. Select exactly ${toRemove} to remove:\n\n${commentList}`
 
@@ -1556,7 +1584,7 @@ Do NOT produce:
 - Generic praise ("Good point here")
 - Vague observations ("This could be improved") — these fail actionability
 - Factually incorrect claims about the text — these fail validity
-- Comments about negligible LaTeX syntax
+- Comments about negligible LaTeX syntax${SKIP_ANONYMITY ? `\n- Comments about anonymous submission compliance (e.g., author names visible, self-citations not anonymized, acknowledgments present) — these are formalism issues the author is aware of` : ''}${SKIP_SOURCE_COMMENTS ? `\n- Comments about author-written LaTeX comments (lines starting with %) or TODO notes in the source — these are the author's private working notes` : ''}
 - Summaries of what the text already says
 - Verbose explanations when a short, direct suggestion suffices — these fail conciseness
 
@@ -1594,7 +1622,7 @@ Do NOT produce:
 - Generic praise ("Good point here")
 - Vague observations ("This could be improved") — these fail actionability
 - Factually incorrect claims about the text — these fail validity
-- Comments about negligible LaTeX syntax
+- Comments about negligible LaTeX syntax${SKIP_ANONYMITY ? `\n- Comments about anonymous submission compliance (e.g., author names visible, self-citations not anonymized, acknowledgments present) — these are formalism issues the author is aware of` : ''}${SKIP_SOURCE_COMMENTS ? `\n- Comments about author-written LaTeX comments (lines starting with %) or TODO notes in the source — these are the author's private working notes` : ''}
 - Summaries of what the text already says
 - Verbose explanations when a short, direct suggestion suffices — these fail conciseness
 
@@ -2092,30 +2120,41 @@ export async function runFullReview({
   )
 
   // Build the final list of agents: static defs + dynamic paper-type agent
-  const agentDefs = [...SUBAGENT_DEFS]
+  // Filter out disabled agents from env config
+  const agentDefs = SUBAGENT_DEFS.filter(d => {
+    if (DISABLED_AGENTS.has(d.id)) {
+      console.log(`[AI Tutor] Agent "${d.name}" (${d.id}) disabled via AI_TUTOR_DISABLED_AGENTS`)
+      return false
+    }
+    return true
+  })
 
   // Add a paper-type-specific reviewer if a guideline file exists for this type
   const paperTypeFile = `03_paper_types/${classification.paperType}_paper.md`
   const paperTypeGuideline = loadSkill(paperTypeFile)
   if (!paperTypeGuideline.startsWith('[skill file not found'))
   {
-    agentDefs.push({
-      id: 'paper_type',
-      name: `Paper Type Reviewer (${classification.paperType})`,
-      skillFiles: [paperTypeFile],
-      sectionCategories: null, // receives full document
-      guidanceKey: 'overallNotes',
-      textOnly: true,
-      systemPreamble:
-        `This paper has been classified as: "${classification.paperType}" — ${classification.paperTypeSummary}\n` +
-        'Review the paper against the type-specific writing guidelines provided in the skills reference. ' +
-        'Check whether the paper follows the recommended structure, includes the expected elements, ' +
-        'and addresses the criteria that reviewers of this paper type typically look for. ' +
-        'Focus on high-level structural and content issues specific to this paper type, not general writing style.',
-    })
-    console.log(
-      `[AI Tutor] Added dynamic Paper Type Reviewer for "${classification.paperType}" using ${paperTypeFile}`
-    )
+    if (DISABLED_AGENTS.has('paper_type')) {
+      console.log(`[AI Tutor] Agent "Paper Type Reviewer" (paper_type) disabled via AI_TUTOR_DISABLED_AGENTS`)
+    } else {
+      agentDefs.push({
+        id: 'paper_type',
+        name: `Paper Type Reviewer (${classification.paperType})`,
+        skillFiles: [paperTypeFile],
+        sectionCategories: null, // receives full document
+        guidanceKey: 'overallNotes',
+        textOnly: true,
+        systemPreamble:
+          `This paper has been classified as: "${classification.paperType}" — ${classification.paperTypeSummary}\n` +
+          'Review the paper against the type-specific writing guidelines provided in the skills reference. ' +
+          'Check whether the paper follows the recommended structure, includes the expected elements, ' +
+          'and addresses the criteria that reviewers of this paper type typically look for. ' +
+          'Focus on high-level structural and content issues specific to this paper type, not general writing style.',
+      })
+      console.log(
+        `[AI Tutor] Added dynamic Paper Type Reviewer for "${classification.paperType}" using ${paperTypeFile}`
+      )
+    }
   } else
   {
     console.log(
@@ -2130,24 +2169,28 @@ export async function runFullReview({
     const venueGuideline = loadSkill(venueFile)
     if (!venueGuideline.startsWith('[skill file not found'))
     {
-      agentDefs.push({
-        id: 'venue',
-        name: `Venue Reviewer (${venue})`,
-        skillFiles: [venueFile],
-        sectionCategories: null, // receives full document
-        guidanceKey: 'overallNotes',
-        textOnly: true,
-        systemPreamble:
-          `The paper is being prepared for submission to: ${venue}.\n` +
-          'Review the paper specifically against this venue\'s requirements: ' +
-          'page limits, required sections (e.g. limitations, reproducibility, impact statement), ' +
-          'formatting rules, and the evaluation criteria that reviewers at this venue apply. ' +
-          'Flag any issues that would hurt the paper\'s acceptance at this specific venue. ' +
-          'Focus on venue-specific gaps — do not repeat general writing advice covered by other reviewers.',
-      })
-      console.log(
-        `[AI Tutor] Added dynamic Venue Reviewer for "${venue}" using ${venueFile}`
-      )
+      if (DISABLED_AGENTS.has('venue')) {
+        console.log(`[AI Tutor] Agent "Venue Reviewer" (venue) disabled via AI_TUTOR_DISABLED_AGENTS`)
+      } else {
+        agentDefs.push({
+          id: 'venue',
+          name: `Venue Reviewer (${venue})`,
+          skillFiles: [venueFile],
+          sectionCategories: null, // receives full document
+          guidanceKey: 'overallNotes',
+          textOnly: true,
+          systemPreamble:
+            `The paper is being prepared for submission to: ${venue}.\n` +
+            'Review the paper specifically against this venue\'s requirements: ' +
+            'page limits, required sections (e.g. limitations, reproducibility, impact statement), ' +
+            'formatting rules, and the evaluation criteria that reviewers at this venue apply. ' +
+            'Flag any issues that would hurt the paper\'s acceptance at this specific venue. ' +
+            'Focus on venue-specific gaps — do not repeat general writing advice covered by other reviewers.',
+        })
+        console.log(
+          `[AI Tutor] Added dynamic Venue Reviewer for "${venue}" using ${venueFile}`
+        )
+      }
     } else
     {
       console.log(
