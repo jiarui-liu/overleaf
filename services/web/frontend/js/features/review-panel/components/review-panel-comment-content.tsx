@@ -89,9 +89,9 @@ export const ReviewPanelCommentContent = memo<{
     }
 
     const firstMessageContent = thread.messages[0]?.content || ''
-    const isAiTutorComment =
-      /^\[(AI Tutor|critical|warning|suggestion)\]/.test(firstMessageContent)
-    const showAnnotation = isAnnotationAccount && isAiTutorComment
+    // For annotation accounts, show rating buttons on ALL comments
+    // (prefixes have been stripped so we can't detect by prefix)
+    const showAnnotation = isAnnotationAccount
 
     return (
       <div

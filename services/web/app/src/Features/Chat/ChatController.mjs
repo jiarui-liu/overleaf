@@ -12,6 +12,7 @@ import DocumentHelper from '../Documents/DocumentHelper.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runFullReview } from './AiTutorReviewOrchestrator.mjs'
+import { runBaselineReview } from './AiTutorBaselineReview.mjs'
 import { isAnnotatorEmail } from './AnnotatorConfig.mjs'
 
 async function sendMessage(req, res) {
@@ -762,6 +763,21 @@ async function reviewWholeProject(req, res) {
     }
     result.docPathToId = docPathToId
 
+    // Run baseline review if enabled (sequentially, to avoid API rate-limit pressure)
+    if (process.env.AI_TUTOR_RUN_BASELINE === 'true') {
+      try {
+        await runBaselineReview({
+          projectId,
+          model,
+          cacheDir,
+          docContentMap,
+          rootDocPath: normalizedRootPath,
+        })
+      } catch (baselineErr) {
+        console.error('[AI Tutor] Baseline review failed (non-fatal):', baselineErr.message)
+      }
+    }
+
     // Log review results to JSONL
     try {
       const logDir = '/var/lib/overleaf/ai-tutor-logs'
@@ -910,6 +926,20 @@ async function saveAnnotation(req, res) {
     annotations = {}
   }
 
+  // Look up comment source (baseline vs ai_tutor) from thread_metadata.json
+  let commentSource = 'unknown'
+  try {
+    const metadataPath = path.join(cacheDir, 'thread_metadata.json')
+    if (fs.existsSync(metadataPath)) {
+      const threadMeta = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'))
+      if (threadMeta[threadId]) {
+        commentSource = threadMeta[threadId].source || 'unknown'
+      }
+    }
+  } catch {
+    // Best effort — leave as 'unknown'
+  }
+
   annotations[threadId] = {
     threadId,
     commentContent: commentContent || '',
@@ -918,6 +948,7 @@ async function saveAnnotation(req, res) {
       actionability: ratings.actionability ?? null,
       conciseness: ratings.conciseness ?? null,
     },
+    source: commentSource,
     timestamp: new Date().toISOString(),
     annotatorEmail: user.email,
   }
