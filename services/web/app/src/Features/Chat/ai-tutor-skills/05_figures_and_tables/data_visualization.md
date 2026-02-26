@@ -5,6 +5,7 @@
 ## Always Good to Have
 
 For dataset papers, it is always good to have:
+
 1. A table of examples
 2. Several tables of statistics
 3. A figure of the data construction process

@@ -2,10 +2,6 @@
 
 [TEXT — no multimodal needed]
 
-## Venue Information
-
-ARR welcomes position papers. Select the corresponding track and indicate the paper type (technical or position).
-
 ## Type 1: Model Hypothesis for a Phenomenon
 
 ### Structure
