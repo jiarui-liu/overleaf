@@ -148,7 +148,7 @@ export const RailLayout = () => {
       {
         key: 'ai-tutor',
         icon: 'smart_toy',
-        title: 'AI Tutor',
+        title: 'Paper Mentor',
         component: <AiTutorPanel />,
       },
       {

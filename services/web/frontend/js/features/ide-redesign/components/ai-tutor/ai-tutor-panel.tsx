@@ -356,10 +356,10 @@ export default function AiTutorPanel() {
       const result = await deleteAiTutorComments(projectId)
       if (result.deleted > 0) {
         setSuccessMessage(
-          `Deleted ${result.deleted} AI Tutor comment(s). Refresh the page to see changes.`
+          `Deleted ${result.deleted} Paper Mentor comment(s). Refresh the page to see changes.`
         )
       } else {
-        setSuccessMessage('No AI Tutor comments found to delete.')
+        setSuccessMessage('No Paper Mentor comments found to delete.')
       }
     } catch (err) {
       console.error('[AI Tutor] Delete comments error:', err)
@@ -377,7 +377,7 @@ export default function AiTutorPanel() {
 
   return (
     <div className="ai-tutor-panel" style={{ color: 'var(--content-primary-themed)' }}>
-      <RailPanelHeader title="AI Tutor" />
+      <RailPanelHeader title="Paper Mentor" />
       <div style={{ padding: '12px 16px' }}>
         {/* ── Delete AI Tutor Comments ── */}
         <OLButton
@@ -387,7 +387,7 @@ export default function AiTutorPanel() {
           disabled={isDeleting || isReviewing || isApplying}
           style={{ width: '100%', marginBottom: '12px' }}
         >
-          {isDeleting ? 'Deleting...' : 'Delete All AI Tutor Comments'}
+          {isDeleting ? 'Deleting...' : 'Delete All Paper Mentor Comments'}
         </OLButton>
 
         {/* ── Model Selection ── */}

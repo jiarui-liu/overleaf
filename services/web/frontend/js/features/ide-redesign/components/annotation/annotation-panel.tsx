@@ -6,7 +6,7 @@ export default function AnnotationPanel() {
       <RailPanelHeader title="Annotation Guide" />
       <div className="annotation-panel-body">
         <p>
-          For each AI Tutor comment, answer <strong>Yes</strong> or{' '}
+          For each Paper Mentor comment, answer <strong>Yes</strong> or{' '}
           <strong>No</strong> on the following three questions.
         </p>
 
@@ -59,7 +59,7 @@ export default function AnnotationPanel() {
           </li>
           <li>Click the same button again to clear your selection</li>
           <li>Ratings are saved automatically</li>
-          <li>Only AI Tutor comments show rating buttons</li>
+          <li>Only Paper Mentor comments show rating buttons</li>
         </ul>
       </div>
     </div>

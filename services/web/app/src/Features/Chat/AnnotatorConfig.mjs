@@ -12,12 +12,16 @@ const annotatorEmails = new Set(
     .filter(Boolean)
 )
 
-// Build email → 1-based index mapping
+// Build email → index mapping by parsing the number from the email address
+// e.g. annotator00@example.com → 0, annotator05@example.com → 5
 const emailToIndex = new Map()
 const emailList = Array.from(annotatorEmails)
-emailList.forEach((email, i) => {
-  emailToIndex.set(email, i + 1)
-})
+for (const email of emailList) {
+  const match = email.match(/annotator(\d+)@/)
+  if (match) {
+    emailToIndex.set(email, parseInt(match[1], 10))
+  }
+}
 
 // Build email → paper hashes mapping
 const emailToPapers = new Map()

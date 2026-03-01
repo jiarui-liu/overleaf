@@ -1,10 +1,74 @@
 # AI Tutor — Multi-Agent Paper Review System
 
+## High-Level Pipeline
+
+```
+  (1) Overleaf               (2) Target          (3) Role Model
+      Paper Project               Venue               Papers
+           │                       │                    │
+           |                       │                    │
+           |                       │                    │
+           |                       │                    │
+           |                       │                    │
+           |                       │                    │
+           │                       │                    │
+           ▼                       │                    │
+  ┌─────────────────┐              │                    │
+  │ Identify Paper  │              │                    │
+  │ Type & Assign   │──────────┐   │                    │
+  │ Reviewing       │          │   │                    │
+  │ Domains (1 LLM) │          │   │                    │
+  └────────┬────────┘          │   │                    │
+           │                   │   │                    │
+           │  type-specific    │   │                    │
+           │  guidance         │   │                    │
+           │    ┌──────────────┘   │                    │
+           │    │    ┌─────────────┘                    │
+           │    │    │    ┌────────────────────────────-┘
+           ▼    ▼    ▼    ▼
+  ┌──────────────────────────────────────────────────────┐
+  │          Parallel Reviewer Subagents (10-12)         │
+  │                                                      │
+  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐         │
+  │  │Abstract│ │Methods │ │Writing │ │ Venue  │  ...    │
+  │  │Reviewer│ │Reviewer│ │ Style  │ │Reviewer│         │
+  │  └────────┘ └────────┘ └────────┘ └────────┘         │
+  │                                                      │
+  │  Each receives:                                      |
+  |     latex source + domain specific skill files       │
+  │    + type guidance + venue rules + role model papers │
+  └────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+  ┌──────────────────────────────────────────────────────┐
+  │     Deduplicate · Prune · Map Comments to Files      │
+  └────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+  ┌──────────────────────────────────────────────────────┐
+  │              Overleaf Review Interface               │
+  │                                                      │
+  │  ┌────────────────────────────────────┬─────────────┐│
+  │  │ \begin{abstract}                   │             ││
+  │  │ We propose a novel method for      │ [warning]   ││
+  │  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │ Abstract     ││
+  │  │ ...                                │ lacks a     ││
+  │  │                                    │ quantitative││
+  │  │ \section{Introduction}             │ result.     ││
+  │  │ Recent work has shown that         │             ││
+  │  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ... │ [suggestion] ││
+  │  │                                    │ Consider    ││
+  │  │ \section{Related Work}             │ citing X.   ││
+  │  │ ...                                │             ││
+  │  └────────────────────────────────────┴─────────────┘│
+  └──────────────────────────────────────────────────────┘
+```
+
 ## Overview
 
 The AI Tutor is an Overleaf plugin that provides automated paper review using a multi-agent architecture. It analyzes the full project structure, classifies the paper type, and runs parallel reviewer subagents — each specialized in a different aspect of academic writing — then deduplicates overlapping comments and posts inline comments to the Overleaf review panel. Users can optionally target a specific venue for venue-aware feedback and upload role model PDFs for structure/style comparison.
 
-## Architecture
+## Architecture (Detailed)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

@@ -1,113 +1,125 @@
 # ML Paper Writing Tutor — Skill Library
 
-This skill library is given to an LLM agent that reviews Overleaf papers and leaves inline writing suggestions. Each file is tagged with its modality requirement:
+This skill library is consumed by `AiTutorReviewOrchestrator.mjs`, which runs a 6-phase review pipeline. Skill files are loaded via `loadSkill()` and injected into LLM system prompts as reference material for specialized reviewer subagents. Each file is tagged with its modality requirement:
 - **[TEXT]** — can be applied by reading the LaTeX source only.
 - **[MULTIMODAL]** — requires viewing compiled figures/tables/images.
 
+### Review Pipeline Overview
+
+1. **Section Parsing** — Extracts sections from merged LaTeX (no LLM).
+2. **Paper Type Classification** — Loads `paper_type_definitions.md`; LLM classifies the paper and generates type-specific guidance.
+3. **Parallel Reviewer Subagents** — 11 static agents (each with assigned skill files) + up to 2 dynamic agents (paper type, venue) run in parallel. Skill files are concatenated into each agent's system prompt under "Writing Skills Reference."
+4. **Comment Deduplication** — Removes overlapping feedback across agents.
+5. **Strict-Mode Pruning** — LLM selects top-N comments if count exceeds threshold.
+6. **Position Mapping** — Maps comments back from merged.tex to original documents.
+
 ---
 
-## 01_setup/ — Agent Setup Actions
-
-Actions the agent should take before giving writing suggestions (e.g., web search, fetching prototype papers).
+## 01_setup/ — Agent Setup & Classification
 
 | File | Modality | Description |
-|------|----------|--------------|
-| `finding_prototype_papers.md` | TEXT | **Action 0:** Check local review sets first; then web search for prototype papers from top venues (>=8 pages), literature review completeness check, filtering by credibility, useful tools (Allen AI, CatalyzeX, DBLP, ACL Anthology, Google Scholar PDF Reader) |
-| `example_papers_guide.md` | TEXT+MULTIMODAL | Index of 34 downloaded example papers in `example_papers/`, organized by section/paper type, with what to study in each |
-| `review_sets_guide.md` | TEXT | How to search the curated review set JSON files to find topically relevant high-quality accepted papers; lookup workflow, what to extract from strong examples, and how to use the low-quality set as a negative reference |
+|------|----------|-------------|
+| `paper_type_definitions.md` | TEXT | **Used in Phase 2.** Defines 7 paper types (dataset, method_improvement, llm_engineering, llm_inference_findings, css, position, other) with descriptions and examples. Loaded as context for LLM classification. |
+| `finding_prototype_papers.md` | TEXT | How to find prototype papers: check local review sets first, then web search top venues (≥8 pages), credibility filtering, useful tools (Allen AI, CatalyzeX, DBLP, ACL Anthology, Google Scholar PDF Reader) |
+| `example_papers_guide.md` | TEXT+MULTIMODAL | Index of 32 downloaded example papers in `example_papers/`, organized by section/paper type, with what to study in each |
+| `review_sets_guide.md` | TEXT | How to search the curated review set JSON files to find topically relevant high-quality accepted papers; lookup workflow, what to extract, and how to use the low-quality set as a negative reference |
 
 ---
 
 ## 02_venues/ — Target Venue Guidelines
 
-Venue-specific submission requirements, page limits, required sections, and reviewer evaluation criteria. When a venue is selected, a dedicated Venue Reviewer subagent is added to check the paper against that venue's specific expectations.
+Venue-specific submission requirements and reviewer criteria. When a venue other than arxiv is selected, a **dynamic Venue Reviewer subagent** is created and loaded with the corresponding file.
 
 | File | Modality | Description |
 |------|----------|-------------|
 | `arxiv_default.md` | TEXT | No specific venue; general ML best practices apply |
-| `colm_2026.md` | TEXT | COLM 2026: 9 pages, 6 reviewer dimensions (Empiricism, Impact, Ambition, Understanding, Clarity, Reproducibility) |
-| `icml_2026.md` | TEXT | ICML 2026: 8 pages, mandatory impact statement, 4 dimensions (Soundness, Presentation, Significance, Originality) |
-| `acl_2026.md` | TEXT | ACL 2026: 8/4 pages, ARR system, required Limitations section, scores: Soundness, Excitement, Overall |
-| `aaai_2026.md` | TEXT | AAAI 2026: 7 pages, required Reproducibility Checklist, two-phase review with AI supplement |
-| `iclr_2026.md` | TEXT | ICLR 2026: 9 pages, 4 reviewer questions (Problem, Motivation, Evidence, Significance), rating 0–10 |
-| `emnlp_2025.md` | TEXT | EMNLP 2025: 8/4 pages, ARR system, NLP focus, required Limitations, scores: Soundness, Excitement, Overall |
-| `neurips_2025.md` | TEXT | NeurIPS 2025: 9 pages, required checklist, 4 dimensions (Quality, Clarity, Significance, Originality), 1–6 scale |
+| `colm_2026.md` | TEXT | COLM 2026: 9 pages, 6 reviewer dimensions |
+| `icml_2026.md` | TEXT | ICML 2026: 8 pages, mandatory impact statement, 4 dimensions |
+| `acl_2026.md` | TEXT | ACL 2026: 8/4 pages, ARR system, required Limitations section |
+| `aaai_2026.md` | TEXT | AAAI 2026: 7 pages, required Reproducibility Checklist, two-phase review |
+| `iclr_2026.md` | TEXT | ICLR 2026: 9 pages, 4 reviewer questions, rating 0–10 |
+| `emnlp_2025.md` | TEXT | EMNLP 2025: 8/4 pages, ARR system, NLP focus |
+| `neurips_2025.md` | TEXT | NeurIPS 2025: 9 pages, required checklist, 4 dimensions, 1–6 scale |
 
 ---
 
-## 03_paper_types/ — Paper Type Identification
+## 03_paper_types/ — Paper Type Guidance
 
-Identify what type of paper is being written, then apply type-specific structural guidance.
+After Phase 2 classification, a **dynamic Paper Type Reviewer subagent** is created and loaded with the matching file.
 
 | File | Modality | Description |
 |------|----------|-------------|
 | `analysis_paper.md` | TEXT | References results_and_analysis.md for RQ structure |
-| `dataset_paper.md` | TEXT | Reviewer criteria (6 points), data collection writing guide, dataset comparison |
+| `dataset_paper.md` | TEXT | Reviewer criteria, data collection writing guide, dataset comparison |
 | `method_improvement_paper.md` | TEXT | Baseline statement, design choice justification, ablation studies, fair comparisons |
-| `llm_inference_findings_paper.md` | TEXT | Paper type definition, multiple analysis sections, RQ-driven structure, bold findings |
+| `llm_inference_findings_paper.md` | TEXT | Multiple analysis sections, RQ-driven structure, bold findings |
 | `llm_engineering_paper.md` | TEXT | Problem statement → multi-aspect solutions → empirical gains structure |
-| `css_paper.md` | TEXT | CSS paper definition, social science grounding, data collection, publication venues |
-| `position_paper.md` | TEXT | Type 1: model hypothesis + case studies. Type 2: collection of opinions, flat structure |
+| `css_paper.md` | TEXT | Social science grounding, data collection, publication venues |
+| `position_paper.md` | TEXT | Type 1: model/hypothesis + case studies. Type 2: organized arguments |
 
 ---
 
 ## 04_paper_sections/ — Section-by-Section Writing Guide
 
-Detailed guidance for writing each section, including improvement prompting templates where applicable.
+Each file is assigned to one or more **static reviewer subagents** that review the corresponding section.
 
-| File | Modality | Description |
-|------|----------|-------------|
-| `abstract.md` | TEXT | 5-sentence structure, matryoshka doll principle, general tips (describe work not paper, be specific), annotated example, improvement prompt template |
-| `introduction.md` | TEXT | Critical importance, WHAT-WHY-HOW figures, 5-question/4-paragraph structure, storytelling approach, contributions list, full annotated example, improvement prompt template |
-| `task_formulation.md` | TEXT | When to include, what it covers (problem setting, notation, assumptions), novel problem settings |
-| `related_work.md` | TEXT | "History book" paragraph structure, ingredient gathering, compare and contrast, academic siblings concept, placement advice, improvement prompt template |
-| `methods.md` | TEXT | Page budget (start by p2-3), questions to address, background vs methods, pseudo-code readability, design choice justification, intuition before formalism, running examples, top-down descriptions, notation, linear flow |
-| `results_and_analysis.md` | TEXT+MULTIMODAL | Experimental setup template, single vs. multiple result sections, RQ structures, Answer/Elaboration vs Question/Answer subsection styles, Finding 1/2/3 pattern, what to measure, important considerations |
-| `conclusion.md` | TEXT | Structure (what solved + next steps), keep brief, don't repeat abstract/intro, bullet-list future work |
-| `limitations.md` | TEXT | *Placeholder* |
-| `ethical_considerations.md` | TEXT | Format, ACL Ethics FAQ guidelines (ethics review process, dataset papers, NLP applications, demographic data, computational costs) |
-| `faq_appendix.md` | TEXT | Why include a FAQ, how to write it (anticipate reviewer questions, clear Q&A format) |
+| File | Used by Agent(s) | Modality | Description |
+|------|-------------------|----------|-------------|
+| `abstract.md` | `abstract` | TEXT | 5-sentence structure, matryoshka doll principle, annotated example, improvement prompt |
+| `introduction.md` | `introduction` | TEXT | 5-question/4-paragraph structure, storytelling, contributions list, annotated example |
+| `task_formulation.md` | `methods` | TEXT | When to include, what it covers (problem setting, notation, assumptions) |
+| `related_work.md` | `related_work` | TEXT | "History book" paragraph structure, compare and contrast, academic siblings |
+| `methods.md` | `methods` | TEXT | Page budget, background vs methods, pseudo-code, design choice justification, intuition before formalism |
+| `results_and_analysis.md` | `results` | TEXT+MULTIMODAL | Experimental setup, RQ structures, Finding 1/2/3 pattern, subsection styles |
+| `conclusion.md` | `conclusion` | TEXT | Structure (what solved + next steps), don't repeat abstract/intro |
+| `limitations.md` | `conclusion` | TEXT | *Placeholder* |
+| `ethical_considerations.md` | `conclusion` | TEXT | ACL Ethics FAQ guidelines, ethics review process |
+| `faq_appendix.md` | `appendix` | TEXT | Why include a FAQ, anticipate reviewer questions |
 
 ---
 
 ## 05_figures_and_tables/ — Visual Elements
 
-Guidance on creating and reviewing figures, tables, and their captions.
-
-| File | Modality | Description |
-|------|----------|-------------|
-| `figure1_design.md` | MULTIMODAL | Tools (draw.io), export format, design principles (self-contained, sketch first, label generously), font size rule, color usage, figure placement |
-| `experiment_visualization.md` | MULTIMODAL | Plan figures early, one key message per figure, improving tables & figures, data ordering, chart type appropriateness, numeric precision, visual clutter, visualization tools (D3.js) |
-| `color_palettes.md` | MULTIMODAL | Nature-style palettes, ColorBrewer/Tachyons tools, colorblind accessibility, contrast, grayscale fallback |
-| `data_visualization.md` | MULTIMODAL | Dataset paper visuals: 3 required elements |
-| `table_formatting.md` | TEXT+MULTIMODAL | No vertical bars, booktabs LaTeX template |
-| `caption_writing.md` | TEXT | Abbreviation rule, self-contained captions, first sentence as statement (not description), explaining figures/tables in text |
+| File | Used by Agent(s) | Modality | Description |
+|------|-------------------|----------|-------------|
+| `figure1_design.md` | `figures_tables` | MULTIMODAL | Tools (draw.io), design principles, font size rule, color usage |
+| `experiment_visualization.md` | `figures_tables` | MULTIMODAL | One key message per figure, chart type, data ordering, numeric precision |
+| `color_palettes.md` | — | MULTIMODAL | Nature-style palettes, colorblind accessibility, grayscale fallback |
+| `data_visualization.md` | — | MULTIMODAL | Dataset paper visuals: 3 required elements |
+| `table_formatting.md` | `latex_formatting` | TEXT+MULTIMODAL | No vertical bars, booktabs LaTeX template |
+| `caption_writing.md` | `figures_tables` | TEXT | Self-contained captions, first sentence as statement |
 
 ---
 
 ## 06_writing_style/ — Formatting and Language
 
-Rules and conventions for professional academic writing.
+| File | Used by Agent(s) | Modality | Description |
+|------|-------------------|----------|-------------|
+| `grammar_and_punctuation.md` | `writing_style` | TEXT | Tense, pronoun clarity, active voice, filler words, conciseness, formality |
+| `citations_and_references.md` | `related_work`, `writing_style` | TEXT | \citet vs \citep, citation framing, reference priority, BibTeX |
+| `latex_formatting.md` | `latex_formatting` | TEXT | Cleveref, acronym packages, anonymous submission, quotation marks, hyperref |
+| `math_and_formulas.md` | `methods`, `latex_formatting` | TEXT | \mathrm/\bm/\top, equations as sentences, notation consistency, macros |
+| `capitalization_and_acronyms.md` | `writing_style` | TEXT | Lowercase ML terms, abbreviation rules, title vs. sentence capitalization |
+| `general_writing_habits.md` | `writing_style` | TEXT | Write early, outline method, one key idea, terminology consistency, elevator pitch |
 
-| File | Modality | Description |
-|------|----------|-------------|
-| `grammar_and_punctuation.md` | TEXT | Spacing, footnotes, tense, pronoun clarity, that/which, active vs passive voice, filler words, conciseness, vague language, bold/italic usage, plagiarism, formality, numbers, American/British English, grammar tools |
-| `citations_and_references.md` | TEXT | Reference priority, BibTeX alias, \citet vs \citep, citation framing, citation grammar, quotation vs paraphrase, completeness, management tools |
-| `latex_formatting.md` | TEXT | Cleveref, acronym packages, section ordering, anonymous submission rules, quotation marks, hyperref backref, automatic numbering, positional references, proofread PDF, fill page limit, appendix content |
-| `math_and_formulas.md` | TEXT | \mathrm/\bm/\top, formula numbering, equations as sentences, style tips, readability (notation with names, consistency, simplify, macros), punctuation, variable definitions |
-| `capitalization_and_acronyms.md` | TEXT | Lowercase ML terms, abbreviation rules, title vs. sentence capitalization |
-| `general_writing_habits.md` | TEXT | Writing as thinking, write early, shitty first draft, outline method, first sentences tell story, elevator pitch, one key idea, every section tells a story, contributions clarity, terminology consistency, scientific claims, headings, put readers first, listen to readers, fresh perspective |
+---
+
+## example_papers/ — Role Model Papers
+
+32 PDFs used as structural/style references. Optionally injected into subagent prompts with agent-specific study hints. See `01_setup/example_papers_guide.md` for the full index mapping papers to sections and writing patterns.
+
+Also contains `download_papers.sh` for fetching papers by arXiv ID.
 
 ---
 
 ## review_sets/ — Curated Review Datasets
 
-JSON files containing accepted papers from recent top conferences, with full reviewer feedback (scores, strengths, weaknesses). Used by the agent to find topically relevant **high-quality example papers** before web searching. See `01_setup/review_sets_guide.md` for the lookup workflow.
+JSON files containing accepted papers from recent top conferences, with full reviewer feedback (scores, strengths, weaknesses). Used to find topically relevant example papers before web searching. See `01_setup/review_sets_guide.md` for the lookup workflow.
 
 | File | Coverage | Papers |
-|------|----------|---------|
-| `ICLR2025_50_high_quality_papers.json` | ICLR 2025 — high quality | 50 papers (avg score >8, mostly Oral/Spotlight) |
-| `ICLR2025_50_low_quality_papers.json` | ICLR 2025 — low quality | 50 papers (lower scores; use as negative reference) |
+|------|----------|--------|
+| `ICLR2025_50_high_quality_papers.json` | ICLR 2025 — high quality | 50 papers (avg score >8) |
+| `ICLR2025_50_low_quality_papers.json` | ICLR 2025 — low quality | 50 papers (negative reference) |
 | `NeurIPS2025_100_high_quality_papers.json` | NeurIPS 2025 — high quality | 100 papers |
-| `NeurIPS2025_100_low_quality_papers.json` | NeurIPS 2025 — low quality | 100 papers (lower scores; use as negative reference) |
+| `NeurIPS2025_100_low_quality_papers.json` | NeurIPS 2025 — low quality | 100 papers (negative reference) |
 | `COLM2025_50_high_quality_papers.json` | COLM 2025 — high quality | 50 papers |
