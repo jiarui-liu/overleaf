@@ -12,8 +12,6 @@ import {
 } from '../../../../../types/review-panel/review-panel'
 import { usePermissionsContext } from '@/features/ide-react/context/permissions-context'
 import { isFormSubmitKeypressEvent } from '@/features/review-panel/utils/form-events'
-import useIsAnnotationAccount from '@/shared/hooks/use-is-annotation-account'
-import { AnnotationRatingButtons } from './annotation-rating-buttons'
 
 export const ReviewPanelCommentContent = memo<{
   comment: Change<CommentOperation>
@@ -43,7 +41,6 @@ export const ReviewPanelCommentContent = memo<{
     const [submitting, setSubmitting] = useState(false)
     const [content, setContent] = useState('')
 
-    const isAnnotationAccount = useIsAnnotationAccount()
     const hasActiveContent = content.trim().length > 0
 
     const handleSubmit = useCallback(() => {
@@ -88,11 +85,6 @@ export const ReviewPanelCommentContent = memo<{
       return null
     }
 
-    const firstMessageContent = thread.messages[0]?.content || ''
-    // For annotation accounts, show rating buttons on ALL comments
-    // (prefixes have been stripped so we can't detect by prefix)
-    const showAnnotation = isAnnotationAccount
-
     return (
       <div
         className="review-panel-entry-content"
@@ -124,13 +116,6 @@ export const ReviewPanelCommentContent = memo<{
             </div>
           )
         })}
-
-        {showAnnotation && (
-          <AnnotationRatingButtons
-            threadId={comment.op.t}
-            commentContent={firstMessageContent}
-          />
-        )}
 
         {isResolved && (
           <div className="review-panel-comment-wrapper">

@@ -12,8 +12,6 @@ import DocumentHelper from '../Documents/DocumentHelper.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runFullReview } from './AiTutorReviewOrchestrator.mjs'
-import { runBaselineReview } from './AiTutorBaselineReview.mjs'
-import { isAnnotatorEmail } from './AnnotatorConfig.mjs'
 
 async function sendMessage(req, res) {
   const { project_id: projectId } = req.params
@@ -763,21 +761,6 @@ async function reviewWholeProject(req, res) {
     }
     result.docPathToId = docPathToId
 
-    // Run baseline review if enabled (sequentially, to avoid API rate-limit pressure)
-    if (process.env.AI_TUTOR_RUN_BASELINE === 'true') {
-      try {
-        await runBaselineReview({
-          projectId,
-          model,
-          cacheDir,
-          docContentMap,
-          rootDocPath: normalizedRootPath,
-        })
-      } catch (baselineErr) {
-        console.error('[AI Tutor] Baseline review failed (non-fatal):', baselineErr.message)
-      }
-    }
-
     // Log review results to JSONL
     try {
       const logDir = '/var/lib/overleaf/ai-tutor-logs'
@@ -862,101 +845,6 @@ async function deleteAiTutorComments(req, res) {
   }
 }
 
-async function getAnnotations(req, res) {
-  const { project_id: projectId } = req.params
-
-  const annotationsPath = path.join(
-    '/var/lib/overleaf/ai-tutor-cache',
-    projectId,
-    'annotations.json'
-  )
-
-  try {
-    if (fs.existsSync(annotationsPath)) {
-      const data = fs.readFileSync(annotationsPath, 'utf-8')
-      res.json(JSON.parse(data))
-    } else {
-      res.json({})
-    }
-  } catch (error) {
-    console.error('[Annotations] Failed to read annotations:', error)
-    res.json({})
-  }
-}
-
-async function saveAnnotation(req, res) {
-  const { project_id: projectId } = req.params
-  const { threadId, commentContent, ratings } = req.body
-  const user = SessionManager.getSessionUser(req.session)
-
-  if (!user) {
-    return res.sendStatus(401)
-  }
-
-  // Verify this is an annotation account
-  if (!isAnnotatorEmail(user.email)) {
-    return res.sendStatus(403)
-  }
-
-  // Validate ratings
-  if (!ratings || typeof ratings !== 'object') {
-    return res.status(400).json({ error: 'Invalid ratings' })
-  }
-
-  for (const key of ['validity', 'actionability', 'conciseness']) {
-    const val = ratings[key]
-    if (val !== null && (typeof val !== 'number' || (val !== 0 && val !== 1))) {
-      return res.status(400).json({ error: `Invalid rating for ${key}` })
-    }
-  }
-
-  const cacheDir = path.join('/var/lib/overleaf/ai-tutor-cache', projectId)
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true })
-  }
-
-  const annotationsPath = path.join(cacheDir, 'annotations.json')
-
-  let annotations = {}
-  try {
-    if (fs.existsSync(annotationsPath)) {
-      annotations = JSON.parse(fs.readFileSync(annotationsPath, 'utf-8'))
-    }
-  } catch {
-    annotations = {}
-  }
-
-  // Look up comment source (baseline vs ai_tutor) from thread_metadata.json
-  let commentSource = 'unknown'
-  try {
-    const metadataPath = path.join(cacheDir, 'thread_metadata.json')
-    if (fs.existsSync(metadataPath)) {
-      const threadMeta = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'))
-      if (threadMeta[threadId]) {
-        commentSource = threadMeta[threadId].source || 'unknown'
-      }
-    }
-  } catch {
-    // Best effort — leave as 'unknown'
-  }
-
-  annotations[threadId] = {
-    threadId,
-    commentContent: commentContent || '',
-    ratings: {
-      validity: ratings.validity ?? null,
-      actionability: ratings.actionability ?? null,
-      conciseness: ratings.conciseness ?? null,
-    },
-    source: commentSource,
-    timestamp: new Date().toISOString(),
-    annotatorEmail: user.email,
-  }
-
-  fs.writeFileSync(annotationsPath, JSON.stringify(annotations, null, 2), 'utf-8')
-  res.json(annotations[threadId])
-}
-
 export default {
   sendMessage: expressify(sendMessage),
   getMessages: expressify(getMessages),
@@ -973,6 +861,4 @@ export default {
   analyzeWholeProject: expressify(analyzeWholeProject),
   reviewWholeProject: expressify(reviewWholeProject),
   deleteAiTutorComments: expressify(deleteAiTutorComments),
-  getAnnotations: expressify(getAnnotations),
-  saveAnnotation: expressify(saveAnnotation),
 }

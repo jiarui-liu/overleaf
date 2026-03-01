@@ -15,7 +15,6 @@ import AdminAuthorizationHelper from '../Features/Helpers/AdminAuthorizationHelp
 import { addOptionalCleanupHandlerAfterDrainingConnections } from './GracefulShutdown.mjs'
 import { sanitizeSessionUserForFrontEnd } from './FrontEndUser.mjs'
 import { expressify } from '@overleaf/promise-utils'
-import { isAnnotatorEmail } from '../Features/Chat/AnnotatorConfig.mjs'
 
 const {
   canRedirectToAdminDomain,
@@ -265,13 +264,6 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
     if (currentUser != null) {
       res.locals.user = sanitizeSessionUserForFrontEnd(currentUser)
     }
-    next()
-  })
-
-  webRouter.use(function (req, res, next) {
-    const currentUser = SessionManager.getSessionUser(req.session)
-    const userEmail = currentUser?.email || ''
-    res.locals.isAnnotationAccount = isAnnotatorEmail(userEmail)
     next()
   })
 

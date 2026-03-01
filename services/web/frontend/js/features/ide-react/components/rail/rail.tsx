@@ -21,8 +21,6 @@ import {
   hasFullProjectSearch,
 } from '@/features/ide-redesign/components/full-project-search-panel'
 import AiTutorPanel from '@/features/ide-redesign/components/ai-tutor/ai-tutor-panel'
-import AnnotationPanel from '@/features/ide-redesign/components/annotation/annotation-panel'
-import useIsAnnotationAccount from '@/shared/hooks/use-is-annotation-account'
 import { sendSearchEvent } from '@/features/event-tracking/search-events'
 import { useProjectContext } from '@/shared/context/project-context'
 import { useCommandProvider } from '@/features/ide-react/hooks/use-command-provider'
@@ -71,7 +69,6 @@ export const RailLayout = () => {
     useRailContext()
   const { features } = useProjectContext()
   const { isRestrictedTokenMember } = useEditorContext()
-  const isAnnotationAccount = useIsAnnotationAccount()
   const gitBridgeEnabled = getMeta('ol-gitBridgeEnabled')
   const { isOverleaf } = getMeta('ol-ExposedSettings')
 
@@ -151,13 +148,6 @@ export const RailLayout = () => {
         title: 'Paper Mentor',
         component: <AiTutorPanel />,
       },
-      {
-        key: 'annotation',
-        icon: 'assignment',
-        title: 'Annotation Guide',
-        component: <AnnotationPanel />,
-        hide: !isAnnotationAccount,
-      },
       ...moduleRailEntries,
     ],
     [
@@ -167,7 +157,6 @@ export const RailLayout = () => {
       isRestrictedTokenMember,
       isOverleaf,
       gitBridgeEnabled,
-      isAnnotationAccount,
     ]
   )
 

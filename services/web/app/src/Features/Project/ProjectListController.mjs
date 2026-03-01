@@ -32,10 +32,6 @@ import PermissionsManager from '../Authorization/PermissionsManager.mjs'
 import AnalyticsManager from '../Analytics/AnalyticsManager.mjs'
 import { OnboardingDataCollection } from '../../models/OnboardingDataCollection.mjs'
 import UserSettingsHelper from './UserSettingsHelper.mjs'
-import {
-  isAnnotatorEmail,
-  getAllowedProjectIds,
-} from '../Chat/AnnotatorConfig.mjs'
 
 /**
  * @import { GetProjectsRequest, GetProjectsResponse, AllUsersProjects, MongoProject, FormattedProject, MongoTag } from "./types"
@@ -164,19 +160,7 @@ async function projectListPage(req, res, next) {
     }
   }
 
-  // For annotator accounts, resolve allowed project IDs to filter the project list
-  const sessionUser = SessionManager.getSessionUser(req.session)
-  const annotatorAllowedProjectIds = isAnnotatorEmail(sessionUser?.email)
-    ? getAllowedProjectIds(sessionUser.email)
-    : null
-
-  const projectsBlobPending = _getProjects(
-    userId,
-    {},
-    undefined,
-    undefined,
-    annotatorAllowedProjectIds
-  ).catch(err => {
+  const projectsBlobPending = _getProjects(userId).catch(err => {
     logger.err({ err, userId }, 'projects listing in background failed')
     return undefined
   })
@@ -610,17 +594,7 @@ async function projectListPage(req, res, next) {
 async function getProjectsJson(req, res) {
   const { filters, page, sort } = req.body
   const userId = SessionManager.getLoggedInUserId(req.session)
-  const sessionUser = SessionManager.getSessionUser(req.session)
-  const annotatorAllowedProjectIds = isAnnotatorEmail(sessionUser?.email)
-    ? getAllowedProjectIds(sessionUser.email)
-    : null
-  const projectsPage = await _getProjects(
-    userId,
-    filters,
-    sort,
-    page,
-    annotatorAllowedProjectIds
-  )
+  const projectsPage = await _getProjects(userId, filters, sort, page)
   res.json(projectsPage)
 }
 
@@ -650,8 +624,7 @@ async function _getProjects(
   userId,
   filters = {},
   sort = { by: 'lastUpdated', order: 'desc' },
-  page = { size: 20 },
-  allowedProjectIds = null
+  page = { size: 20 }
 ) {
   /** @type {[AllUsersProjects, MongoTag[]]} */
   const results = await Promise.all([
@@ -663,13 +636,6 @@ async function _getProjects(
   ])
   const [allProjects, tags] = results
   let formattedProjects = _formatProjects(allProjects, userId)
-
-  // For annotator accounts, only show their assigned projects
-  if (allowedProjectIds && allowedProjectIds.size > 0) {
-    formattedProjects = formattedProjects.filter(p =>
-      allowedProjectIds.has(p.id)
-    )
-  }
 
   const filteredProjects = _applyFilters(
     formattedProjects,
