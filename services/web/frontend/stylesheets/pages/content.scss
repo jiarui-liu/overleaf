@@ -1,0 +1,60 @@
+/*
+  Styling for content pages
+  Including: about, blog, /for/__, legal, contact, portals, wiki, gallery, plans, and interstitial payment page
+*/
+
+// TODO: consolidate cms.scss and content.scss
+
+.content-page {
+  &.content {
+    padding-top: $header-height; // remove extra padding added by .content. Keep .content selector to increase specificity
+  }
+
+  word-break: break-word;
+
+  .btn + .btn {
+    margin-left: var(--spacing-06);
+  }
+
+  /*
+      Links and Buttons
+    */
+
+  // TODO: remove an use link style in more generic selector,
+  // which is likely .website-redesign to start
+  // a {
+  //   color: @link-color-alt;
+  //   &:hover {
+  //     color: @link-hover-color-alt;
+  //   }
+  // }
+
+  hr {
+    border-color: var(--neutral-30);
+  }
+
+  // TODO: only used on about page. Confirm with UX changes needed
+  // .container-small {
+  //   section .section-row {
+  //     /* match col-sm-8 */
+  //     /* @grid-gutter-width  is used for margins */
+  //     max-width: (@screen-sm * (8/12)) - @grid-gutter-width;
+  //     @media (min-width: @screen-md-min) {
+  //       max-width: (@screen-md * (8/12)) - @grid-gutter-width;
+  //     }
+  //     @media (min-width: @screen-lg-min) {
+  //       max-width: (@screen-lg * (8/12)) - @grid-gutter-width;
+  //     }
+  //   }
+  // }
+
+  /*
+      lists
+    */
+
+  .list-without-style {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+}

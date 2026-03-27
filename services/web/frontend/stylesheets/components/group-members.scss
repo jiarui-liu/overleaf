@@ -1,0 +1,169 @@
+/* Styles for group-subscription members view */
+
+.structured-list.managed-entities-list {
+  /* Override scrolling behaviour on structured-list */
+  overflow: initial;
+  overflow-y: initial;
+  overflow-x: initial;
+}
+
+.managed-entities-list {
+  vertical-align: middle;
+
+  .security-state-invite-pending {
+    color: var(--content-disabled);
+  }
+
+  .security-state-managed {
+    color: var(--content-positive);
+  }
+
+  .security-state-not-managed {
+    color: var(--content-danger);
+  }
+
+  .managed-entity-row {
+    overflow-wrap: break-word;
+  }
+
+  .managed-user-security {
+    display: flex;
+    justify-content: space-between;
+  }
+}
+
+.managed-entities-table {
+  width: 100%;
+  table-layout: fixed;
+
+  @include media-breakpoint-up(sm) {
+    .cell-checkbox {
+      width: 5%;
+    }
+
+    .cell-email {
+      width: 30%;
+    }
+
+    &.group-sso-active .cell-email {
+      width: 29%;
+    }
+
+    .cell-name {
+      width: 20%;
+    }
+
+    .cell-last-active {
+      width: 20%;
+    }
+
+    .cell-security {
+      width: 12%;
+    }
+
+    .cell-managed {
+      width: 15%;
+    }
+
+    .cell-dropdown {
+      width: 26%;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    .cell-accepted-invite {
+      width: 17%;
+    }
+
+    &.managed-users-active {
+      .cell-email {
+        width: 30%;
+      }
+
+      &.group-sso-active {
+        .cell-checkbox {
+          width: 3%;
+        }
+
+        .cell-email {
+          width: 37%;
+        }
+
+        .cell-last-active {
+          width: 16%;
+        }
+
+        .cell-name {
+          width: 18%;
+        }
+      }
+    }
+  }
+
+  @include media-breakpoint-up(xl) {
+    .cell-checkbox {
+      width: 5%;
+    }
+
+    .cell-email {
+      width: 41%;
+    }
+
+    &.group-sso-active .cell-email {
+      width: 41%;
+    }
+
+    .cell-name {
+      width: 20%;
+    }
+
+    .cell-last-active {
+      width: 15%;
+    }
+
+    .cell-security {
+      width: 10%;
+    }
+
+    .cell-managed {
+      width: 13%;
+    }
+
+    .cell-dropdown {
+      width: 19%;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    .cell-accepted-invite {
+      width: 17%;
+    }
+
+    &.managed-users-active {
+      .cell-email {
+        width: 41%;
+      }
+
+      &.group-sso-active {
+        .cell-checkbox {
+          width: 3%;
+        }
+
+        .cell-email {
+          width: 36%;
+        }
+
+        .cell-name {
+          width: 18%;
+        }
+      }
+    }
+  }
+}
+
+.managed-user-security {
+  .material-symbols {
+    position: relative;
+    top: 4px;
+  }
+}

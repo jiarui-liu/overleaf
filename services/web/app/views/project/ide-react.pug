@@ -1,0 +1,34 @@
+extends ../layout-react
+
+block vars
+	- var suppressNavbar = true
+	- var suppressFooter = true
+	- var suppressSkipToContent = true
+	- var deferScripts = true
+	- metadata.robotsNoindexNofollow = true
+	- enableIeeeBranding = false
+
+block entrypointVar
+	- entrypoint = 'pages/ide'
+
+block content
+	//- TODO: remove `main` once it's no longer needed by browser extensions
+	main#ide-root
+		.loading-screen
+			.loading-screen-brand-container
+				.loading-screen-brand(style='height: 20%')
+			h3.loading-screen-label #{translate("loading")}
+				span.loading-screen-ellip .
+				span.loading-screen-ellip .
+				span.loading-screen-ellip .
+
+block append meta
+	include editor/_meta
+
+block prepend foot-scripts
+	script(
+		type='text/javascript'
+		nonce=scriptNonce
+		src=(wsUrl || '/socket.io') + '/socket.io.js'
+		defer=deferScripts
+	)

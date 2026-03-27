@@ -1,0 +1,9 @@
+/var/log/overleaf/*.log {
+  daily
+  missingok
+  rotate 5
+  compress
+  copytruncate
+  notifempty
+  create 644 root adm
+}

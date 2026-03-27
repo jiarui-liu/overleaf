@@ -1,0 +1,87 @@
+{
+  "name": "overleaf",
+  "private": true,
+  "dependencies": {
+    "patch-package": "^8.0.0"
+  },
+  "devDependencies": {
+    "@prettier/plugin-pug": "^3.4.0",
+    "@types/chai": "^4.3.0",
+    "@types/chai-as-promised": "^7.1.8",
+    "@types/mocha": "^10.0.6",
+    "@typescript-eslint/eslint-plugin": "8.50.0",
+    "@typescript-eslint/parser": "^8.50.0",
+    "@vitest/eslint-plugin": "^1.5.0",
+    "eslint": "^8.15.0",
+    "eslint-config-prettier": "^8.5.0",
+    "eslint-config-standard": "^17.0.0",
+    "eslint-plugin-chai-expect": "^3.0.0",
+    "eslint-plugin-chai-friendly": "^0.7.2",
+    "eslint-plugin-cypress": "^2.15.1",
+    "eslint-plugin-import": "^2.26.0",
+    "eslint-plugin-mocha": "^10.1.0",
+    "eslint-plugin-n": "^15.7.0",
+    "eslint-plugin-prettier": "^4.0.0",
+    "eslint-plugin-promise": "^6.0.0",
+    "eslint-plugin-unicorn": "^56.0.0",
+    "prettier": "3.7.4",
+    "prettier-plugin-groovy": "0.2.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "npm": "11.6.2"
+  },
+  "overrides": {
+    "request@2.88.2": {
+      "tough-cookie": "5.1.2",
+      "form-data": "2.5.5",
+      "qs": "6.14.1"
+    },
+    "streamdown": {
+      "mermaid": "file:./services/web/stubs/mermaid-stub"
+    }
+  },
+  "scripts": {
+    "format": "prettier --cache --cache-location ./node_modules/.cache/prettier/.prettier-cache --check",
+    "format:fix": "prettier --cache --cache-location ./node_modules/.cache/prettier/.prettier-cache --write --check",
+    "format:styles": "prettier --cache --cache-location ./node_modules/.cache/prettier/.prettier-cache --check '**/*.{css,scss}'",
+    "format:styles:fix": "prettier --cache --cache-location ./node_modules/.cache/prettier/.prettier-cache --write --check '**/*.{css,scss}'",
+    "format:pug": "prettier --cache --cache-location ./node_modules/.cache/prettier/.prettier-cache --check '**/*.pug'",
+    "format:pug:fix": "prettier --cache --cache-location ./node_modules/.cache/prettier/.prettier-cache --write --check '**/*.pug'",
+    "format:jenkins": "prettier --cache --cache-location ./node_modules/.cache/prettier/.prettier-cache --check '**/Jenkinsfile'",
+    "format:jenkins:fix": "prettier --cache --cache-location ./node_modules/.cache/prettier/.prettier-cache --write --check '**/Jenkinsfile'",
+    "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint/ --max-warnings 0 --format unix .",
+    "lint:fix": "eslint --cache --cache-location ./node_modules/.cache/eslint/ --fix .",
+    "postinstall": "patch-package"
+  },
+  "workspaces": [
+    "jobs/mirror-documentation",
+    "libraries/*",
+    "server-ce/test",
+    "services/analytics",
+    "services/chat",
+    "services/clsi",
+    "services/clsi-cache",
+    "services/clsi-perf",
+    "services/contacts",
+    "services/docstore",
+    "services/document-updater",
+    "services/filestore",
+    "services/freegeoip",
+    "services/github-sync",
+    "services/history-v1",
+    "services/idp",
+    "services/latexqc",
+    "services/notifications",
+    "services/project-history",
+    "services/real-time",
+    "services/templates",
+    "services/third-party-datastore",
+    "services/third-party-references",
+    "services/tpdsworker",
+    "services/web",
+    "tools/dependency-management",
+    "tools/saas-e2e",
+    "tools/migrations"
+  ]
+}

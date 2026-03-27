@@ -1,0 +1,386 @@
+@mixin light-buttons {
+  // primary
+  --btn-primary-color: var(--white);
+  --btn-primary-background: var(--bg-accent-01);
+  --btn-primary-hover-background: var(--bg-accent-02);
+  --btn-primary-hover-border: var(--bg-accent-02);
+
+  // secondary
+  --btn-secondary-color: var(--content-primary);
+  --btn-secondary-background: var(--bg-light-primary);
+  --btn-secondary-border: var(--border-primary);
+  --btn-secondary-hover-background: var(--bg-light-tertiary);
+  --btn-secondary-hover-border: var(--border-primary);
+
+  // ghost
+  --btn-ghost-color: var(--content-primary);
+  --btn-ghost-background: var(--bg-light-primary);
+  --btn-ghost-hover-background: var(--bg-light-tertiary);
+
+  // danger
+  --btn-danger-color: var(--white);
+  --btn-danger-background: var(--bg-danger-01);
+  --btn-danger-border: var(--bg-danger-01);
+  --btn-danger-hover-background: var(--bg-danger-02);
+
+  // danger-ghost
+  --btn-danger-ghost-color: var(--content-danger);
+  --btn-danger-ghost-background: var(--bg-light-primary);
+  --btn-danger-ghost-hover-background: var(--bg-danger-03);
+  --btn-danger-ghost-border: var(--bg-light-primary);
+  --btn-danger-ghost-hover-border: var(--bg-light-primary);
+
+  // premium
+  --btn-premium-color: var(--white);
+  --btn-premium-background: var(--blue-70);
+  --btn-premium-hover-background: var(--blue-70);
+
+  // premium-secondary
+  --btn-premium-secondary-color: var(--blue-60);
+  --btn-premium-secondary-background: var(--bg-light-primary);
+  --btn-premium-secondary-border: var(--blue-60);
+  --btn-premium-secondary-hover-background: var(--bg-info-03);
+  --btn-premium-secondary-hover-border: var(--blue-60);
+}
+
+@mixin dark-buttons {
+  // primary
+  --btn-primary-color: var(--white);
+  --btn-primary-background: var(--bg-accent-01);
+  --btn-primary-hover-background: var(--bg-accent-02);
+  --btn-primary-hover-border: var(--bg-accent-02);
+
+  // secondary
+  --btn-secondary-color: var(--white);
+  --btn-secondary-background: var(--bg-dark-primary);
+  --btn-secondary-border: var(--bg-light-primary);
+  --btn-secondary-hover-background: var(--bg-dark-tertiary);
+  --btn-secondary-hover-border: var(--bg-light-primary);
+
+  // ghost
+  --btn-ghost-color: var(--white);
+  --btn-ghost-background: var(--bg-dark-secondary);
+  --btn-ghost-hover-background: var(--bg-dark-tertiary);
+
+  // danger
+  --btn-danger-color: var(--white);
+  --btn-danger-background: var(--bg-danger-01);
+  --btn-danger-border: var(--bg-danger-01);
+  --btn-danger-hover-background: var(--bg-danger-02);
+
+  // danger-ghost
+  --btn-danger-ghost-color: var(--bg-danger-03);
+  --btn-danger-ghost-background: var(--bg-dark-secondary);
+  --btn-danger-ghost-hover-background: var(--bg-dark-tertiary);
+  --btn-danger-ghost-border: var(--bg-danger-01);
+  --btn-danger-ghost-hover-border: var(--bg-danger-01);
+
+  // premium
+  --btn-premium-color: var(--white);
+  --btn-premium-background: var(--blue-70);
+  --btn-premium-hover-background: var(--blue-70);
+
+  // premium-secondary, todo once WIP designs for dm are finished
+  --btn-premium-secondary-color: var(--content-primary);
+  --btn-premium-secondary-background: var(--blue-30);
+  --btn-premium-secondary-border: var(--blue-60);
+  --btn-premium-secondary-hover-background: var(--blue-30);
+  --btn-premium-secondary-hover-border: var(--blue-60);
+}
+
+:root {
+  .btn {
+    @include light-buttons;
+  }
+
+  @include theme('default') {
+    .ide-redesign-main,
+    .project-ds-nav-page {
+      .btn {
+        @include dark-buttons;
+      }
+    }
+  }
+}
+
+.btn {
+  // Focus style for all buttons
+  --bs-btn-focus-box-shadow: 0 0 0 2px var(--border-active-dark);
+
+  &:focus-visible {
+    background-color: var(--bs-btn-bg);
+  }
+
+  // Sizes
+
+  // Default size
+  @include ol-button-size(
+    $font-size: var(--font-size-03),
+    $line-height: var(--line-height-03),
+    $padding-y: var(--spacing-03)
+  );
+
+  &.btn-lg {
+    @include ol-button-size(
+      $font-size: var(--font-size-03),
+      $line-height: var(--line-height-03),
+      $padding-y: var(--spacing-05)
+    );
+  }
+
+  &.btn-sm {
+    @include ol-button-size(
+      $font-size: var(--font-size-02),
+      $line-height: var(--line-height-02),
+      $padding-y: var(--spacing-01),
+      $padding-x: var(--spacing-05)
+    );
+  }
+
+  // Variants
+  &.btn-primary {
+    @include ol-button-variant(
+      $color: var(--btn-primary-color),
+      $background: var(--btn-primary-background),
+      $hover-background: var(--btn-primary-hover-background),
+      $hover-border: var(--btn-primary-hover-border)
+    );
+  }
+
+  &.btn-secondary {
+    @include ol-button-variant(
+      $color: var(--btn-secondary-color),
+      $background: var(--btn-secondary-background),
+      $border: var(--btn-secondary-border),
+      $hover-background: var(--btn-secondary-hover-background),
+      $hover-border: var(--btn-secondary-hover-border),
+      $borderless: false
+    );
+  }
+
+  &.btn-ghost {
+    @include ol-button-variant(
+      $color: var(--btn-ghost-color),
+      $background: var(--btn-ghost-background),
+      $hover-background: var(--btn-ghost-hover-background)
+    );
+  }
+
+  &.btn-danger {
+    @include ol-button-variant(
+      $color: var(--btn-danger-color),
+      $background: var(--btn-danger-background),
+      $border: var(--btn-danger-border),
+      $hover-background: var(--btn-danger-hover-background)
+    );
+  }
+
+  &.btn-danger-ghost {
+    @include ol-button-variant(
+      $color: var(--btn-danger-ghost-color),
+      $background: var(--btn-danger-ghost-background),
+      $border: var(--btn-danger-ghost-border),
+      $hover-background: var(--btn-danger-ghost-hover-background),
+      $hover-border: var(--btn-danger-ghost-hover-border),
+      $borderless: false
+    );
+  }
+
+  &.btn-premium {
+    @include ol-button-variant(
+      $color: var(--btn-premium-color),
+      $background: var(--btn-premium-background)
+    );
+
+    background: var(--premium-gradient);
+    transition: none;
+
+    &:hover {
+      background: var(--btn-premium-hover-background);
+    }
+  }
+
+  &.btn-premium-secondary {
+    @include ol-button-variant(
+      $color: var(--btn-premium-secondary-color),
+      $background: var(--btn-premium-secondary-background),
+      $border: var(--btn-premium-secondary-border),
+      $hover-background: var(--btn-premium-secondary-hover-background),
+      $hover-border: var(--btn-premium-secondary-hover-border),
+      $borderless: false
+    );
+  }
+
+  &.btn-blue {
+    @include ol-button-variant(
+      $color: var(--white),
+      $background: var(--sapphire-blue),
+      $border: var(--sapphire-blue),
+      $hover-background: (
+        var(--sapphire-blue-dark),
+      ),
+      $hover-border: (
+        var(--sapphire-blue-dark),
+      ),
+      $borderless: false
+    );
+  }
+
+  &.btn-social {
+    @extend .btn-secondary;
+
+    padding-left: var(--spacing-03);
+
+    .btn-social-icon {
+      height: 24px;
+      width: 24px;
+      padding: var(--spacing-01);
+      margin-right: var(--spacing-02);
+    }
+  }
+}
+
+// Link buttons
+// -------------------------
+
+// Make a button look and behave like a link
+.btn-link {
+  color: var(--link-color);
+  font-weight: normal;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+  vertical-align: inherit;
+  border-radius: 0;
+
+  &,
+  &:active,
+  &[disabled],
+  fieldset[disabled] & {
+    background-color: transparent;
+
+    @include box-shadow(none);
+  }
+
+  &:hover,
+  &:focus {
+    color: var(--link-hover-color);
+    text-decoration: none;
+    background-color: transparent;
+  }
+
+  &.btn-danger {
+    color: var(--content-danger);
+
+    // since it's a link, override the button states
+    &:active {
+      color: var(--content-danger);
+      background-color: transparent;
+    }
+
+    &:focus-visible {
+      background-color: transparent;
+      outline: -webkit-focus-ring-color auto 1px;
+    }
+  }
+}
+
+.btn-inline-link {
+  @extend .btn-link;
+
+  font-size: inherit;
+  padding: 0;
+  vertical-align: inherit;
+}
+
+.button-loading {
+  align-items: center;
+  display: inline-grid;
+  grid-template-areas: 'container'; // Define a single grid area
+  pointer-events: none;
+}
+
+.button-loading > * {
+  grid-area: container; // Position all the direct children within the single grid area
+}
+
+.button-loading .spinner-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  .loading-spinner-small {
+    border-width: 0.2em;
+    height: 1.25rem;
+    width: 1.25rem;
+  }
+
+  .loading-spinner-large {
+    border-width: 0.2em;
+    height: 1.5rem;
+    width: 1.5rem;
+  }
+}
+
+// Hide the text when the spinner is visible
+.button-loading > [aria-hidden='true'] {
+  visibility: hidden;
+}
+
+.button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-04); // Add gap between text and icons
+  justify-content: center;
+
+  .icon-small {
+    font-size: 1.25rem;
+  }
+
+  .icon-large {
+    font-size: 1.5rem;
+  }
+
+  .spinner {
+    margin: var(--spacing-01);
+  }
+}
+
+.icon-button-small {
+  padding: var(--spacing-01);
+}
+
+.icon-button {
+  padding: var(--spacing-04);
+}
+
+.icon-button-large {
+  padding: var(--spacing-05);
+}
+
+// Set the visited colour for a link that is styled as a button. This is necessary because we have a generic rule that
+// sets the colour of visited links
+a.btn:visited {
+  color: var(--bs-btn-color);
+}
+
+// Copy icon button
+.copy-button {
+  text-decoration: none;
+}
+
+.btn-reset {
+  @include reset-button;
+}
+
+.btn-transparent {
+  background: none !important;
+  border-radius: 0 !important;
+  color: inherit !important;
+  font-weight: 400;
+
+  &:hover {
+    background: none !important;
+    color: inherit !important;
+  }
+}

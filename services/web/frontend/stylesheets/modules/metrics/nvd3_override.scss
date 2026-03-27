@@ -1,0 +1,13 @@
+.nvd3 {
+  .nv-axis {
+    .tick {
+      line {
+        opacity: 0;
+      }
+    }
+
+    path.domain {
+      opacity: 0;
+    }
+  }
+}

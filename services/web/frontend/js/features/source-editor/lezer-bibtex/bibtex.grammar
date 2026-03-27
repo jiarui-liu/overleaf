@@ -1,0 +1,141 @@
+@tokens {
+  whiteSpace { $[\t\n ]+ }
+
+  // Anything outside of an entry at the top level is a BibTeX free-form comment
+  Junk { ![@ \t\n%] ![@]* }
+
+  // BibLaTeX supports comments starting with a % and extending to the end of
+  // the line
+  Comment { "%" ![\n]* }
+
+  // See https://metacpan.org/release/AMBS/Text-BibTeX-0.91/view/btparse/doc/bt_language.pod
+  identifierSymbol { $[!$&*+./:;<>?^`_|] | "[" | "]" | "-" }
+  identifier {
+      (@asciiLetter | identifierSymbol)
+      (@asciiLetter | @digit | identifierSymbol)*
+  }
+
+  EntryType { identifier }
+
+  // Citation keys can start with a digit
+  CitationKey { (@asciiLetter | @digit | identifierSymbol)+ }
+
+  NumberLiteral { @digit+ }
+
+  "#" "="
+}
+
+@external specialize {EntryType} specializeEntryType from "./tokens.mjs" {
+  stringKeyword,
+  preambleKeyword,
+  commentKeyword
+}
+
+@skip { whiteSpace | Comment }
+
+@top Bibliography {
+  (Junk | Entry | CommentEntry | PreambleEntry | StringEntry)*
+}
+
+StringEntry { StringCommand StringBody }
+PreambleEntry { PreambleCommand PreambleBody }
+CommentEntry { CommentCommand CommentBody }
+Entry { EntryCommand EntryBody }
+
+EntryCommand { "@" EntryType }
+EntryBody { commandBody<entryContents> }
+StringCommand { "@" stringKeyword }
+StringBody { commandBody<fields> }
+PreambleCommand { "@" preambleKeyword }
+PreambleBody { commandBody<Value> }
+CommentCommand { "@" commentKeyword }
+
+commandBody<contents> {
+  (
+    BodyOpen[closedBy="BodyClose"] { "{" }
+    contents
+    BodyClose[openedBy="BodyOpen"] { "}" }
+  ) | (
+    BodyOpen[closedBy="BodyClose"] { "(" }
+    contents
+    BodyClose[openedBy="BodyOpen"] { ")" }
+  )
+}
+
+entryContents { CitationKey ("," fields)?  }
+
+fields { (Field ("," Field)* ","?)?  }
+
+Field { FieldName "=" Value }
+FieldName { identifier }
+Value { simpleValue ("#" simpleValue)* }
+simpleValue { StringLiteral | NumberLiteral | StringName }
+StringName { identifier }
+
+@local tokens {
+  strOpenBrace { "{" }
+  strCloseBrace { "}" }
+  strOpenParen { "(" }
+  strCloseParen { ")" }
+  strQuote { "\"" }
+  @else strOther
+}
+
+@skip {} {
+  StringLiteral {
+    (
+      StringOpen[closedBy="StringClose"] { "\"" }
+      StringContents { quotedStringContents }
+      StringClose[openedBy="StringOpen"] { strQuote }
+    ) | (
+      StringOpen[closedBy="StringClose"] { "{" }
+      StringContents { bracedStringContents }
+      StringClose[openedBy="StringOpen"] { strCloseBrace }
+    )
+  }
+
+  CommentBody {
+    (
+      BodyOpen[closedBy="BodyClose"] { "{" }
+      CommentContents { bracedStringContents }
+      BodyClose[openedBy="BodyOpen"] { strCloseBrace }
+    ) | (
+      BodyOpen[closedBy="BodyClose"] { "(" }
+      CommentContents { parenthesizedStringContents }
+      BodyClose[openedBy="BodyOpen"] { strCloseParen }
+    )
+  }
+
+  quotedStringContents {
+    (
+      strOpenBrace bracedStringContents strCloseBrace |
+      strOpenParen |
+      strCloseParen |
+      strCloseBrace |
+      strOther
+    )*
+  }
+
+  parenthesizedStringContents {
+    (
+      strOpenBrace bracedStringContents strCloseBrace |
+      strQuote |
+      strOpenParen |
+      strCloseBrace |
+      strOther
+    )*
+
+  }
+
+  bracedStringContents {
+    (
+      strOpenBrace bracedStringContents strCloseBrace |
+      strQuote |
+      strOpenParen |
+      strCloseParen |
+      strOther
+    )*
+  }
+}
+
+@external propSource highlighting from "./highlight.mjs"

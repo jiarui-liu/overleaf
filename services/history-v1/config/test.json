@@ -1,0 +1,53 @@
+{
+  "databaseUrl": "postgres://overleaf:overleaf@postgres/overleaf-history-v1-test",
+  "databaseUrlReadOnly": "postgres://read_only:password@postgres/overleaf-history-v1-test",
+  "persistor": {
+    "backend": "gcs",
+    "gcs": {
+      "unsignedUrls": "true",
+      "endpoint": {
+        "apiEndpoint": "http://gcs:9090",
+        "projectId": "fake"
+      }
+    }
+  },
+  "blobStore": {
+    "globalBucket": "overleaf-test-blobs",
+    "projectBucket": "overleaf-test-project-blobs"
+  },
+  "chunkStore": {
+    "bucket": "overleaf-test-chunks"
+  },
+  "zipStore": {
+    "bucket": "overleaf-test-zips"
+  },
+  "backupStore": {
+    "chunksBucket": "overleaf-test-history-chunks",
+    "deksBucket": "overleaf-test-history-deks",
+    "globalBlobsBucket": "overleaf-test-history-global-blobs",
+    "projectBlobsBucket": "overleaf-test-history-project-blobs"
+  },
+  "backupPersistor": {
+    "keyEncryptionKeys": "[{\"key\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\",\"salt\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\"}]",
+    "s3SSEC": {
+      "ca": "[\"/certs/public.crt\"]"
+    },
+    "tieringStorageClass": "REDUCED_REDUNDANCY"
+  },
+  "healthCheckBlobs": "[\"42/f70d7bba4ae1f07682e0358bd7a2068094fc023b\",\"000000000000000000000042/98d5521fe746bc2d11761edab5d0829bee286009\"]",
+  "healthCheckProjects": "[\"42\",\"000000000000000000000042\"]",
+  "backupRPOInMS": "360000",
+  "maxDeleteKeys": "3",
+  "useDeleteObjects": "false",
+  "mongo": {
+    "uri": "mongodb://mongo:27017/sharelatex"
+  },
+  "basicHttpAuth": {
+    "password": "test"
+  },
+  "jwtAuth": {
+    "key": "testtest",
+    "algorithm": "HS256"
+  },
+  "maxFileUploadSize": "524288"
+}

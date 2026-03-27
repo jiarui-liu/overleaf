@@ -1,0 +1,220 @@
+import { EditorProviders } from '../../helpers/editor-providers'
+import PdfLogsEntries from '../../../../frontend/js/features/pdf-preview/components/pdf-logs-entries'
+import { detachChannel, testDetachChannel } from '../../helpers/detach-channel'
+import { FileTreePathContext } from '@/features/file-tree/contexts/file-tree-path'
+import { FindResult } from '@/features/file-tree/util/path'
+import { FC, ReactElement } from 'react'
+import {
+  EditorManager,
+  EditorManagerContext,
+} from '@/features/ide-react/context/editor-manager-context'
+import { EditorView } from '@codemirror/view'
+import { OpenDocuments } from '@/features/ide-react/editor/open-documents'
+import { LogEntry } from '@/features/pdf-preview/util/types'
+import { EditorViewContext } from '@/features/ide-react/context/editor-view-context'
+
+describe('<PdfLogsEntries/>', function () {
+  const fakeFindEntityResult: FindResult = {
+    type: 'doc',
+    entity: { _id: '123', name: '123 Doc' },
+  }
+
+  const FileTreePathProvider: FC<React.PropsWithChildren> = ({ children }) => (
+    <FileTreePathContext.Provider
+      value={{
+        dirname: cy.stub(),
+        findEntityByPath: cy
+          .stub()
+          .as('findEntityByPath')
+          .returns(fakeFindEntityResult),
+        pathInFolder: cy.stub(),
+        previewByPath: cy.stub(),
+      }}
+    >
+      {children}
+    </FileTreePathContext.Provider>
+  )
+
+  const EditorManagerProvider: FC<React.PropsWithChildren> = ({ children }) => {
+    const value = {
+      openDocWithId: cy.spy().as('openDocWithId'),
+      // @ts-ignore
+      openDocs: new OpenDocuments(),
+    } as unknown as EditorManager
+
+    return (
+      <EditorManagerContext.Provider value={value}>
+        {children}
+      </EditorManagerContext.Provider>
+    )
+  }
+
+  const EditorViewProvider: FC<React.PropsWithChildren> = ({ children }) => {
+    const value = {
+      view: new EditorView({ doc: '\\documentclass{article}' }),
+      setView: cy.stub(),
+    }
+
+    return (
+      <EditorViewContext.Provider value={value}>
+        {children}
+      </EditorViewContext.Provider>
+    )
+  }
+
+  // TODO: ide-redesign-cleanup: Remove this wrapper when the styles are no
+  // longer nested in .ide-redesign-main .error-logs
+  const LogsPanel = ({ children }: { children: ReactElement }) => (
+    <div className="ide-redesign-main">
+      <div className="error-logs"> {children}</div>
+    </div>
+  )
+
+  const logEntries: LogEntry[] = [
+    {
+      file: 'main.tex',
+      line: 9,
+      column: 8,
+      level: 'error',
+      message: 'LaTeX Error',
+      content: 'See the LaTeX manual',
+      raw: '',
+      ruleId: 'hint_misplaced_alignment_tab_character',
+      key: '',
+    },
+  ]
+
+  beforeEach(function () {
+    cy.interceptCompile()
+    cy.interceptEvents()
+  })
+
+  it('displays human readable hint', function () {
+    cy.mount(
+      <EditorProviders providers={{ EditorViewProvider }}>
+        <LogsPanel>
+          <PdfLogsEntries entries={logEntries} />
+        </LogsPanel>
+      </EditorProviders>
+    )
+
+    cy.contains('You have placed an alignment tab character')
+  })
+
+  it('opens doc on click', function () {
+    cy.mount(
+      <EditorProviders
+        providers={{
+          EditorManagerProvider,
+          FileTreePathProvider,
+          EditorViewProvider,
+        }}
+      >
+        <LogsPanel>
+          <PdfLogsEntries entries={logEntries} />
+        </LogsPanel>
+      </EditorProviders>
+    )
+
+    cy.findByRole('button', {
+      name: 'Go to code location',
+    }).click()
+
+    cy.get('@findEntityByPath').should('have.been.calledWith', 'main.tex')
+    cy.get('@openDocWithId').should(
+      'have.been.calledOnceWith',
+      fakeFindEntityResult.entity._id,
+      {
+        gotoLine: 9,
+        gotoColumn: 8,
+        keepCurrentView: false,
+      }
+    )
+  })
+
+  it('opens doc via detached action', function () {
+    cy.window().then(win => {
+      win.metaAttributesCache.set('ol-detachRole', 'detacher')
+    })
+
+    cy.mount(
+      <EditorProviders
+        providers={{
+          EditorManagerProvider,
+          FileTreePathProvider,
+          EditorViewProvider,
+        }}
+      >
+        <LogsPanel>
+          <PdfLogsEntries entries={logEntries} />
+        </LogsPanel>
+      </EditorProviders>
+    ).then(() => {
+      testDetachChannel.postMessage({
+        role: 'detached',
+        event: 'action-sync-to-entry',
+        data: {
+          args: [
+            {
+              file: 'main.tex',
+              line: 7,
+              column: 6,
+            },
+          ],
+        },
+      })
+    })
+
+    cy.get('@findEntityByPath').should('have.been.called')
+    cy.get('@openDocWithId').should(
+      'have.been.calledOnceWith',
+      fakeFindEntityResult.entity._id,
+      {
+        gotoLine: 7,
+        gotoColumn: 6,
+        keepCurrentView: false,
+      }
+    )
+  })
+
+  it('sends open doc clicks via detached action', function () {
+    cy.window().then(win => {
+      win.metaAttributesCache.set('ol-detachRole', 'detached')
+    })
+
+    cy.mount(
+      <EditorProviders
+        providers={{
+          EditorManagerProvider,
+          FileTreePathProvider,
+          EditorViewProvider,
+        }}
+      >
+        <LogsPanel>
+          <PdfLogsEntries entries={logEntries} />
+        </LogsPanel>
+      </EditorProviders>
+    )
+
+    cy.spy(detachChannel, 'postMessage').as('postDetachMessage')
+
+    cy.findByRole('button', {
+      name: 'Go to code location',
+    }).click()
+
+    cy.get('@openDocWithId').should('not.have.been.called')
+    cy.get('@postDetachMessage').should('have.been.calledWith', {
+      role: 'detached',
+      event: 'action-sync-to-entry',
+      data: {
+        args: [
+          {
+            file: 'main.tex',
+            line: 9,
+            column: 8,
+          },
+        ],
+      },
+    })
+  })
+})

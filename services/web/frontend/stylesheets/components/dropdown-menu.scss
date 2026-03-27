@@ -1,0 +1,295 @@
+@mixin light-dropdown-menu {
+  --dropdown-text-color: var(--neutral-90);
+  --dropdown-text-secondary: var(--content-secondary);
+  --dropdown-text-active: var(--green-70);
+  --dropdown-text-danger: var(--content-danger);
+  --dropdown-text-danger-hover: var(--content-danger);
+  --dropdown-header-text-color: var(--content-secondary);
+  --dropdown-background: var(--white);
+  --dropdown-background-active: var(--bg-accent-03);
+  --dropdown-background-hover: var(--bg-light-secondary);
+  --dropdown-background-danger-hover: var(--bg-danger-03);
+  --dropdown-border-divider: var(--border-divider);
+  --dropdown-text-hover: var(--content-primary);
+  --dropdown-border-width: 0;
+  --dropdown-border-color: transparent;
+}
+
+@mixin dark-dropdown-menu {
+  --dropdown-background: var(--bg-dark-primary);
+  --dropdown-background-hover: var(--bg-dark-secondary);
+  --dropdown-background-danger-hover: var(--bg-danger-02);
+  --dropdown-text-color: var(--content-primary-dark);
+  --dropdown-text-danger: var(--red-40);
+  --dropdown-text-danger-hover: var(--red-20);
+  --dropdown-text-secondary: var(--content-secondary-dark);
+  --dropdown-header-text-color: var(--content-secondary-dark);
+  --dropdown-text-hover: var(--content-primary-dark);
+  --dropdown-background-active: var(--green-70);
+  --dropdown-text-active: var(--green-10);
+  --dropdown-border-divider: var(--border-divider-dark);
+  --dropdown-border-width: 1px;
+  --dropdown-border-color: var(--border-primary);
+}
+
+:root {
+  @include light-dropdown-menu;
+}
+
+@include theme('default') {
+  .ide-redesign-main,
+  .project-ds-nav-page,
+  // Codemirror tooltips are rendered outside of the main app container
+  .cm-tooltip .dropdown-menu,
+  .cm-tooltip .dropdown {
+    @include dark-dropdown-menu;
+  }
+}
+
+$dropdown-item-min-height: 36px;
+
+.dropdown {
+  display: inline-flex;
+
+  .no-left-border {
+    border-left: none;
+  }
+
+  .custom-toggle {
+    &::after {
+      content: none !important;
+    }
+
+    padding-left: var(--spacing-04);
+    padding-right: var(--spacing-05);
+    display: flex;
+    align-items: center;
+  }
+}
+
+.dropdown-header {
+  @include body-xs;
+
+  min-height: $dropdown-item-min-height; // a minimum height of 36px to be accessible for touch screens
+  padding: var(--spacing-05) var(--spacing-06) var(--spacing-02)
+    var(--spacing-04);
+  color: var(--dropdown-header-text-color);
+}
+
+.dropdown-menu.dropdown-menu-unpositioned {
+  position: unset;
+  top: unset;
+  left: unset;
+  z-index: unset;
+  display: block;
+  float: unset;
+
+  &:focus {
+    outline: none;
+  }
+}
+
+.dropdown-menu {
+  @include shadow-md;
+
+  border: var(--dropdown-border-width) solid var(--dropdown-border-color);
+  min-width: 240px;
+  background-color: var(--dropdown-background);
+
+  &.dropdown-menu-sm-width {
+    min-width: 160px;
+  }
+
+  .subdued {
+    color: var(--content-disabled);
+  }
+}
+
+.dropdown-item {
+  @include body-sm;
+
+  --bs-dropdown-item-border-radius: var(--border-radius-base);
+
+  display: grid;
+  grid-auto-flow: column;
+  place-content: center start;
+  min-height: $dropdown-item-min-height; // a minimum height of 36px to be accessible for touch screens
+  position: relative;
+  background-color: var(--dropdown-background);
+
+  &:active {
+    background-color: var(--dropdown-background-active);
+  }
+
+  &,
+  &:active,
+  &:visited {
+    color: var(--dropdown-text-color);
+  }
+
+  &:focus {
+    background: none;
+  }
+
+  &:hover:not(.active),
+  &:focus-visible:not(.active),
+  &.nested-dropdown-toggle-shown {
+    color: var(--dropdown-text-hover);
+    background-color: var(--dropdown-background-hover);
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  &[variant='danger'] {
+    color: var(--dropdown-text-danger);
+
+    &:hover:not(.active),
+    &:focus-visible:not(.active) {
+      color: var(--dropdown-text-danger-hover);
+      background-color: var(--dropdown-background-danger-hover);
+    }
+  }
+
+  &.active {
+    background-color: var(--dropdown-background-active);
+    color: var(--dropdown-text-active);
+  }
+
+  &.btn-link {
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+      color: inherit;
+    }
+  }
+}
+
+.dropdown-divider {
+  border-top-color: var(--dropdown-border-divider);
+  margin: var(--spacing-01) var(--spacing-03);
+}
+
+.dropdown-item-description {
+  @include body-xs;
+
+  color: var(--dropdown-text-secondary);
+  margin-top: var(--spacing-01);
+  text-wrap: wrap;
+}
+
+.dropdown-item-description-container {
+  grid-auto-flow: row;
+  min-height: 44px;
+  display: grid;
+  place-content: center start;
+}
+
+.dropdown-item-trailing-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.dropdown-item-leading-icon {
+  display: flex;
+  align-items: center;
+  padding-right: var(--spacing-04);
+
+  &.spinner {
+    margin-left: var(--spacing-01);
+    margin-right: var(--spacing-01);
+  }
+}
+
+.dropdown-item-leading-icon,
+.dropdown-item-trailing-icon {
+  .material-symbols {
+    vertical-align: top;
+  }
+}
+
+.dropdown-item-leading-icon-empty {
+  display: inline-block;
+  width: 20px;
+}
+
+// description text should look disabled when the dropdown item is disabled
+.dropdown-item.disabled .dropdown-item-description,
+.dropdown-item[aria-disabled='true'] .dropdown-item-description {
+  background-color: transparent;
+  color: var(--content-disabled);
+}
+
+// override disabled styles when the state is active
+.dropdown-item.active .dropdown-item-description {
+  background-color: initial;
+  color: var(--dropdown-text-active);
+}
+
+.dropdown-button-toggle {
+  border-bottom-left-radius: 0;
+  border-top-left-radius: 0;
+  padding-right: var(--spacing-05);
+  padding-left: var(--spacing-05);
+  margin-left: 0;
+
+  &.btn-primary,
+  &.btn-danger {
+    border-left: 1px solid rgb($neutral-90, 0.16);
+  }
+
+  &.btn-secondary {
+    border-left: 1px solid var(--neutral-60);
+  }
+
+  &[disabled],
+  &[aria-disabled='true'] {
+    border-left: 1px solid var(--neutral-10);
+  }
+}
+
+.select-dropdown-menu {
+  top: 100%;
+  margin-top: var(--spacing-04);
+  width: 100%;
+  max-height: 200px;
+  overflow: auto;
+  overflow-x: hidden;
+}
+
+.dropdown-item-highlighted {
+  background-color: var(--dropdown-background-hover);
+}
+
+.dropdown-item-material-icon-small {
+  .material-symbols,
+  &.material-symbols {
+    font-size: var(--bs-body-font-size);
+
+    // Centre the symbol in a 20px-by-20px box
+    width: 20px;
+    line-height: 20px;
+    text-align: center;
+  }
+}
+
+.nested-dropdown-toggle {
+  &::after {
+    content: none !important;
+  }
+
+  display: flex;
+  justify-content: space-between;
+}
+
+.dropdown-shortcut-char {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+}
+
+.dropdown-item-wide {
+  min-width: 264px;
+}

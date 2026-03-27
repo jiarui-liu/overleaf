@@ -1,0 +1,278 @@
+@mixin ciam-bottom-margin {
+  margin: 0 0 var(--ds-spacing-400);
+}
+
+@mixin ciam-vertically-spaced {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-spacing-400);
+}
+
+@mixin ciam-h1 {
+  @include ds-heading-md-semibold;
+
+  font-family: var(--ds-font-family-sans), sans-serif;
+  color: var(--ds-color-text-primary);
+  padding-bottom: var(--ds-spacing-200);
+  margin: 0;
+}
+
+.overleaf-ds-logo {
+  background-image: url('../../../frontend/js/shared/svgs/overleaf-a-ds-solution-mallard.svg');
+}
+
+.ciam-layout {
+  // Allow room for the cookie banner
+  padding-bottom: var(--ds-spacing-2400);
+
+  @include ciam-vertically-spaced;
+
+  @include media-breakpoint-up(sm) {
+    gap: var(--ds-spacing-800);
+  }
+}
+
+.ciam-enabled {
+  @include ds-body-md-regular;
+
+  --password-visibility-toggle-width: calc(24px + 2 * var(--ds-spacing-250));
+
+  font-family: var(--ds-font-family-sans), sans-serif;
+  color: var(--ds-color-text-primary);
+
+  h1 {
+    @include ciam-h1;
+  }
+
+  footer {
+    .footer-links {
+      display: flex;
+      gap: var(--ds-spacing-600);
+      justify-content: center;
+      color: var(--ds-color-text-secondary);
+      padding: var(--ds-spacing-300) 0;
+      margin: 0 auto;
+
+      @include media-breakpoint-up(sm) {
+        margin-left: var(--ds-spacing-800);
+        margin-right: var(--ds-spacing-800);
+      }
+
+      a {
+        @include ds-body-sm-regular;
+      }
+    }
+  }
+}
+
+.ciam-container {
+  flex: 1 1 auto;
+  padding: 0 var(--ds-spacing-300);
+}
+
+.ciam-logo {
+  padding: var(--ds-spacing-800) 0 0 0;
+  text-align: center;
+
+  @include media-breakpoint-up(sm) {
+    padding-left: var(--ds-spacing-800);
+    padding-right: var(--ds-spacing-800);
+  }
+}
+
+.ciam-logo .brand {
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: contain;
+  height: 60px;
+  width: 133px;
+  margin: 0 auto;
+  display: block;
+
+  @include media-breakpoint-up(sm) {
+    height: 64px;
+    width: 142px;
+    margin: 9px 0; // Vertical margin isn't an exacting spacing value in the design
+  }
+}
+
+.ciam-card {
+  @include ciam-vertically-spaced;
+
+  background-color: var(--bg-light-primary);
+  box-shadow:
+    0 4px 6px -4px rgb(0 0 0 / 10%),
+    0 1px 29px -3px rgb(0 0 0 / 16%);
+  padding: var(--ds-spacing-800) var(--ds-spacing-400);
+  border-radius: var(--ds-border-radius-400);
+  max-width: 464px;
+  margin: 0 auto;
+
+  @include media-breakpoint-up(sm) {
+    padding: var(--ds-spacing-1300);
+  }
+}
+
+.ciam-login-register-error-container .notification {
+  @include ciam-bottom-margin;
+}
+
+.ciam-disclaimers p {
+  @include ds-body-sm-regular;
+
+  padding-bottom: var(--ds-spacing-250);
+  margin: 0;
+}
+
+.ciam-card-separator {
+  margin: var(--ds-spacing-500) 0;
+  height: 0;
+  border-top: solid 1px var(--ds-color-neutral-200);
+}
+
+.ciam-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-spacing-250);
+
+  p {
+    @include ds-body-sm-regular;
+
+    color: var(--ds-color-text-secondary);
+    margin-bottom: 0;
+    text-align: center;
+  }
+}
+
+.ciam-login-register-text {
+  @include ciam-bottom-margin;
+}
+
+.ciam-login-register-text-final {
+  margin: 0;
+}
+
+.ciam-footer-ds-logo {
+  text-align: center;
+  padding: var(--ds-spacing-200) 0;
+
+  a {
+    display: inline-block;
+  }
+}
+
+.ciam-password-strength-bar {
+  margin: 0;
+  height: 4px;
+  border-radius: var(--ds-border-radius-full);
+
+  .step {
+    background: var(--ds-color-neutral-200);
+  }
+}
+
+.ciam-work-uni-sso {
+  padding-top: var(--ds-spacing-200);
+  font-weight: var(--ds-font-weight-semibold);
+}
+
+.ciam-login-register-or-text-container {
+  @include ds-body-xs-semibold;
+  @include ciam-bottom-margin;
+
+  display: flex;
+  align-items: center;
+  gap: var(--ds-spacing-250);
+  color: var(--ds-color-text-secondary);
+  padding: var(--ds-spacing-200) 0 0 0;
+
+  &::before,
+  &::after {
+    content: '';
+    display: block;
+    flex-grow: 1;
+    height: 1px;
+    background-color: var(--ds-color-neutral-200);
+  }
+}
+
+.ciam-list-style-check-green {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-spacing-200);
+
+  li {
+    background-image: url('../../../public/img/ciam-check-green.svg');
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: 16px 16px;
+    padding-left: calc(16px + var(--ds-spacing-200));
+  }
+}
+
+.ciam-dropdown-menu {
+  // Apply styling from DS design system to CIAM dropdowns
+  --dropdown-border-radius: var(--ds-border-radius-200);
+  --dropdown-text-active: var(--ds-color-text-primary);
+  --dropdown-background-active: var(--ds-color-neutral-50);
+  --dropdown-background-hover: var(--ds-color-neutral-50);
+  --bs-dropdown-item-padding-x: var(--ds-spacing-300);
+  --bs-dropdown-item-padding-y: var(--ds-spacing-250);
+
+  .dropdown-item {
+    border-radius: var(--ds-border-radius-200);
+
+    :has(.dropdown-item-trailing-icon) {
+      padding-right: calc(var(--ds-font-size-350) + var(--ds-spacing-200));
+    }
+  }
+
+  // Allow dropdowns to be wider than the form container where necessary
+  width: 100%;
+  overflow-x: hidden;
+
+  @include media-breakpoint-up(sm) {
+    width: auto;
+    min-width: 100%;
+    max-width: 640px;
+  }
+}
+
+.ciam-form-control-info {
+  @include ds-body-sm-regular;
+
+  padding-top: calc(var(--ds-spacing-200) - var(--ds-spacing-100));
+  margin: 0;
+  color: var(--ds-color-text-secondary);
+}
+
+.ciam-stepper-container {
+  padding: var(--ds-spacing-200) var(--ds-spacing-400) 0 var(--ds-spacing-400);
+}
+
+.ciam-stepper {
+  display: flex;
+  justify-content: center;
+  gap: var(--ds-spacing-400);
+
+  &:focus-visible {
+    @include ds-focus-outline;
+  }
+
+  .step {
+    display: inline-block;
+    border-radius: 50%;
+    background-color: var(--ds-color-text-disabled);
+    width: 8px;
+    height: 8px;
+
+    &.active,
+    &.completed {
+      background-color: var(--ds-color-text-primary);
+    }
+  }
+}

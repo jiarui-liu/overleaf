@@ -1,0 +1,71 @@
+extends ../layout-website-redesign
+
+block vars
+	- isWebsiteRedesign = true
+
+block content
+	main#main-content.content
+		.container
+			.row
+				.registration-message
+					if sharedProjectData.user_first_name !== undefined
+						h1 #{translate("user_wants_you_to_see_project", {username:sharedProjectData.user_first_name, projectname:""})}
+							em #{sharedProjectData.project_name}
+						div
+							| #{translate("join_sl_to_view_project")}.
+						div
+							| #{translate("already_have_sl_account")}
+							|
+							a(href='/login') #{translate("login_here")}
+					else if newTemplateData.templateName !== undefined
+						h1 #{translate("register_to_edit_template", {templateName:newTemplateData.templateName})}
+
+						div #{translate("already_have_sl_account")}
+							|
+							a(href='/login') #{translate("login_here")}
+
+			.row
+				.col-lg-8.offset-lg-2.col-xl-6.offset-xl-3
+					.page-header
+						h1 #{translate("register")}
+					if errorMessage
+						.alert.alert-danger #{errorMessage}
+					form(name='registerForm' action='/register' method='POST')
+						input(name='_csrf' type='hidden' value=csrfToken)
+						.form-group
+							label(for='first_name') First name
+							input#first_name.form-control(
+								name='first_name'
+								type='text'
+								autocomplete='given-name'
+							)
+						.form-group
+							label(for='last_name') Last name
+							input#last_name.form-control(
+								name='last_name'
+								type='text'
+								autocomplete='family-name'
+							)
+						.form-group
+							label(for='email') #{translate("email")}
+							input#email.form-control(
+								name='email'
+								type='email'
+								required
+								autofocus='true'
+								autocomplete='username'
+							)
+						.form-group
+							label(for='password') #{translate("password")}
+							input#password.form-control(
+								name='password'
+								type='password'
+								required
+								autocomplete='new-password'
+							)
+						.actions
+							button.btn-primary.btn(type='submit') #{translate("register")}
+						p.mt-3
+							| #{translate("already_have_sl_account")}
+							|
+							a(href='/login') #{translate("login_here")}

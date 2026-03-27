@@ -1,0 +1,27 @@
+extends ./layout-base
+
+include ./_mixins/formMessages
+include ./_mixins/bootstrap_js
+
+block entrypointVar
+	- entrypoint = 'marketing'
+
+block body
+	if typeof suppressNavbar === 'undefined'
+		include layout/navbar-marketing
+
+	block content
+
+	if typeof suppressFooter === 'undefined'
+		if showThinFooter
+			include layout/thin-footer
+		else
+			include layout/fat-footer
+
+	if typeof suppressPugCookieBanner == 'undefined'
+		include _cookie_banner
+
+	!= moduleIncludes('contactModal-marketing', locals)
+
+block prepend foot-scripts
+	+bootstrap-js

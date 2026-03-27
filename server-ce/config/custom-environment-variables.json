@@ -1,0 +1,63 @@
+{
+  "databaseUrl": "HISTORY_CONNECTION_STRING",
+  "databaseUrlReadOnly": "HISTORY_FOLLOWER_CONNECTION_STRING",
+  "herokuDatabaseUrl": "DATABASE_URL",
+  "databasePoolMin": "DATABASE_POOL_MIN",
+  "databasePoolMax": "DATABASE_POOL_MAX",
+  "persistor": {
+    "backend": "OVERLEAF_HISTORY_BACKEND",
+    "s3": {
+      "key": "OVERLEAF_HISTORY_S3_ACCESS_KEY_ID",
+      "secret": "OVERLEAF_HISTORY_S3_SECRET_ACCESS_KEY",
+      "maxRetries": "OVERLEAF_HISTORY_S3_MAX_RETRIES",
+      "endpoint": "OVERLEAF_HISTORY_S3_ENDPOINT",
+      "pathStyle": "OVERLEAF_HISTORY_S3_PATH_STYLE",
+      "region": "OVERLEAF_HISTORY_S3_REGION",
+      "httpOptions": {
+        "timeout": "OVERLEAF_HISTORY_S3_TIMEOUT"
+      }
+    }
+  },
+  "blobStore": {
+    "globalBucket": "OVERLEAF_HISTORY_BLOBS_BUCKET",
+    "projectBucket": "OVERLEAF_HISTORY_PROJECT_BLOBS_BUCKET"
+  },
+  "chunkStore": {
+    "historyStoreConcurrency": "HISTORY_STORE_CONCURRENCY",
+    "bucket": "OVERLEAF_HISTORY_CHUNKS_BUCKET"
+  },
+  "zipStore": {
+    "bucket": "OVERLEAF_HISTORY_ZIPS_BUCKET",
+    "zipTimeoutMs": "ZIP_STORE_ZIP_TIMEOUT_MS"
+  },
+  "mongo": {
+    "uri": "OVERLEAF_MONGO_URL"
+  },
+  "basicHttpAuth": {
+    "password": "STAGING_PASSWORD",
+    "oldPassword": "BASIC_HTTP_AUTH_OLD_PASSWORD"
+  },
+  "jwtAuth": {
+    "key": "OT_JWT_AUTH_KEY",
+    "oldKey": "OT_JWT_AUTH_OLD_KEY",
+    "algorithm": "OT_JWT_AUTH_ALG"
+  },
+  "clusterWorkers": "CLUSTER_WORKERS",
+  "maxFileUploadSize": "MAX_FILE_UPLOAD_SIZE",
+  "httpsOnly": "HTTPS_ONLY",
+  "httpRequestTimeout": "OVERLEAF_HISTORY_V1_HTTP_REQUEST_TIMEOUT",
+  "redis": {
+    "history": {
+      "host": "OVERLEAF_REDIS_HOST",
+      "password": "OVERLEAF_REDIS_PASS",
+      "port": "OVERLEAF_REDIS_PORT",
+      "tls": "OVERLEAF_REDIS_TLS"
+    },
+    "lock": {
+      "host": "OVERLEAF_REDIS_HOST",
+      "password": "OVERLEAF_REDIS_PASS",
+      "port": "OVERLEAF_REDIS_PORT",
+      "tls": "OVERLEAF_REDIS_TLS"
+    }
+  }
+}

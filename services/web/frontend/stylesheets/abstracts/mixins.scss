@@ -1,0 +1,244 @@
+// Button
+
+@mixin ol-button-size(
+  $font-size,
+  $line-height,
+  $padding-y,
+  $padding-x: var(--spacing-06)
+) {
+  --bs-btn-font-size: #{$font-size};
+  --bs-btn-line-height: #{$line-height};
+  --bs-btn-padding-y: #{$padding-y};
+  --bs-btn-padding-x: #{$padding-x};
+}
+
+@mixin ol-button-variant(
+  $color,
+  $background,
+  $border: $background,
+  $hover-background: $background,
+  $hover-border: $hover-background,
+  $borderless: true,
+  $disabled-color: $content-disabled,
+  $disabled-background: $bg-light-disabled,
+  $disabled-border: $disabled-background,
+  $active-background: $hover-background
+) {
+  --bs-btn-color: #{$color};
+  --bs-btn-bg: #{$background};
+  --bs-btn-border-color: #{$border};
+  --bs-btn-hover-color: #{$color};
+  --bs-btn-hover-bg: #{$hover-background};
+  --bs-btn-hover-border-color: #{$hover-border};
+  --bs-btn-active-color: #{$color};
+  --bs-btn-active-bg: #{$active-background};
+  --bs-btn-active-border-color: #{$hover-border};
+  --bs-btn-disabled-color: #{$disabled-color};
+  --bs-btn-disabled-bg: #{$disabled-background};
+  --bs-btn-disabled-border-color: #{$disabled-border};
+
+  @if $borderless {
+    --bs-btn-border-width: 0;
+  }
+
+  // Use the default state colors when in a loading state
+  &[data-ol-loading='true'] {
+    color: var(--bs-btn-color);
+    background-color: var(--bs-btn-bg);
+    border-color: var(--bs-btn-border-color);
+    opacity: 1;
+  }
+}
+
+@mixin action-button {
+  font-size: 0;
+  line-height: 1;
+  border-radius: 50%;
+  color: var(--content-primary);
+  background-color: transparent;
+
+  &:hover,
+  &:active,
+  &[aria-expanded='true'] {
+    background-color: rgb($neutral-90, 0.08);
+  }
+}
+
+@mixin editor-switcher-button {
+  @include ol-button-variant(
+    $color: var(--green-60),
+    $background: var(--bg-accent-03),
+    $border: var(--green-50),
+    $hover-background: var(--bg-accent-03),
+    $hover-border: var(--green-40),
+    $borderless: false
+  );
+}
+
+@mixin reset-button() {
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  appearance: none;
+}
+
+@mixin modal-lg {
+  max-width: 960px;
+}
+
+@mixin modal-md {
+  max-width: 640px;
+}
+
+@mixin modal-sm {
+  max-width: 480px;
+}
+
+// Toolbar
+@mixin toolbar-sm-height {
+  height: var(--toolbar-small-height);
+}
+
+@mixin toolbar-alt-bg() {
+  background-color: var(--toolbar-alt-bg-color);
+}
+
+@mixin theme($name) {
+  @if index($themes, $name) {
+    [data-theme='#{$name}'] {
+      @content;
+    }
+  } @else {
+    @error 'Theme "#{$name}" is not supported. Supported themes are: #{$themes}.';
+  }
+}
+
+@mixin box-shadow-button-input {
+  box-shadow: 0 0 0 2px var(--blue-30);
+}
+
+@mixin animation($animation) {
+  animation: $animation;
+}
+
+@mixin striped($color: rgba(255, 255, 255, 0.15), $angle: 45deg) {
+  background-image: linear-gradient(
+    $angle,
+    $color 25%,
+    transparent 25%,
+    transparent 50%,
+    $color 50%,
+    $color 75%,
+    transparent 75%,
+    transparent
+  );
+}
+
+@mixin mask-image($gradient) {
+  // mask-image isn't supported without the -webkit prefix on all browsers we support yet
+  -webkit-mask-image: $gradient;
+  mask-image: $gradient;
+}
+
+@mixin premium-background {
+  background-image: var(--premium-gradient);
+}
+
+@mixin premium-text {
+  @include premium-background;
+
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--white); // Fallback
+  background-color: var(--blue-70); // Fallback
+}
+
+@mixin dark-bg {
+  --link-color: var(--link-color-dark);
+  --link-hover-color: var(--link-hover-color-dark);
+  --link-visited-color: var(--link-visited-color-dark);
+}
+
+@mixin themed-links {
+  --link-color: var(--link-ui-themed);
+  --link-hover-color: var(--link-ui-hover-themed);
+  --link-visited-color: var(--link-ui-visited-themed);
+}
+
+@mixin triangle($direction, $width, $height, $color) {
+  position: absolute;
+  border-color: transparent;
+  border-style: solid;
+  width: 0;
+  height: 0;
+
+  @if $direction == top {
+    border-width: 0 calc(#{$width} / 2) #{$height} calc(#{$width} / 2);
+    border-bottom-color: $color;
+    border-left-color: transparent;
+    border-right-color: transparent;
+  } @else if $direction == bottom {
+    border-width: #{$height} calc(#{$width} / 2) 0 calc(#{$width} / 2);
+    border-top-color: $color;
+    border-left-color: transparent;
+    border-right-color: transparent;
+  } @else if $direction == right {
+    border-width: calc(#{$height} / 2) 0 calc(#{$height} / 2) #{$width};
+    border-left-color: $color;
+    border-top-color: transparent;
+    border-bottom-color: transparent;
+  } @else if $direction == left {
+    border-width: calc(#{$height} / 2) #{$width} calc(#{$height} / 2) 0;
+    border-right-color: $color;
+    border-top-color: transparent;
+    border-bottom-color: transparent;
+  }
+}
+
+// Form validation states
+
+@mixin form-control-validation($color) {
+  color: $color;
+
+  // Color the label and help text
+  .help-block,
+  .control-label,
+  .radio,
+  .checkbox,
+  .radio-inline,
+  .checkbox-inline,
+  .form-label {
+    color: $color;
+  }
+
+  .form-control {
+    border-color: $color;
+
+    &:focus {
+      border-color: $border-active;
+    }
+  }
+
+  // Optional feedback icon
+  .form-control-feedback {
+    color: $color;
+  }
+}
+
+@mixin input-disabled-styles {
+  background-color: $input-disabled-bg;
+  border-color: $input-disabled-border-color;
+}
+
+@mixin full-viewport-height {
+  height: 100vh; /* for backwards compatibility */
+  height: 100dvh; /* needed for mobile devices */
+}
+
+@mixin full-height-stacked-page {
+  @include full-viewport-height;
+
+  display: flex;
+  flex-direction: column;
+}

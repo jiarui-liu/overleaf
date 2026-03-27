@@ -1,0 +1,10 @@
+validation-tools
+--dependencies=None
+--env-add=
+--env-pass-through=
+--esmock-loader=False
+--is-library=True
+--node-version=24.13.0
+--public-repo=False
+--test-acceptance-vitest=True
+--test-unit-vitest=True

@@ -1,0 +1,123 @@
+@mixin light-table {
+  --bs-table-color: var(--content-primary);
+  --bs-table-bg: var(--bg-light-primary);
+  --bs-table-striped-color: var(--content-secondary);
+  --bs-table-striped-bg: var(--bg-light-secondary);
+  --bs-table-active-color: var(--content-secondary);
+  --bs-table-active-bg: var(--link-web-hover);
+  --bs-table-hover-color: var(--content-secondary);
+  --bs-table-hover-bg: var(--bg-light-secondary);
+  --bs-border-divider: var(--border-divider);
+  --table-bg-tertiary: var(--bg-light-tertiary);
+  --table-btn-bg-hover: 27 34 44;
+}
+
+@mixin dark-table {
+  --bs-table-color: var(--content-primary-dark);
+  --bs-table-bg: var(--bg-dark-primary);
+  --bs-table-striped-color: var(--content-secondary-dark);
+  --bs-table-striped-bg: var(--bg-dark-secondary);
+  --bs-table-active-color: var(--content-secondary-dark);
+  --bs-table-active-bg: var(--link-web-hover);
+  --bs-table-hover-color: var(--content-secondary-dark);
+  --bs-table-hover-bg: var(--bg-dark-secondary);
+  --bs-border-divider: var(--border-divider-dark);
+  --table-bg-tertiary: var(--bg-dark-tertiary);
+  --table-btn-bg-hover: 255 255 255;
+}
+
+:root {
+  @include light-table;
+
+  @include theme('default') {
+    .project-ds-nav-page {
+      .table,
+      .table-container {
+        @include dark-table;
+      }
+    }
+  }
+}
+
+.table-container {
+  flex: 1;
+  margin-bottom: var(--spacing-06);
+  background-color: var(--bs-table-bg);
+  padding: var(--spacing-04);
+  border-color: var(--bs-border-divider);
+
+  .table {
+    margin-bottom: initial;
+  }
+}
+
+.table {
+  border-color: var(--bs-border-divider);
+
+  th,
+  td {
+    a {
+      text-decoration: none;
+    }
+  }
+
+  tbody {
+    tr {
+      &:last-child {
+        td,
+        th {
+          border-bottom-width: 0;
+        }
+      }
+
+      th[scope='row'] {
+        font-weight: normal;
+      }
+
+      th {
+        .form-label {
+          font-weight: normal;
+        }
+      }
+    }
+  }
+
+  .dropdown {
+    .dropdown-table-button-toggle {
+      @include action-button;
+
+      color: var(--bs-table-color);
+
+      &:hover,
+      &:active,
+      &[aria-expanded='true'] {
+        background-color: rgb(var(--table-btn-bg-hover) / 8%);
+      }
+
+      padding: var(--spacing-04);
+    }
+  }
+}
+
+.table-container-bordered {
+  padding: var(--spacing-04);
+  border-color: var(--bs-border-divider);
+  border-radius: var(--border-radius-base);
+  border-width: var(--bs-border-width);
+  border-style: solid;
+}
+
+.table-striped {
+  tr,
+  td,
+  th {
+    border-top-width: 0;
+    border-bottom-width: 0;
+  }
+
+  > tbody > tr:nth-of-type(#{$table-striped-order}) {
+    &:hover > * {
+      --#{$prefix}table-hover-bg: var(--table-bg-tertiary);
+    }
+  }
+}

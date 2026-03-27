@@ -1,0 +1,70 @@
+//- Avoids including Bootstrap's own JS to prevent conflicts with react-bootstrap,
+//- since Bootstrap 5's JS and react-bootstrap should not be used together on the same page.
+extends ./layout-base
+
+include ./_mixins/formMessages
+
+block isApplicationPageVar
+	- isApplicationPage = true
+
+block append meta
+	- const canDisplayAdminMenu = hasAdminAccess()
+	- const canDisplayAdminRedirect = canRedirectToAdminDomain()
+	- const sessionUser = getSessionUser()
+	- const canDisplayProjectUrlLookup = settings.adminPrivilegeAvailable && canDisplayAdminMenu && hasAdminCapability('view-project-setting', false)
+	- const canDisplaySplitTestMenu = hasFeature('saas') && canDisplayAdminMenu && hasAdminCapability('view-split-test')
+	- const canDisplaySurveyMenu = hasFeature('saas') && canDisplayAdminMenu && hasAdminCapability('manage-survey', false)
+	- const canDisplayScriptLogMenu = hasFeature('saas') && hasAdminCapability('view-script-log', false) && canDisplayAdminMenu
+	- const enableUpgradeButton = projectDashboardReact && usersBestSubscription && (usersBestSubscription.type === 'free' || usersBestSubscription.type === 'standalone-ai-add-on')
+	- const showSignUpLink = hasFeature('registration-page')
+
+	meta(
+		name='ol-navbar'
+		data-type='json'
+		content={
+			customLogo: settings.nav.custom_logo,
+			title: nav.title,
+			canDisplayAdminMenu,
+			canDisplayAdminRedirect,
+			canDisplayProjectUrlLookup,
+			canDisplaySplitTestMenu,
+			canDisplaySurveyMenu,
+			canDisplayScriptLogMenu,
+			enableUpgradeButton,
+			suppressNavbarRight: !!suppressNavbarRight,
+			suppressNavContentLinks: !!suppressNavContentLinks,
+			showSubscriptionLink: nav.showSubscriptionLink,
+			showSignUpLink: showSignUpLink,
+			currentUrl: currentUrl,
+			sessionUser: sessionUser ? {email: sessionUser.email} : undefined,
+			adminUrl: settings.adminUrl,
+			items: cloneAndTranslateText(nav.header_extras),
+		}
+	)
+	meta(
+		name='ol-footer'
+		data-type='json'
+		content={
+			showThinFooter: showThinFooter,
+			showPoweredBy: !hasFeature('saas') && !settings.nav.hide_powered_by,
+			subdomainLang: settings.i18n.subdomainLang,
+			translatedLanguages: settings.translatedLanguages,
+			leftItems: cloneAndTranslateText(settings.nav.left_footer),
+			rightItems: settings.nav.right_footer,
+		}
+	)
+
+block body
+	if typeof suppressNavbar === 'undefined'
+		include layout/navbar-marketing-react
+
+	block content
+
+	if typeof suppressFooter === 'undefined'
+		if showThinFooter
+			include layout/thin-footer
+		else
+			include layout/fat-footer-react
+
+	if typeof suppressPugCookieBanner === 'undefined'
+		include _cookie_banner

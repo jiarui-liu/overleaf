@@ -1,0 +1,80 @@
+:root {
+  --ide-redesign-background: var(--bg-dark-primary);
+  --ide-redesign-color: var(--content-primary-dark);
+  --ide-redesign-resizing-background: var(--bg-dark-primary);
+  --ide-redesign-color-scheme: dark;
+}
+
+@include theme('light') {
+  --ide-redesign-background: var(--bg-light-primary);
+  --ide-redesign-color: var(--content-primary);
+  --ide-redesign-resizing-background: var(--white);
+  --ide-redesign-color-scheme: light;
+}
+
+.ide-redesign-body {
+  color-scheme: var(--ide-redesign-color-scheme);
+  display: flex;
+  flex-grow: 1;
+  background-color: var(--ide-redesign-background);
+  color: var(--ide-redesign-color);
+  overflow-y: hidden;
+  z-index: 0;
+}
+
+.ide-redesign-main {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  .ide-panel-group-resizing {
+    background-color: var(--ide-redesign-resizing-background);
+  }
+}
+
+.ide-skeleton-block {
+  border: 1px solid grey;
+  background-color: white;
+}
+
+.ide-redesign-full-height {
+  height: 100%;
+}
+
+.ide-redesign-pdf-container {
+  position: relative;
+}
+
+.ide-redesign-editor-container {
+  position: relative;
+  height: 100%;
+}
+
+.ide-redesign-editor-content {
+  height: 100%;
+}
+
+.ide-redesign-labs-user-beta-promo {
+  position: absolute;
+  top: 60px;
+  right: 28px;
+  z-index: 100000;
+  max-width: 560px;
+  font-size: var(--font-size-03);
+  line-height: var(--line-height-03);
+
+  .notification-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-02);
+    align-items: flex-start;
+  }
+}
+
+.ide-redesign-labs-user-beta-promo-title {
+  font-weight: bold;
+}
+
+.ide-redesign-labs-user-beta-promo-button {
+  margin-top: var(--spacing-05);
+}

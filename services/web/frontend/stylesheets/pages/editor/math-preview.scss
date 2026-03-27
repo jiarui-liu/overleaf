@@ -1,0 +1,37 @@
+.ol-cm-math-tooltip-container {
+  position: relative;
+  overflow: visible;
+  border: 0 !important;
+  background-color: transparent !important;
+}
+
+.ol-cm-math-tooltip {
+  display: flex;
+  gap: var(--spacing-04);
+  overflow: auto;
+  padding: var(--spacing-04);
+  border-radius: var(--border-radius-base);
+  max-height: 200px;
+  max-width: 800px;
+  margin-top: 10px;
+
+  .dropdown {
+    position: static;
+  }
+}
+
+.math-tooltip-options-toggle {
+  border: none;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+
+  &::after {
+    content: none;
+  }
+}
+
+.math-tooltip-options-keyboard-shortcut {
+  color: $content-secondary;
+  font-size: var(--font-size-02);
+}

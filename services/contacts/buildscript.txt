@@ -1,0 +1,8 @@
+contacts
+--dependencies=mongo
+--env-add=
+--env-pass-through=
+--esmock-loader=True
+--node-version=24.13.0
+--pipeline-owner=B2C
+--public-repo=False

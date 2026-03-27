@@ -1,0 +1,14 @@
+extends ../layout-marketing
+
+block vars
+	- isWebsiteRedesign = true
+
+block content
+	main#main-content.content
+		.container
+			.error-container
+				.error-details
+					h1.error-status #{translate("not_found")}
+					p.error-description #{translate("cant_find_page")}
+					p.error-actions
+						a.error-btn(href='/') Home

@@ -1,0 +1,35 @@
+data/*
+coverage
+
+public/manifest.json
+
+public/js
+public/minjs
+public/stylesheets
+public/fonts
+public/images
+
+modules/**/Makefile
+
+# Precompiled pug files
+**/app/views/**/*.js
+
+# Sentry secrets file (injected by CI)
+.sentryclirc
+
+# Cypress
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+cypress/results/
+
+# Ace themes for conversion
+frontend/js/features/source-editor/themes/ace/
+
+# Compiled parser files
+frontend/js/features/source-editor/lezer-latex/latex.mjs
+frontend/js/features/source-editor/lezer-latex/latex.terms.mjs
+frontend/js/features/source-editor/lezer-bibtex/bibtex.mjs
+frontend/js/features/source-editor/lezer-bibtex/bibtex.terms.mjs
+
+!**/fixtures/**/*.log

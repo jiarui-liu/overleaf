@@ -1,0 +1,20 @@
+.ai-tutor-panel {
+  color: var(--content-primary-themed);
+
+  .form-label {
+    color: var(--content-primary-themed);
+  }
+
+  .form-control,
+  .form-select {
+    color: var(--content-primary-themed);
+    background-color: var(--bg-secondary-themed);
+    border-color: var(--border-divider-themed);
+  }
+
+  select.form-control {
+    color: var(--content-primary-themed);
+    background-color: var(--bg-secondary-themed);
+    border-color: var(--border-divider-themed);
+  }
+}

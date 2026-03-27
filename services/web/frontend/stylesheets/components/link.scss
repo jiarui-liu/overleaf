@@ -1,0 +1,13 @@
+.previous-page-link-container {
+  margin-bottom: var(--spacing-09);
+}
+
+.previous-page-link {
+  @extend .link-black-text;
+  @include body-sm;
+
+  i {
+    margin-right: var(--spacing-02);
+    padding-bottom: 3px;
+  }
+}

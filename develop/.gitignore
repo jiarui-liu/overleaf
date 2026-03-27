@@ -1,0 +1,6 @@
+/compiles/*
+!.gitkeep
+.env
+ai-tutor-cache/
+ai-tutor-logs/
+output/

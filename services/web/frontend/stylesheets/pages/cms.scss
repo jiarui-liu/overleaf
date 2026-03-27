@@ -1,0 +1,776 @@
+/*
+  CMS Generated Pages:
+  /about/*, /contact, /legal, /blog/*, /for/*, /events/*
+*/
+
+@mixin section-row-custom-gap($spacing) {
+  // only update the padding between columns
+  // not the padding before the first column
+  // or the padding after the last column
+  // rows can be nested, so only select direct col in row
+
+  > div[class*='col-'] {
+    &:not(:first-child, :last-child) {
+      padding-left: $spacing;
+      padding-right: $spacing;
+    }
+
+    &:first-child {
+      padding-right: $spacing;
+    }
+
+    &:last-child {
+      padding-left: $spacing;
+    }
+  }
+}
+
+.cms-page {
+  .sales-contact-form-left-column {
+    @include media-breakpoint-up(sm) {
+      .names-container {
+        display: flex;
+        gap: 21px;
+      }
+    }
+
+    .checkbox-label {
+      font-size: 16px;
+      font-weight: 400;
+    }
+  }
+
+  .row {
+    row-gap: var(--spacing-13);
+  }
+
+  .p-no-text-nodes:has(.btn) {
+    margin-top: var(--spacing-09);
+
+    @include media-breakpoint-down(md) {
+      .btn {
+        width: 100%;
+        margin-left: 0;
+        margin-top: var(--spacing-05);
+      }
+
+      .btn:first-child {
+        margin-top: 0;
+      }
+    }
+  }
+
+  .linkable-list-container {
+    .row-with-id {
+      margin-top: var(--spacing-12);
+
+      h2:first-child {
+        // css specificity problem. this is more specific than header overrides below
+        margin-top: 0;
+      }
+    }
+  }
+
+  // create .paragraphs-margin-spacing-00, .paragraphs-margin-spacing-01, .paragraphs-margin-spacing-02, .paragraphs-margin-spacing-03, .paragraphs-margin-spacing-04, .paragraphs-margin-spacing-05, .paragraphs-margin-spacing-06, .paragraphs-margin-spacing-07, .paragraphs-margin-spacing-08, .paragraphs-margin-spacing-09, .paragraphs-margin-spacing-10, .paragraphs-margin-spacing-11, .paragraphs-margin-spacing-12, .paragraphs-margin-spacing-13, .paragraphs-margin-spacing-14, .paragraphs-margin-spacing-15, .paragraphs-margin-spacing-16
+  @each $spacing-option in $all-spacings {
+    .paragraphs-margin-#{$spacing-option} {
+      p {
+        margin-bottom: var(--#{$spacing-option});
+      }
+    }
+  }
+
+  // create .paragraphs-top-margin-spacing-00, .paragraphs-top-margin-spacing-01, .paragraphs-top-margin-spacing-02, .paragraphs-top-margin-spacing-03, .paragraphs-top-margin-spacing-04, .paragraphs-top-margin-spacing-05, .paragraphs-top-margin-spacing-06, .paragraphs-top-margin-spacing-07, .paragraphs-top-margin-spacing-08, .paragraphs-top-margin-spacing-09, .paragraphs-top-margin-spacing-10, .paragraphs-top-margin-spacing-11, .paragraphs-top-margin-spacing-12, .paragraphs-top-margin-spacing-13, .paragraphs-top-margin-spacing-14, .paragraphs-top-margin-spacing-15, .paragraphs-top-margin-spacing-16
+  @each $spacing-option in $all-spacings {
+    .paragraphs-top-margin-#{$spacing-option} {
+      p {
+        margin-top: var(--#{$spacing-option}) !important;
+      }
+    }
+  }
+
+  // create .headers-top-margin-spacing-00, .headers-top-margin-spacing-01, .headers-top-margin-spacing-02, .headers-top-margin-spacing-03, .headers-top-margin-spacing-04, .headers-top-margin-spacing-05, .headers-top-margin-spacing-06, .headers-top-margin-spacing-07, .headers-top-margin-spacing-08, .headers-top-margin-spacing-09, .headers-top-margin-spacing-10, .headers-top-margin-spacing-11, .headers-top-margin-spacing-12, .headers-top-margin-spacing-13, .headers-top-margin-spacing-14, .headers-top-margin-spacing-15, .headers-top-margin-spacing-16
+  @each $spacing-option in $all-spacings {
+    .headers-top-margin-#{$spacing-option} {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        margin-top: var(
+          --#{$spacing-option}
+        ) !important; // needed for :first-child specificity
+      }
+    }
+  }
+
+  // create .headers-bottom-margin-spacing-00, .headers-bottom-margin-spacing-01, .headers-bottom-margin-spacing-02, .headers-bottom-margin-spacing-03, .headers-bottom-margin-spacing-04, .headers-bottom-margin-spacing-05, .headers-bottom-margin-spacing-06, .headers-bottom-margin-spacing-07, .headers-bottom-margin-spacing-08, .headers-bottom-margin-spacing-09, .headers-bottom-margin-spacing-10, .headers-bottom-margin-spacing-11, .headers-bottom-margin-spacing-12, .headers-bottom-margin-spacing-13, .headers-bottom-margin-spacing-14, .headers-bottom-margin-spacing-15, .headers-bottom-margin-spacing-16
+  @each $spacing-option in $all-spacings {
+    .headers-bottom-margin-#{$spacing-option} {
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        margin-bottom: var(--#{$spacing-option});
+      }
+    }
+  }
+
+  @each $spacing-option in $all-spacings {
+    // create .padding-top-spacing-00, .padding-top-spacing-01, .padding-top-spacing-02, .padding-top-spacing-03, .padding-top-spacing-04, .padding-top-spacing-05, .padding-top-spacing-06, .padding-top-spacing-07, .padding-top-spacing-08, .padding-top-spacing-09, .padding-top-spacing-10, .padding-top-spacing-11, .padding-top-spacing-12, .padding-top-spacing-13, .padding-top-spacing-14, .padding-top-spacing-15, .padding-top-spacing-16
+    .padding-top-#{$spacing-option} {
+      padding-top: var(--#{$spacing-option});
+    }
+  }
+
+  @each $spacing-option in $all-spacings {
+    // create .padding-bottom-spacing-00, .padding-bottom-spacing-01, .padding-bottom-spacing-02, .padding-bottom-spacing-03, .padding-bottom-spacing-04, .padding-bottom-spacing-05, .padding-bottom-spacing-06, .padding-bottom-spacing-07, .padding-bottom-spacing-08, .padding-bottom-spacing-09, .padding-bottom-spacing-10, .padding-bottom-spacing-11, .padding-bottom-spacing-12, .padding-bottom-spacing-13, .padding-bottom-spacing-14, .padding-bottom-spacing-15, .padding-bottom-spacing-16
+    .padding-bottom-#{$spacing-option} {
+      padding-bottom: var(--#{$spacing-option});
+    }
+  }
+
+  .font-color-green-bright {
+    p,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      color: var(--green-bright);
+    }
+  }
+
+  .card + .card {
+    margin-top: var(--spacing-09);
+  }
+
+  .optional-text {
+    font-size: 14px;
+  }
+
+  section {
+    padding: var(--spacing-16) 0 0 0;
+
+    &.no-top-padding {
+      /* opt out of padding via the CMS */
+      padding-top: 0;
+    }
+
+    // TODO: confirm if we will still support this and if so what colors to use
+    // &.color-block {
+    //   &.green-dark {
+    //     background-color: @ol-dark-green;
+    //   }
+    //   &.green {
+    //     background-color: @ol-green;
+
+    //     .no-card * {
+    //       .btn-primary,
+    //       .btn-success {
+    //         // only correct button colors when green on green
+    //         .btn-primary-on-primary-bg;
+    //       }
+    //     }
+    //   }
+    //   &.blue-gray-dark {
+    //     background-color: @ol-blue-gray-5;
+    //   }
+    //   &.blue-gray-light {
+    //     background-color: @ol-blue-gray-1;
+    //   }
+
+    //   &.green,
+    //   &.green-dark,
+    //   &.blue-gray-dark {
+    //     .no-card * {
+    //       &:not(.btn) {
+    //         color: @white;
+    //       }
+    //       a {
+    //         text-decoration: underline;
+    //       }
+    //       .btn {
+    //         text-decoration: none;
+    //       }
+
+    //       .form-control {
+    //         color: @input-color;
+    //       }
+    //     }
+    //   }
+    // }
+  }
+
+  // only first level of .section-row need to act like containers. We do not want to update .section-row nested within a .section-row
+  section > .section-row {
+    @extend .container;
+  }
+
+  padding-bottom: 0;
+
+  img {
+    height: auto;
+    max-width: 100%;
+  }
+
+  /*
+      Tabs
+    */
+  .tab-content {
+    padding-left: 0;
+    padding-right: 0;
+    width: 100%;
+  }
+
+  /*
+      When on preview mode
+    */
+  .cms-preview {
+    background-color: var(--blue-60);
+    color: white;
+    font-weight: bold;
+    height: 30px;
+    left: 0;
+    line-height: 30px;
+    opacity: 0.8;
+    position: fixed;
+    text-align: center;
+    top: 0;
+    width: 100%;
+    z-index: 1000;
+
+    &::after {
+      content: 'Preview';
+      width: 100%;
+      top: 0;
+      left: 0;
+    }
+  }
+
+  .tab-pane {
+    .row:first-child {
+      margin-top: 0;
+    }
+  }
+
+  /*
+      Tables
+    */
+  .table-styled {
+    overflow: hidden;
+    overflow-x: auto;
+
+    table {
+      background: white;
+      max-width: none;
+
+      th,
+      td {
+        border: 1px solid var(--neutral-30);
+        padding: var(--spacing-05);
+        text-align: center;
+        word-break: normal;
+      }
+    }
+  }
+
+  .table-styled,
+  .features-table {
+    .fa-check-square,
+    .fa-check {
+      color: var(--green-50);
+    }
+  }
+
+  .features-table {
+    max-width: none;
+
+    th,
+    td {
+      border: 1px solid var(--neutral-30);
+      hyphens: auto;
+      padding: var(--spacing-05);
+      text-align: center;
+      width: 20%;
+    }
+
+    .btn {
+      max-width: 100%;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    &.left-align-first-col {
+      td,
+      th {
+        text-align: left;
+      }
+
+      td + td,
+      th + th {
+        text-align: center;
+      }
+    }
+
+    .hidden-row-above-xs {
+      display: none;
+    }
+
+    @include media-breakpoint-down(md) {
+      tbody,
+      thead {
+        display: block;
+      }
+
+      tr {
+        display: flex;
+        flex-flow: row wrap;
+        justify-content: space-around;
+      }
+
+      td,
+      th {
+        display: block;
+        width: 25%;
+      }
+
+      tr:first-child {
+        th {
+          width: 50%;
+        }
+
+        th:first-child {
+          width: 100%;
+        }
+      }
+
+      td:first-child {
+        text-align: center;
+        width: 100%;
+      }
+
+      .hidden-row-xs {
+        display: none;
+      }
+
+      .hidden-row-above-xs {
+        display: flex;
+      }
+
+      .table-header {
+        text-align: center;
+      }
+    }
+  }
+
+  /*
+      universities page
+    */
+  #universities-container {
+    padding: var(--spacing-07);
+    width: 100%;
+
+    .row {
+      border-bottom: 1px solid var(--neutral-10);
+
+      div {
+        padding: var(--spacing-07);
+        vertical-align: middle;
+      }
+    }
+
+    .row:first-child {
+      // parent container contains padding
+
+      div {
+        padding-top: 0;
+      }
+    }
+
+    .row:last-child {
+      border: 0;
+
+      // parent container contains padding
+      div {
+        border: 0;
+        padding-bottom: 0;
+      }
+    }
+
+    p {
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    // Logos
+    .uni-logo {
+      margin: 0 auto;
+      max-height: 55px;
+      min-width: 55px;
+    }
+
+    .university-claim-btn {
+      text-align: center;
+    }
+
+    @include media-breakpoint-up(sm) {
+      display: table;
+      table-layout: fixed;
+
+      .row {
+        display: table-row;
+
+        div {
+          border-bottom: 1px solid var(--neutral-10);
+          display: table-cell;
+          float: none;
+        }
+      }
+    }
+  }
+
+  /*
+      videos
+    */
+  video {
+    height: auto;
+    max-width: 100%;
+    box-shadow:
+      0 8px 16px 0 rgba(30 37 48 / 12%),
+      0 4px 6px 0 rgba(30 37 48 / 12%);
+  }
+
+  /*
+    cards
+  */
+  .card-body {
+    // card-body all have div before the actual content
+    // due to option to override font size
+    > :first-child {
+      > :first-child {
+        margin-top: 0;
+      }
+    }
+
+    > :last-child {
+      > :last-child {
+        margin-bottom: 0;
+
+        :last-child {
+          margin-bottom: 0;
+        }
+      }
+    }
+  }
+
+  .card,
+  .no-card {
+    &.top-margin-sm {
+      margin-top: var(--spacing-05);
+    }
+
+    &.top-margin-md {
+      margin-top: var(--spacing-07);
+    }
+
+    &.top-margin-lg {
+      margin-top: var(--spacing-09);
+    }
+
+    &.top-margin-xl {
+      margin-top: var(--spacing-10);
+    }
+
+    &.top-margin-xxl {
+      margin-top: var(--spacing-11);
+    }
+
+    // create .top-margin-spacing-00, .top-margin-spacing-01, .top-margin-spacing-02, .top-margin-spacing-03, .top-margin-spacing-04, .top-margin-spacing-05, .top-margin-spacing-06, .top-margin-spacing-07, .top-margin-spacing-08, .top-margin-spacing-09, .top-margin-spacing-10, .top-margin-spacing-11, .top-margin-spacing-12, .top-margin-spacing-13, .top-margin-spacing-14, .top-margin-spacing-15, .top-margin-spacing-16
+    @each $spacing-option in $all-spacings {
+      &.top-margin-#{$spacing-option} {
+        margin-top: var(--#{$spacing-option});
+      }
+    }
+  }
+
+  .card {
+    @each $spacing-option in $all-spacings {
+      // create .padding-spacing-00, .padding-spacing-01, .padding-spacing-02, .padding-spacing-03, .padding-spacing-04, .padding-spacing-05, .padding-spacing-06, .padding-spacing-07, .padding-spacing-08, .padding-spacing-09, .padding-spacing-10, .padding-spacing-11, .padding-spacing-12, .padding-spacing-13, .padding-spacing-14, .padding-spacing-15, .padding-spacing-16
+      &.padding-#{$spacing-option} {
+        .card-body {
+          padding: var(--#{$spacing-option});
+        }
+      }
+    }
+  }
+
+  .no-card {
+    @each $spacing-option in $all-spacings {
+      // create .padding-spacing-00, .padding-spacing-01, .padding-spacing-02, .padding-spacing-03, .padding-spacing-04, .padding-spacing-05, .padding-spacing-06, .padding-spacing-07, .padding-spacing-08, .padding-spacing-09, .padding-spacing-10, .padding-spacing-11, .padding-spacing-12, .padding-spacing-13, .padding-spacing-14, .padding-spacing-15, .padding-spacing-16
+      &.padding-#{$spacing-option} {
+        padding: var(--#{$spacing-option});
+      }
+    }
+  }
+
+  .table-of-contents {
+    --link-color: var(--neutral-70);
+    --link-visited-color: var(--neutral-70);
+
+    border-top: 1px solid var(--neutral-30);
+    border-bottom: 1px solid var(--neutral-30);
+    padding: var(--spacing-09) 0;
+    margin-right: var(--spacing-13);
+
+    h2 {
+      @include heading-xs;
+
+      color: var(--green-60);
+      margin: 0;
+      margin-bottom: var(--spacing-06);
+    }
+
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+
+      li {
+        margin-top: var(--spacing-06);
+      }
+
+      li:first-child {
+        margin-top: 0;
+      }
+    }
+
+    a {
+      text-decoration: none;
+      font-weight: 500;
+
+      &:hover {
+        text-decoration: none !important;
+      }
+    }
+  }
+}
+
+.icon-with-content {
+  display: flex;
+
+  h2,
+  h3,
+  h4 {
+    margin-top: 15px;
+  }
+
+  .icon-container {
+    background-color: var(--green-10);
+    padding: 7.5px;
+    height: 56px;
+    width: 56px;
+    border-radius: 50%;
+    margin-right: 24px;
+
+    .icon-inner-container {
+      align-items: center;
+      border: var(--green-30) 3.5px solid;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      height: 42px;
+      width: 42px;
+    }
+
+    i {
+      color: var(--green-50);
+      font-size: 21px;
+    }
+  }
+}
+
+.visual-with-content {
+  display: flex;
+  gap: var(--spacing-06);
+  align-items: flex-start;
+}
+
+.svg-arrow-icon {
+  position: relative;
+  left: 4px;
+  bottom: 1px;
+}
+
+.vertically-center-col > div[class*='col-'] {
+  align-self: center;
+
+  // remove margin to better vertically align
+  // some elements need to be nested within a container, and others are directly within .no-card/.card
+  .card:first-child,
+  .no-card:first-child {
+    .cms-element-container {
+      > *:first-child {
+        margin-top: 0;
+      }
+    }
+
+    > *:first-child:not(.cms-element-container) {
+      margin-top: 0;
+    }
+  }
+
+  .card:last-child,
+  .no-card:last-child {
+    .cms-element-container {
+      > *:last-child {
+        margin-bottom: 0;
+      }
+    }
+
+    > *:last-child:not(.cms-element-container) {
+      margin-bottom: 0;
+    }
+  }
+}
+
+.row-within-card {
+  .no-card {
+    div:first-child {
+      > :first-child {
+        margin-top: 0;
+      }
+    }
+
+    div:last-child {
+      > :last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
+}
+
+.sidebar-blog {
+  .card-body {
+    padding: var(--spacing-06) !important;
+
+    h2 {
+      @extend .h5;
+
+      padding: var(--spacing-04) var(--spacing-05);
+      margin-bottom: unset;
+    }
+
+    .badge-link-list {
+      padding: 0 var(--spacing-05);
+      margin-bottom: 0 !important;
+    }
+
+    .sidebar-register-container {
+      margin-top: var(--spacing-05);
+
+      a {
+        margin-top: var(--spacing-02);
+        margin-left: var(--spacing-05);
+      }
+    }
+  }
+}
+
+.contact-form-error-container {
+  padding-bottom: var(--spacing-08);
+}
+
+.message-received {
+  color: var(--neutral-70);
+  margin-bottom: 0;
+}
+
+// Desktop layout options depdendent on mobile breakpoint
+@include media-breakpoint-up(lg) {
+  .row-equal-column-heights > div[class*='col-'] > .card,
+  .row-equal-column-heights > div[class*='col-'] > .no-card {
+    height: 100%;
+  }
+
+  .row {
+    &.row-max-800 {
+      max-width: 800px !important;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    &.row-max-900 {
+      max-width: 900px !important;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    &.row-max-1000 {
+      max-width: 1000px !important;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    &.row-max-unset {
+      max-width: unset !important;
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
+
+  // create .row-gap-spacing-00, .row-gap-spacing-01, .row-gap-spacing-02, .row-gap-spacing-03, .row-gap-spacing-04, .row-gap-spacing-05, .row-gap-spacing-06, .row-gap-spacing-07, .row-gap-spacing-08, .row-gap-spacing-09, .row-gap-spacing-10, .row-gap-spacing-11, .row-gap-spacing-12, .row-gap-spacing-13, .row-gap-spacing-14, .row-gap-spacing-15, .row-gap-spacing-16
+  @each $spacing-option in $all-spacings {
+    .row-gap-#{$spacing-option} {
+      @include section-row-custom-gap(calc(var(--#{$spacing-option}) / 2));
+    }
+  }
+}
+
+// Mobile layout options depdendent on mobile breakpoint
+@include media-breakpoint-down(lg) {
+  .cms-page {
+    .reverse-col-order-mobile {
+      flex-direction: column-reverse;
+    }
+
+    // create .row-mobile-gap-spacing-00, .row-mobile-gap-spacing-01, .row-mobile-gap-spacing-02, .row-mobile-gap-spacing-03, .row-mobile-gap-spacing-04, .row-mobile-gap-spacing-05, .row-mobile-gap-spacing-06, .row-mobile-gap-spacing-07, .row-mobile-gap-spacing-08, .row-mobile-gap-spacing-09, .row-mobile-gap-spacing-10, .row-mobile-gap-spacing-11, .row-mobile-gap-spacing-12, .row-mobile-gap-spacing-13, .row-mobile-gap-spacing-14, .row-mobile-gap-spacing-15, .row-mobile-gap-spacing-16
+    @each $spacing-option in $all-spacings {
+      .row-mobile-gap-#{$spacing-option} {
+        @include section-row-custom-gap(calc(var(--#{$spacing-option}) / 2));
+      }
+    }
+  }
+}
+
+.bottom-align-last-entry {
+  &.no-card {
+    display: flex;
+    flex-direction: column;
+
+    * {
+      &:last-child {
+        flex: 1;
+        align-content: end;
+      }
+    }
+  }
+
+  &.card {
+    .card-body {
+      display: flex;
+      flex-direction: column;
+
+      * {
+        &:last-child {
+          flex: 1;
+          align-content: end;
+        }
+      }
+    }
+  }
+}

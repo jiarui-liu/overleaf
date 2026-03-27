@@ -1,0 +1,68 @@
+.registration-message {
+  text-align: center;
+  padding-bottom: var(--spacing-07);
+}
+
+.register-container {
+  h1 {
+    @include heading-sm;
+
+    color: var(--neutral-90);
+    margin-bottom: 0;
+  }
+
+  .register-illustration-container {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    position: relative;
+
+    .register-illustration {
+      position: absolute;
+      left: 80px;
+      top: 100px;
+
+      // for wide screen
+      @media (width >= 1700px) {
+        position: relative;
+        left: unset;
+        top: unset;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+      }
+
+      .register-main-image {
+        max-width: 850px;
+
+        @media (width <= 1350px) {
+          max-width: 750px;
+        }
+
+        @media (width <= 1150px) {
+          max-width: 670px;
+        }
+      }
+
+      .sticky-tags {
+        position: absolute;
+        height: 210px;
+        bottom: -135px;
+        right: 130px;
+
+        // for wide screen
+        @media (width >= 1700px) {
+          right: calc(50% - 300px);
+        }
+      }
+    }
+  }
+
+  .recaptcha-branding {
+    @include body-xs;
+
+    text-align: left;
+    padding: var(--spacing-05) 0;
+  }
+}

@@ -1,0 +1,86 @@
+footer.fat-footer.hidden-print.website-redesign-fat-footer
+	.fat-footer-container
+		.fat-footer-sections(class={hidden: hideFatFooter})
+			#footer-brand.footer-section
+				a.footer-brand(href='/' aria-label=settings.appName)
+
+			.footer-section
+				h2.footer-section-heading #{translate('About')}
+
+				ul.list-unstyled
+					li
+						a(href='/about') #{translate('footer_about_us')}
+					li
+						a(href='https://digitalscience.pinpointhq.com/') #{translate('careers')}
+					li
+						a(href='/blog') #{translate('blog')}
+
+			.footer-section
+				h2.footer-section-heading #{translate('solutions')}
+
+				ul.list-unstyled
+					li
+						a(href='/for/enterprises') #{translate('for_business')}
+					li
+						a(href='/for/universities') #{translate('for_universities')}
+					li
+						a(href='/for/government') #{translate('for_government')}
+					li
+						a(href='/for/publishers') #{translate('for_publishers')}
+					li
+						a(href='/about/customer-stories') #{translate('customer_stories')}
+
+			.footer-section
+				h2.footer-section-heading #{translate('learn')}
+
+				ul.list-unstyled
+					li
+						a(href='/learn/latex/Learn_LaTeX_in_30_minutes') #{translate('latex_in_thirty_minutes')}
+					li
+						a(href='/latex/templates') #{translate('templates')}
+					li
+						a(href='/events/webinars') #{translate('webinars')}
+					li
+						a(href='/learn/latex/Tutorials') #{translate('tutorials')}
+					li
+						a(href='/learn/latex/Inserting_Images') #{translate('how_to_insert_images')}
+					li
+						a(href='/learn/latex/Tables') #{translate('how_to_create_tables')}
+
+			.footer-section
+				h2.footer-section-heading !{translate('pricing')}
+
+				ul.list-unstyled
+					li
+						a(href='/user/subscription/plans?itm_referrer=footer-for-indv') #{translate('for_individuals')}
+					li
+						a(
+							href='/user/subscription/plans?plan=group&itm_referrer=footer-for-groups'
+						) !{translate('for_groups_and_organizations')}
+					li
+						a(
+							href='/user/subscription/plans?itm_referrer=footer-for-students#student-annual'
+						) #{translate('for_students')}
+
+			.footer-section
+				h2.footer-section-heading #{translate('get_involved')}
+
+				ul.list-unstyled
+					li
+						a(href='https://forms.gle/67PSpN1bLnjGCmPQ9') #{translate('let_us_know_what_you_think')}
+					if user
+						li
+							a(href='/beta/participate') #{translate('join_beta_program')}
+
+			.footer-section
+				h2.footer-section-heading #{translate('help')}
+
+				ul.list-unstyled
+					li
+						a(href='/learn') #{translate('Documentation')} 
+					li
+						a(href='/contact') #{translate('footer_contact_us')} 
+					li
+						a(href='https://status.overleaf.com/') #{translate('website_status')}
+
+		include fat-footer-base

@@ -1,0 +1,9 @@
+promise-utils
+--dependencies=None
+--env-add=
+--env-pass-through=
+--esmock-loader=False
+--is-library=True
+--node-version=24.13.0
+--pipeline-owner=🚉 Platform
+--public-repo=False

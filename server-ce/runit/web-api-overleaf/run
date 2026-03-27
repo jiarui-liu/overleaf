@@ -1,0 +1,14 @@
+#!/bin/bash
+
+NODE_PARAMS=""
+if [ "$DEBUG_NODE" == "true" ]; then
+    echo "running debug - web-api"
+    NODE_PARAMS="--inspect=0.0.0.0:30000"
+fi
+
+source /etc/overleaf/env.sh
+export LISTEN_ADDRESS=0.0.0.0
+export ENABLED_SERVICES="api"
+export METRICS_APP_NAME="web-api"
+
+exec /sbin/setuser www-data /usr/bin/node $NODE_PARAMS /overleaf/services/web/app.mjs >> /var/log/overleaf/web-api.log 2>&1

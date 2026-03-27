@@ -1,0 +1,809 @@
+@use 'sass:color';
+
+$rp-border-grey: #d9d9d9;
+$rp-type-blue: #6b7797;
+
+:root {
+  --rp-base-font-size: var(--font-size-01);
+  --rp-border-grey: #{$rp-border-grey};
+  --rp-type-blue: #{$rp-type-blue};
+  --review-panel-bg-color: var(--bg-light-secondary);
+  --review-panel-color: var(--content-primary);
+  --review-panel-color-secondary: var(--content-secondary);
+  --review-panel-header-bg-color: var(--bg-light-primary);
+  --review-panel-footer-bg-color: var(--bg-light-primary);
+  --review-panel-entry-bg-color: var(--bg-light-primary);
+  --review-panel-empty-state-bg-color: var(--bg-light-primary);
+  --review-panel-button-hover-bg-color: var(--bg-light-tertiary);
+  --review-panel-border-color: var(--border-divider);
+  --review-panel-header-height: 36px;
+  --review-panel-width: 230px;
+  --review-panel-width-mini: 24px;
+  --review-panel-color-scheme: light;
+
+  @include theme('default') {
+    .ide-redesign-main {
+      --review-panel-bg-color: var(--bg-dark-secondary);
+      --review-panel-color: var(--content-primary-dark);
+      --review-panel-color-secondary: var(--content-secondary-dark);
+      --review-panel-header-bg-color: var(--bg-dark-primary);
+      --review-panel-footer-bg-color: var(--bg-dark-primary);
+      --review-panel-entry-bg-color: var(--bg-dark-primary);
+      --review-panel-empty-state-bg-color: var(--bg-dark-primary);
+      --review-panel-button-hover-bg-color: var(--bg-dark-tertiary);
+      --review-panel-border-color: var(--border-divider-dark);
+      --review-panel-color-scheme: dark;
+    }
+  }
+}
+
+.ide-redesign-main {
+  .review-panel-container {
+    order: -1;
+  }
+
+  .review-panel-inner {
+    border-left: none;
+    border-right: 1px solid var(--border-divider-themed);
+  }
+
+  .review-panel-header {
+    border-bottom: none;
+    flex: 0 0 var(--review-panel-width);
+  }
+
+  .review-panel-more-comments-button-container {
+    &.upwards {
+      top: calc(var(--review-panel-top) + 16px);
+    }
+  }
+
+  .review-panel-mini {
+    // This needs to have a higher z-index than the gutter
+    // so that the comment/change hover previews appear in
+    // front of the gutter
+    z-index: 201;
+
+    .review-panel-entry-hover {
+      .review-panel-entry-content {
+        left: auto;
+        right: -200px;
+      }
+    }
+  }
+
+  .review-panel-overview {
+    top: 0;
+  }
+}
+
+.review-panel-container {
+  color-scheme: var(--review-panel-color-scheme);
+  height: 100%;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.review-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+  background-color: transparent;
+  transition: background-color 0.15s;
+  // Default: panel on the right, handle on its left edge
+  left: 0;
+
+  &:hover {
+    background-color: #4582ec66;
+  }
+}
+
+// In new editor, panel is on the left side, so handle on its right edge
+.ide-redesign-main .review-panel-resize-handle {
+  left: auto;
+  right: 0;
+}
+
+.review-panel-inner {
+  position: relative;
+  z-index: 6;
+  flex-shrink: 0;
+  background-color: var(--review-panel-bg-color);
+  border-left: 1px solid var(--review-panel-border-color);
+  color: var(--review-panel-color);
+  font-family: $font-family-base;
+  line-height: $line-height-base;
+  font-size: var(--font-size-01);
+  box-sizing: content-box;
+  width: var(--review-panel-width);
+  min-height: var(--review-panel-height);
+  backface-visibility: hidden; // force compositing layer
+
+  .dropdown-menu {
+    z-index: 1;
+    min-width: var(--bs-dropdown-min-width);
+  }
+}
+
+.review-panel-entry {
+  background-color: var(--review-panel-entry-bg-color);
+  border-radius: var(--border-radius-base);
+  border: 1px solid var(--review-panel-border-color);
+  padding: var(--spacing-04);
+  width: calc(100% - var(--spacing-04));
+  margin-left: var(--spacing-02);
+  z-index: 1;
+}
+
+.review-panel-entry:hover {
+  @include shadow-sm;
+}
+
+.review-panel-entry.review-panel-entry-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.review-panel-entry-indicator {
+  display: none;
+}
+
+.review-panel-entry-content {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--font-size-01);
+  gap: var(--spacing-04);
+}
+
+.review-panel-entry.review-panel-entry-selected,
+.review-panel-entry.review-panel-entry-highlighted,
+.review-panel-entry.review-panel-entry-textarea-focused {
+  margin-left: var(--spacing-01);
+  border: 1px solid var(--border-active);
+
+  @include shadow-md;
+}
+
+.review-panel-entry.review-panel-entry-focused {
+  z-index: 2;
+}
+
+.review-panel-entry-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-01);
+
+  .review-panel-entry-user {
+    color: var(--review-panel-color);
+    font-size: 110%;
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .review-panel-entry-time {
+    color: var(--review-panel-color-secondary);
+  }
+
+  .review-panel-entry-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-03);
+
+    .btn {
+      background-color: transparent;
+      color: var(--review-panel-color);
+      border-width: 0;
+      padding: 0;
+      height: 24px;
+      width: 24px;
+
+      &:hover,
+      &:focus {
+        background-color: var(--review-panel-button-hover-bg-color);
+        color: var(--review-panel-color);
+      }
+    }
+
+    .dropdown-toggle::after {
+      display: none;
+    }
+
+    .review-panel-entry-actions-icon {
+      padding: var(--spacing-01);
+      font-size: var(--font-size-05);
+    }
+  }
+}
+
+.review-panel-entry-user-color-badge {
+  display: inline-block;
+  width: $spacing-04;
+  height: $spacing-04;
+  margin-right: $spacing-02;
+  border-radius: 2px;
+}
+
+.review-panel-change-body {
+  display: flex;
+  align-items: flex-start;
+  color: var(--review-panel-color-secondary);
+  gap: var(--spacing-02);
+  overflow-wrap: anywhere;
+}
+
+.review-panel-content-highlight {
+  color: var(--review-panel-color);
+  text-decoration: none;
+}
+
+del.review-panel-content-highlight {
+  text-decoration: line-through;
+}
+
+.review-panel-entry-icon {
+  border-radius: var(--border-radius-base);
+  padding: var(--spacing-02);
+  font-size: var(--font-size-03);
+}
+
+.review-panel-entry-change-icon {
+  margin-top: calc(-1 * var(--spacing-01));
+}
+
+.review-panel-entry-icon-accept {
+  background-color: var(--bg-accent-03);
+  color: var(--bg-accent-01);
+}
+
+.review-panel-entry-icon-reject {
+  background-color: var(--bg-danger-03);
+  color: var(--bg-danger-01);
+}
+
+.review-panel-entry-icon-changed {
+  background-color: var(--neutral-20);
+  color: var(--content-secondary);
+}
+
+.review-panel-header {
+  position: sticky;
+  top: 0;
+  width: var(--review-panel-width);
+  height: var(--review-panel-header-height);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-bottom: 1px solid var(--review-panel-border-color);
+  background-color: var(--review-panel-header-bg-color);
+  z-index: 4;
+}
+
+.review-panel-resolved-comments-toggle {
+  display: flex;
+  align-items: center;
+  border: none;
+  background-color: transparent;
+  color: var(--review-panel-color);
+  padding: var(--spacing-01);
+  border-radius: 100%;
+
+  &:hover,
+  &:focus {
+    background-color: var(--review-panel-button-hover-bg-color);
+  }
+}
+
+.review-panel-resolved-comments {
+  --bs-popover-border-width: 1px;
+  --bs-popover-bg: var(--bg-light-secondary);
+  --bs-popover-body-color: var(--content-secondary);
+
+  width: 280px;
+
+  .popover-body {
+    overflow-y: auto;
+    max-height: calc(100vh - 180px);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-02);
+    padding: var(--spacing-04) var(--spacing-03);
+  }
+}
+
+.review-panel-resolved-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.review-panel-resolved-comments-empty {
+  text-align: center;
+}
+
+.review-panel-resolved-comments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-02) 0;
+}
+
+.review-panel-resolved-comments-label {
+  font-weight: bold;
+  font-size: var(--font-size-02);
+}
+
+.review-panel-resolved-comment {
+  background-color: var(--white);
+  border-radius: var(--border-radius-base);
+  padding: var(--spacing-04);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-04);
+
+  .btn-inline-link {
+    font-size: 12px;
+  }
+}
+
+.review-panel-resolved-comment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--content-secondary);
+  font-size: var(--font-size-01);
+}
+
+.review-panel-resolved-comment-filename {
+  color: var(--content-primary);
+}
+
+.review-panel-resolved-comment-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-03);
+
+  .btn {
+    background-color: transparent;
+    border-width: 0;
+    color: var(--content-primary);
+    padding: var(--spacing-01);
+    height: 24px;
+    width: 24px;
+
+    &:hover,
+    &:focus {
+      background-color: var(--neutral-20);
+    }
+  }
+
+  .material-symbols {
+    font-size: var(--font-size-05);
+  }
+}
+
+.review-panel-resolved-comment-quoted-text {
+  background-color: var(--neutral-20);
+  border-radius: var(--border-radius-base);
+  padding: var(--spacing-02) var(--spacing-04);
+}
+
+.review-panel-resolved-comment-quoted-text-label {
+  color: var(--content-secondary);
+  font-size: var(--font-size-01);
+}
+
+.review-panel-resolved-comment-quoted-text-quote {
+  color: var(--content-primary);
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-02);
+}
+
+.review-panel-comment-wrapper {
+  display: flex;
+  gap: var(--spacing-04);
+}
+
+.review-panel-comment {
+  flex-grow: 1;
+}
+
+.review-panel-comment-reply-divider {
+  border-left: 2px solid var(--yellow-20);
+}
+
+.review-panel-comment-body {
+  font-size: var(--font-size-02);
+  color: var(--review-panel-color);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.review-panel-expandable-content {
+  display: inline;
+  padding-right: var(--spacing-02);
+  cursor: default;
+}
+
+.review-panel-expandable-inline {
+  display: inline;
+}
+
+.review-panel-expandable-links {
+  .btn-inline-link {
+    text-decoration: none;
+    line-height: 1;
+  }
+
+  .btn-inline-link:hover {
+    text-decoration: underline;
+  }
+}
+
+.review-panel-comment-input {
+  width: 100%;
+  font-size: var(--rp-base-font-size);
+  padding: 2px var(--spacing-03);
+  border-radius: var(--border-radius-base);
+  border: solid 1px var(--neutral-60);
+  resize: vertical;
+  color: var(--review-panel-color-secondary);
+  background-color: var(--review-panel-entry-bg-color);
+  height: 25px;
+  min-height: 25px;
+  overflow-x: hidden;
+  max-height: 400px;
+}
+
+.review-panel-comment-edit {
+  margin-top: var(--spacing-03);
+}
+
+.review-panel-empty-state {
+  position: fixed;
+  width: var(--review-panel-width);
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow-y: auto;
+}
+
+.review-panel-empty-state-inner {
+  position: sticky;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+  padding-left: var(--spacing-06);
+  padding-right: var(--spacing-06);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+
+  p {
+    margin-bottom: 0;
+    text-align: center;
+  }
+}
+
+.review-panel-empty-state-comment-icon {
+  width: 80px;
+  height: 80px;
+  background-color: var(--review-panel-empty-state-bg-color);
+  border-radius: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacing-06);
+
+  .material-symbols {
+    font-size: 32px;
+  }
+}
+
+.review-panel-overview {
+  padding: var(--spacing-02);
+  position: absolute;
+  top: var(--review-panel-header-height);
+  bottom: 59px;
+  width: 100%;
+  overflow: auto;
+  overscroll-behavior-block: none;
+
+  .review-panel-entry {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+.review-panel-overfile-divider {
+  border-bottom: 1px solid var(--review-panel-border-color);
+  margin: var(--spacing-01) 0;
+}
+
+.review-panel-overview-file-entries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-02);
+  overflow: hidden;
+  padding-top: var(--spacing-02);
+  padding-bottom: var(--spacing-03);
+}
+
+.review-panel-footer {
+  position: fixed;
+  height: 60px;
+  bottom: 0;
+  width: var(--review-panel-width);
+  z-index: 2;
+  background-color: var(--review-panel-footer-bg-color);
+  border-top: 1px solid var(--review-panel-border-color);
+  display: flex;
+
+  .review-panel-tab {
+    flex: 0 0 50%;
+    padding: var(--spacing-03) 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-02);
+    border: 0;
+    border-top: solid 3px transparent;
+    background: none;
+    color: var(--review-panel-color-secondary);
+    font-size: var(--font-size-02);
+
+    &:hover,
+    &:focus {
+      text-decoration: none;
+      color: var(--review-panel-color);
+    }
+
+    &-active {
+      color: var(--review-panel-color);
+      border-top: solid 3px var(--bg-accent-01);
+    }
+  }
+}
+
+.review-panel-add-comment-textarea {
+  padding: var(--spacing-01) var(--spacing-03);
+  resize: vertical;
+  min-height: 44px;
+}
+
+.review-panel-add-comment-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-04);
+}
+
+.review-panel-add-comment-cancel-button {
+  background-color: transparent;
+  color: var(--review-panel-color);
+
+  &:hover,
+  &:focus {
+    background-color: var(--review-panel-button-hover-bg-color);
+    color: var(--review-panel-color);
+  }
+}
+
+.review-panel-more-comments-button-container {
+  position: fixed;
+  width: var(--review-panel-width);
+  display: flex;
+  justify-content: center;
+  z-index: 3;
+
+  &.downwards {
+    // TODO: fix this to not use a magic number when we have updated the footer ui
+    top: calc(100% - 102px);
+  }
+
+  &.upwards {
+    top: calc(
+      var(--review-panel-top) + var(--review-panel-header-height) + 16px
+    );
+  }
+}
+
+.review-panel-subview-overview {
+  &.review-panel-container {
+    overflow-y: hidden;
+    position: sticky;
+    top: 0;
+  }
+
+  .review-panel-inner {
+    min-height: auto;
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+.review-panel-mini {
+  overflow: visible !important;
+
+  .review-panel-entry-header .review-panel-entry-user {
+    width: 130px;
+  }
+
+  .review-panel-inner {
+    width: var(--review-panel-width-mini);
+  }
+
+  .review-panel-entry {
+    margin-left: 0;
+    background-color: transparent;
+    border: none;
+    width: 100%;
+  }
+
+  .review-panel-entry-indicator {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: flex;
+    color: var(--review-panel-color-secondary);
+    cursor: pointer;
+  }
+
+  .review-panel-entry-content {
+    display: none;
+    background: var(--review-panel-entry-bg-color);
+    border: 1px solid var(--review-panel-border-color);
+    border-radius: var(--border-radius-base);
+    width: 200px;
+    padding: var(--spacing-02);
+  }
+
+  .review-panel-entry-hover {
+    .review-panel-entry-content {
+      display: flex;
+      position: absolute;
+      left: -200px;
+      top: 0;
+      padding: var(--spacing-04);
+    }
+  }
+
+  .review-panel-more-comments-button-container {
+    display: none;
+  }
+
+  .review-panel-footer {
+    display: none;
+  }
+
+  .review-panel-entry:hover,
+  .review-panel-entry-focused,
+  .review-panel-entry-highlighted {
+    box-shadow: none;
+  }
+}
+
+.review-tooltip-menu {
+  display: flex;
+  box-shadow: 0 2px 4px 0 #1e253029;
+  border: none;
+  border-radius: var(--border-radius-base);
+  padding: var(--spacing-02);
+  gap: var(--spacing-02);
+  transition: opacity 0.05s ease-in;
+  opacity: 0;
+}
+
+.review-tooltip-menu-visible {
+  opacity: 1;
+}
+
+.review-tooltip-menu-button {
+  background-color: inherit;
+  color: inherit;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-01);
+  padding: var(--spacing-01);
+  border-radius: var(--border-radius-base);
+}
+
+.review-tooltip-add-comment-button {
+  padding: var(--spacing-01) var(--spacing-04);
+}
+
+.review-tooltip-menu-divider {
+  width: 1px;
+  background-color: #e7e9ee;
+}
+
+.review-panel-tooltip {
+  pointer-events: none; // this is to prevent mouseLeave event from firing when hovering over the tooltip
+}
+
+.review-mode-switcher-container {
+  position: sticky;
+  top: 0;
+  right: 0;
+}
+
+.review-mode-switcher {
+  position: absolute;
+  top: var(--spacing-03);
+  right: var(--spacing-03);
+  font-family: var(--font-sans);
+
+  &:hover,
+  &:focus {
+    .review-mode-switcher-toggle-button.editing {
+      background-color: var(--bg-light-tertiary);
+    }
+
+    .review-mode-switcher-toggle-button.reviewing {
+      background-color: var(--yellow-20);
+    }
+
+    .review-mode-switcher-toggle-button.viewing {
+      background-color: var(--blue-20);
+    }
+
+    .review-mode-switcher-toggle-label {
+      display: block;
+    }
+  }
+
+  // prevent gap between button and menu
+  > .dropdown-menu {
+    margin-top: -2px;
+  }
+}
+
+.review-mode-switcher-toggle-button {
+  all: unset;
+  z-index: 2;
+  font-family: $font-family-base;
+  display: flex;
+  align-items: center;
+  border-radius: 14px;
+  font-size: var(--font-size-02);
+  padding: var(--spacing-02) var(--spacing-03);
+  gap: var(--spacing-02);
+  height: 20px;
+
+  .material-symbols {
+    font-size: 16px;
+    font-variation-settings:
+      'FILL' 0,
+      'wght' 400,
+      'GRAD' 0,
+      'opsz' 20;
+  }
+
+  &.editing {
+    background-color: var(--bg-light-secondary);
+    color: var(--content-primary);
+  }
+
+  &.reviewing {
+    background-color: var(--yellow-10);
+    color: var(--yellow-60);
+  }
+
+  &.viewing {
+    background-color: var(--blue-10);
+    color: var(--blue-70);
+  }
+
+  .review-mode-switcher-toggle-label {
+    display: none;
+  }
+
+  &.review-mode-switcher-toggle-button-expanded {
+    .review-mode-switcher-toggle-label {
+      display: block;
+    }
+  }
+}

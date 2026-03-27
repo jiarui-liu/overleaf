@@ -1,0 +1,6 @@
+# docker image build
+.dockerignore
+
+# user defined files
+.env_credentials
+docker-compose.override.yml

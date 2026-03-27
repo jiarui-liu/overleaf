@@ -1,0 +1,30 @@
+.ciam-register-columns {
+  display: flex;
+  flex-grow: 1;
+}
+
+.ciam-register-login-link {
+  text-align: center;
+  margin: 0;
+  padding: var(--ds-spacing-200) 0;
+}
+
+.ciam-register-container {
+  @include ciam-vertically-spaced;
+
+  @include media-breakpoint-up(sm) {
+    gap: var(--ds-spacing-800);
+  }
+}
+
+.ciam-password-group {
+  @include ciam-bottom-margin;
+}
+
+.ciam-password-requirements-message {
+  @include ds-body-sm-regular;
+
+  color: var(--ds-color-text-secondary);
+  padding-top: var(--ds-spacing-200);
+  margin: 0;
+}

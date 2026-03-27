@@ -1,0 +1,34 @@
+#!/bin/sh
+
+. /etc/container_environment.sh
+. /etc/overleaf/env.sh
+
+SITE_MAINTENANCE_FILE_BAK="$SITE_MAINTENANCE_FILE.bak.shutdown"
+
+mv "${SITE_MAINTENANCE_FILE}" "${SITE_MAINTENANCE_FILE_BAK}"
+echo "closed" > "${SITE_MAINTENANCE_FILE}"
+
+# status file is polled every 5 seconds
+sleep 5
+
+# giving a grace period of 5 seconds for users before disconnecting them and start shutting down
+cd /overleaf/services/web && /sbin/setuser www-data node scripts/disconnect_all_users.mjs --delay-in-seconds=5 >> /var/log/overleaf/web.log 2>&1
+
+EXIT_CODE="$?"
+if [ $EXIT_CODE -ne 0 ]
+then
+  echo "scripts/disconnect_all_users.mjs failed with exit code $EXIT_CODE"
+  exit 1
+fi
+
+sleep 10 &
+GIVE_EDITOR_10_SECONDS_TO_RELOAD=$!
+
+# wait for disconnection
+while ! sv stop real-time-overleaf; do
+  sleep 1
+done
+
+wait $GIVE_EDITOR_10_SECONDS_TO_RELOAD
+
+exit 0

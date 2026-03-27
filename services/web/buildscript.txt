@@ -1,0 +1,8 @@
+web
+--dependencies=mongo
+--docker-repos=us-east1-docker.pkg.dev/overleaf-ops/ol-docker
+--env-add=
+--env-pass-through=
+--esmock-loader=False
+--node-version=24.13.0
+--public-repo=False

@@ -1,0 +1,17 @@
+$pdf_mode = 4;
+# Add parent directory (project root) to TEXINPUTS so \input paths work
+# when the main file is in a subdirectory and latexmk uses -cd.
+# Use ../ (non-recursive) instead of ..// to prevent cross-contamination
+# between sibling project subdirectories (e.g., picking up natbib.sty or
+# acl.sty from other directories instead of system packages).
+$ENV{'TEXINPUTS'} = '../:' . ($ENV{'TEXINPUTS'} || '');
+$ENV{'BIBINPUTS'} = '../:' . ($ENV{'BIBINPUTS'} || '');
+
+# Global compatibility fixes injected before each document:
+# - float package: enables [H] float specifier
+# - xcolor options: prevents "Option clash for package xcolor" errors
+# - marginparwidth: ensures at least 2cm for todonotes compatibility
+# These are harmless for projects that don't use these features.
+$pdflatex = 'pdflatex %O "\\RequirePackage{float}\\PassOptionsToPackage{dvipsnames,table}{xcolor}\\AtBeginDocument{\\ifdim\\marginparwidth<2cm\\setlength{\\marginparwidth}{2cm}\\fi}\\input{%S}"';
+$lualatex = 'lualatex %O "\\RequirePackage{float}\\PassOptionsToPackage{dvipsnames,table}{xcolor}\\AtBeginDocument{\\ifdim\\marginparwidth<2cm\\setlength{\\marginparwidth}{2cm}\\fi}\\input{%S}"';
+$xelatex  = 'xelatex %O "\\RequirePackage{float}\\PassOptionsToPackage{dvipsnames,table}{xcolor}\\AtBeginDocument{\\ifdim\\marginparwidth<2cm\\setlength{\\marginparwidth}{2cm}\\fi}\\input{%S}"';

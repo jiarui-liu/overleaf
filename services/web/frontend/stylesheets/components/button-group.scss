@@ -1,0 +1,16 @@
+.btn-group {
+  > .btn {
+    &:first-of-type {
+      padding-left: var(--spacing-05);
+    }
+
+    &:last-of-type {
+      padding-right: var(--spacing-05);
+    }
+  }
+}
+
+.btn-toolbar {
+  gap: var(--spacing-03);
+  flex-wrap: nowrap;
+}

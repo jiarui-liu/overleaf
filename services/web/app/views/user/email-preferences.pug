@@ -1,0 +1,16 @@
+extends ../layout-website-redesign
+include ../_mixins/back_to_btns
+
+block entrypointVar
+	- entrypoint = 'pages/user/email-preferences'
+
+block append meta
+	meta(name='ol-newsletter-subscribed' data-type='boolean' content=subscribed)
+	meta(name='ol-user' data-type='json' content=user)
+
+block vars
+	- isWebsiteRedesign = true
+
+block content
+	main#main-content.content.content-alt
+		#email-preferences-root

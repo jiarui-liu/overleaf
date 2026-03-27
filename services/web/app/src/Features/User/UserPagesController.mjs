@@ -1,0 +1,362 @@
+import UserGetter from './UserGetter.mjs'
+import OError from '@overleaf/o-error'
+import UserSessionsManager from './UserSessionsManager.mjs'
+import logger from '@overleaf/logger'
+import Settings from '@overleaf/settings'
+import AuthenticationController from '../Authentication/AuthenticationController.mjs'
+import SessionManager from '../Authentication/SessionManager.mjs'
+import SubscriptionLocator from '../Subscription/SubscriptionLocator.mjs'
+import UserAnalyticsIdCache from '../Analytics/UserAnalyticsIdCache.mjs'
+import _ from 'lodash'
+import { expressify } from '@overleaf/promise-utils'
+import Features from '../../infrastructure/Features.mjs'
+import Modules from '../../infrastructure/Modules.mjs'
+import SplitTestHandler from '../SplitTests/SplitTestHandler.mjs'
+
+async function settingsPage(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const reconfirmationRemoveEmail = req.query.remove
+  // SSO
+  const ssoError = req.session.ssoError
+  if (ssoError) {
+    delete req.session.ssoError
+  }
+  const ssoErrorMessage = req.session.ssoErrorMessage
+  if (ssoErrorMessage) {
+    delete req.session.ssoErrorMessage
+  }
+  const projectSyncSuccessMessage = req.session.projectSyncSuccessMessage
+  if (projectSyncSuccessMessage) {
+    delete req.session.projectSyncSuccessMessage
+  }
+  // Institution SSO
+  let institutionLinked = _.get(req.session, ['saml', 'linked'])
+  if (institutionLinked) {
+    // copy object if exists because _.get does not
+    institutionLinked = Object.assign(
+      {
+        hasEntitlement: _.get(req.session, ['saml', 'hasEntitlement']),
+      },
+      institutionLinked
+    )
+  }
+  const samlError = _.get(req.session, ['saml', 'error'])
+  const institutionEmailNonCanonical = _.get(req.session, [
+    'saml',
+    'emailNonCanonical',
+  ])
+  const institutionRequestedEmail = _.get(req.session, [
+    'saml',
+    'requestedEmail',
+  ])
+
+  const reconfirmedViaSAML = _.get(req.session, ['saml', 'reconfirmed'])
+  delete req.session.saml
+  let shouldAllowEditingDetails = true
+  if (Settings.ldap && Settings.ldap.updateUserDetailsOnLogin) {
+    shouldAllowEditingDetails = false
+  }
+  if (Settings.saml && Settings.saml.updateUserDetailsOnLogin) {
+    shouldAllowEditingDetails = false
+  }
+  const oauthProviders = Settings.oauthProviders || {}
+
+  const user = await UserGetter.promises.getUser(userId)
+  if (!user) {
+    // The user has just deleted their account.
+    return UserSessionsManager.removeSessionsFromRedis(
+      { _id: userId },
+      null,
+      () => res.redirect('/')
+    )
+  }
+
+  let personalAccessTokens
+  try {
+    const results = await Modules.promises.hooks.fire(
+      'listPersonalAccessTokens',
+      user._id
+    )
+    personalAccessTokens = results?.[0] ?? []
+  } catch (error) {
+    const err = OError.tag(error, 'listPersonalAccessTokens hook failed')
+    logger.error({ err, userId }, err.message)
+  }
+
+  let currentManagedUserAdminEmail
+  try {
+    currentManagedUserAdminEmail =
+      await SubscriptionLocator.promises.getAdminEmail(req.managedBy)
+  } catch (err) {
+    logger.error({ err }, 'error getting subscription admin email')
+  }
+
+  let memberOfSSOEnabledGroups = []
+  try {
+    memberOfSSOEnabledGroups =
+      (
+        await Modules.promises.hooks.fire(
+          'getUserGroupsSSOEnrollmentStatus',
+          user._id,
+          { teamName: 1 },
+          ['email']
+        )
+      )?.[0] || []
+    memberOfSSOEnabledGroups = memberOfSSOEnabledGroups.map(group => {
+      return {
+        groupId: group._id.toString(),
+        linked: group.linked,
+        groupName: group.teamName,
+        adminEmail: group.admin_id?.email,
+      }
+    })
+  } catch (error) {
+    logger.error(
+      { err: error },
+      'error fetching groups with Group SSO enabled the user may be member of'
+    )
+  }
+
+  await SplitTestHandler.promises.getAssignment(req, res, 'email-notifications')
+
+  res.render('user/settings', {
+    title: 'account_settings',
+    user: {
+      id: user._id,
+      isAdmin: user.isAdmin,
+      email: user.email,
+      allowedFreeTrial: user.allowedFreeTrial,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      alphaProgram: user.alphaProgram,
+      betaProgram: user.betaProgram,
+      labsProgram: user.labsProgram,
+      features: {
+        dropbox: user.features.dropbox,
+        github: user.features.github,
+        mendeley: user.features.mendeley,
+        zotero: user.features.zotero,
+        papers: user.features.papers,
+        references: user.features.references,
+      },
+      refProviders: {
+        mendeley: Boolean(user.refProviders?.mendeley),
+        zotero: Boolean(user.refProviders?.zotero),
+        papers: Boolean(user.refProviders?.papers),
+      },
+      writefull: {
+        enabled: Boolean(user.writefull?.enabled),
+      },
+      aiErrorAssistant: {
+        enabled: Boolean(user.aiErrorAssistant?.enabled),
+      },
+    },
+    labsExperiments: user.labsExperiments ?? [],
+    hasPassword: !!user.hashedPassword,
+    shouldAllowEditingDetails,
+    oauthProviders: UserPagesController._translateProviderDescriptions(
+      oauthProviders,
+      req
+    ),
+    institutionLinked,
+    samlError,
+    institutionEmailNonCanonical:
+      institutionEmailNonCanonical && institutionRequestedEmail
+        ? institutionEmailNonCanonical
+        : undefined,
+    reconfirmedViaSAML,
+    reconfirmationRemoveEmail,
+    samlBeta: req.session.samlBeta,
+    ssoErrorMessage,
+    thirdPartyIds: UserPagesController._restructureThirdPartyIds(user),
+    projectSyncSuccessMessage,
+    personalAccessTokens,
+    emailAddressLimit: Settings.emailAddressLimit,
+    isManagedAccount: !!req.managedBy,
+    userRestrictions: Array.from(req.userRestrictions || []),
+    currentManagedUserAdminEmail,
+    gitBridgeEnabled: Settings.enableGitBridge,
+    isSaas: Features.hasFeature('saas'),
+    memberOfSSOEnabledGroups,
+    capabilities: [...req.capabilitySet],
+  })
+}
+
+async function accountSuspended(req, res) {
+  if (SessionManager.isUserLoggedIn(req.session)) {
+    return res.redirect('/project')
+  }
+  res.render('user/accountSuspended', {
+    title: 'your_account_is_suspended',
+  })
+}
+
+async function logout(req, res) {
+  const isLoggedIn = SessionManager.isUserLoggedIn(req.session)
+  if (!isLoggedIn) {
+    return res.redirect('/')
+  }
+  res.render('user/logout')
+}
+
+async function reconfirmAccountPage(req, res) {
+  const pageData = {
+    reconfirm_email: req.session.reconfirm_email,
+  }
+
+  res.render('user/reconfirm', pageData)
+}
+
+async function emailPreferencesPage(req, res) {
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const user = await UserGetter.promises.getUser(userId, {
+    _id: 1,
+    email: 1,
+    first_name: 1,
+    last_name: 1,
+  })
+
+  if (!user) {
+    throw new Error('User not found')
+  }
+
+  let subscribed = false
+
+  const analyticsId = await UserAnalyticsIdCache.get(userId)
+  if (analyticsId) {
+    const [preferences] = await Modules.promises.hooks.fire(
+      'getSubscriptionPreferences',
+      analyticsId
+    )
+
+    subscribed = Boolean(preferences?.newsletter)
+  }
+
+  res.render('user/email-preferences', {
+    title: 'newsletter_info_title',
+    customerIoEnabled: true,
+    subscribed,
+    user,
+  })
+}
+
+const UserPagesController = {
+  accountSuspended: expressify(accountSuspended),
+  logout: expressify(logout),
+
+  registerPage(req, res) {
+    const sharedProjectData = req.session.sharedProjectData || {}
+
+    const newTemplateData = {}
+    if (req.session.templateData != null) {
+      newTemplateData.templateName = req.session.templateData.templateName
+    }
+
+    res.render('user/register', {
+      title: 'register',
+      sharedProjectData,
+      newTemplateData,
+      samlBeta: req.session.samlBeta,
+    })
+  },
+
+  loginPage(req, res) {
+    // if user is being sent to /login with explicit redirect (redir=/foo),
+    // such as being sent from the editor to /login, then set the redirect explicitly
+    if (
+      req.query.redir != null &&
+      AuthenticationController.getRedirectFromSession(req) == null
+    ) {
+      AuthenticationController.setRedirectInSession(req, req.query.redir)
+    }
+    const metadata = { robotsNoindexNofollow: false }
+    if (Object.keys(req.query).length !== 0) {
+      metadata.robotsNoindexNofollow = true
+    }
+    res.render('user/login', {
+      title: Settings.nav?.login_support_title || 'login',
+      login_support_title: Settings.nav?.login_support_title,
+      login_support_text: Settings.nav?.login_support_text,
+      metadata,
+    })
+  },
+
+  /**
+   * Landing page for users who may have received one-time login
+   * tokens from the read-only maintenance site.
+   *
+   * We tell them that Overleaf is back up and that they can login normally.
+   */
+  oneTimeLoginPage(req, res, next) {
+    res.render('user/one_time_login')
+  },
+
+  renderReconfirmAccountPage: expressify(reconfirmAccountPage),
+
+  settingsPage: expressify(settingsPage),
+
+  sessionsPage(req, res, next) {
+    const user = SessionManager.getSessionUser(req.session)
+    logger.debug({ userId: user._id }, 'loading sessions page')
+    const currentSession = {
+      ip_address: user.ip_address,
+      session_created: user.session_created,
+    }
+    UserSessionsManager.getAllUserSessions(
+      user,
+      [req.sessionID],
+      (err, sessions) => {
+        if (err != null) {
+          OError.tag(err, 'error getting all user sessions', {
+            userId: user._id,
+          })
+          return next(err)
+        }
+        res.render('user/sessions', {
+          title: 'sessions',
+          currentSession,
+          sessions,
+        })
+      }
+    )
+  },
+
+  emailPreferencesPage: expressify(emailPreferencesPage),
+
+  async compromisedPasswordPage(req, res) {
+    res.render('user/compromised_password')
+  },
+
+  _restructureThirdPartyIds(user) {
+    // 3rd party identifiers are an array of objects
+    // this turn them into a single object, which
+    // makes data easier to use in template
+    if (
+      !user.thirdPartyIdentifiers ||
+      user.thirdPartyIdentifiers.length === 0
+    ) {
+      return null
+    }
+    return user.thirdPartyIdentifiers.reduce((obj, identifier) => {
+      obj[identifier.providerId] = identifier.externalUserId
+      return obj
+    }, {})
+  },
+
+  _translateProviderDescriptions(providers, req) {
+    const result = {}
+    if (providers) {
+      for (const provider in providers) {
+        const data = providers[provider]
+        data.description = req.i18n.translate(
+          data.descriptionKey,
+          Object.assign({}, data.descriptionOptions)
+        )
+        result[provider] = data
+      }
+    }
+    return result
+  },
+}
+
+export default UserPagesController

@@ -1,0 +1,36 @@
+.writefull-loading-bar {
+  font-size: var(--font-size-02);
+  height: 40px;
+  justify-content: center;
+}
+
+.writefull-error-notification {
+  margin: 48px 64px;
+  width: 100%;
+  max-width: 520px;
+  text-align: left;
+}
+
+.feature-rebrand-promo-container {
+  z-index: 12;
+  position: absolute;
+  bottom: 15px;
+  right: 15px;
+  background: $bg-dark-primary;
+  color: $content-primary-dark;
+  max-width: 450px;
+}
+
+.feature-rebrand-promo-title-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.feature-rebrand-promo-title-text {
+  color: white;
+  font-size: 14px;
+}
+
+.feature-rebrand-promo-body {
+  color: white;
+}

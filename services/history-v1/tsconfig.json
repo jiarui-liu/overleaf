@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.backend.json",
+  "include": [
+    "api/**/*",
+    "app.js",
+    "app.ts",
+    "app/js/**/*",
+    "backup-deletion-app.mjs",
+    "backup-verifier-app.mjs",
+    "backup-worker-app.mjs",
+    "benchmarks/**/*",
+    "config/**/*",
+    "migrations/**/*",
+    "scripts/**/*",
+    "storage/**/*",
+    "test/**/*",
+    "types"
+  ]
+}

@@ -1,0 +1,57 @@
+.text-with-bg {
+  @include font-mono;
+
+  padding: 0 var(--spacing-04);
+  border-radius: var(--border-radius-medium);
+  margin-top: var(--spacing-02);
+
+  // will make all spans content inline while avoiding overflowing the viewport in mobile
+  // https://developer.mozilla.org/en-US/docs/Web/CSS/display#flow-root
+  // https://css-tricks.com/display-flow-root/
+  display: inline flow-root;
+
+  &.tangerine-bg {
+    background-color: var(--vivid-tangerine);
+  }
+
+  &.purple-bg {
+    background-color: var(--ceil);
+  }
+
+  &.yellow-bg {
+    background-color: var(--caramel);
+  }
+
+  &.green-bg {
+    background-color: var(--green-30);
+  }
+}
+
+.mono-text {
+  @include font-mono;
+  @include body-lg;
+
+  color: var(--green-60);
+  font-weight: 500;
+  margin: 0;
+}
+
+.eyebrow-text {
+  @extend .mono-text;
+
+  display: block;
+  margin-bottom: var(--spacing-04);
+}
+
+p:has(.eyebrow-text) {
+  margin-bottom: 0;
+}
+
+p:has(.eyebrow-text) + h1,
+p:has(.eyebrow-text) + h2,
+p:has(.eyebrow-text) + h3,
+p:has(.eyebrow-text) + h4,
+p:has(.eyebrow-text) + h5,
+p:has(.eyebrow-text) + h6 {
+  margin-top: 0;
+}

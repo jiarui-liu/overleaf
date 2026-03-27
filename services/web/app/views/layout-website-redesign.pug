@@ -1,0 +1,31 @@
+extends ./layout-base
+
+include ./_mixins/formMessages
+include ./_mixins/bootstrap_js
+
+block entrypointVar
+	- entrypoint = 'marketing'
+
+block append meta
+	meta(name='ol-shouldLoadHotjar' data-type='boolean' content=shouldLoadHotjar)
+
+block body
+	if typeof suppressNavbar == 'undefined'
+		include layout/navbar-marketing
+
+	block content
+
+	if typeof suppressFooter == 'undefined'
+		if showThinFooter
+			include layout/thin-footer
+		else
+			include layout/fat-footer-website-redesign
+
+	if typeof suppressPugCookieBanner == 'undefined'
+		include _cookie_banner
+
+	block contactModal
+		!= moduleIncludes('contactModal-marketing', locals)
+
+block prepend foot-scripts
+	+bootstrap-js

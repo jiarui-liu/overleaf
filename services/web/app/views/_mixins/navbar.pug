@@ -1,0 +1,23 @@
+mixin nav-item
+	li(role='none')&attributes(attributes)
+		block
+
+mixin nav-link
+	a.nav-link(role='menuitem')&attributes(attributes)
+		block
+
+mixin dropdown-menu
+	ul.dropdown-menu(role='menu')&attributes(attributes)
+		block
+
+mixin dropdown-menu-item
+	li(role='none')
+		block
+
+mixin dropdown-menu-link-item
+	+dropdown-menu-item
+		a.dropdown-item(role='menuitem')&attributes(attributes)
+			block
+
+mixin dropdown-menu-divider
+	li.dropdown-divider.d-none.d-lg-block(role='separator')

@@ -1,0 +1,62 @@
+:root {
+  --password-visibility-toggle-width: 35px;
+}
+
+.login-register-or-text-container {
+  display: flex;
+  gap: var(--spacing-05);
+  padding: var(--spacing-08) 0 var(--spacing-05) 0;
+  align-items: center;
+  font-size: var(--font-size-02);
+  line-height: 1;
+  margin: 0;
+
+  &::before,
+  &::after {
+    content: '';
+    display: block;
+    flex-grow: 1;
+    height: 1px;
+    background-color: var(--neutral-20);
+  }
+}
+
+.login-register-form {
+  padding: var(--spacing-08) var(--spacing-08) 0 var(--spacing-08);
+  border-bottom: solid 1px var(--border-divider);
+
+  &:last-child {
+    border-bottom-width: 0;
+  }
+}
+
+.form-group-password {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+
+  .form-group-password-input {
+    input.form-control,
+    // needlessly specific selectors to override competing styles
+    input.form-control.form-control-ds.form-control-lg {
+      padding-right: var(--password-visibility-toggle-width);
+    }
+  }
+
+  .visibility-toggle {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: var(--password-visibility-toggle-width);
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: unset;
+    background-color: unset;
+
+    #visibility-icon-off {
+      margin-top: 2px; // workaround for the icon not having the same center as the non-slashed one
+    }
+  }
+}

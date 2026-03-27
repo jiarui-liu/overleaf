@@ -1,0 +1,54 @@
+#institution-hub {
+  .section-header {
+    .dropdown {
+      margin-right: var(--spacing-04);
+    }
+  }
+
+  #usage {
+    .recent-activity {
+      .overbox {
+        @include body-base;
+      }
+
+      .hub-big-number,
+      .hub-number-label,
+      .worked-on {
+        display: block;
+        width: 50%;
+      }
+
+      .hub-big-number {
+        padding-right: var(--spacing-04);
+        text-align: right;
+      }
+
+      .hub-number-label,
+      .worked-on {
+        float: right;
+      }
+
+      .hub-number-label {
+        &:nth-child(odd) {
+          margin-top: var(--spacing-06);
+        }
+      }
+
+      .worked-on {
+        color: var(--content-secondary);
+        font-style: italic;
+      }
+    }
+  }
+
+  .overbox {
+    margin: 0;
+    padding: var(--spacing-10) var(--spacing-07);
+    background: var(--white);
+    border: 1px solid var(--content-disabled);
+
+    &.overbox-small {
+      padding: var(--spacing-04);
+    }
+  }
+}

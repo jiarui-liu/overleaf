@@ -1,0 +1,91 @@
+.auth-aux-logo {
+  position: absolute;
+  top: var(--spacing-06);
+  left: var(--spacing-06);
+
+  img {
+    height: 40px;
+  }
+}
+
+.auth-aux-container {
+  padding-top: calc($header-height + $spacing-11);
+  max-width: 320px;
+  min-height: 100vh;
+  margin-left: auto;
+  margin-right: auto;
+
+  .recaptcha-branding {
+    @include body-xs;
+
+    padding: 0;
+    text-align: left;
+  }
+}
+
+.auth-aux-new-password ~ .notification {
+  margin-top: var(--spacing-04);
+}
+
+.login-register-container {
+  max-width: 400px;
+  margin: 0 auto;
+  padding-bottom: 125px;
+}
+
+.login-register-error-container {
+  padding-bottom: var(--spacing-05);
+  text-align: left;
+}
+
+.login-register-card {
+  padding-top: 0;
+  padding-bottom: 0;
+  text-align: center;
+}
+
+.login-register-header {
+  padding-bottom: var(--spacing-07);
+  border-bottom: solid 1px var(--border-divider);
+}
+
+.login-register-header-heading {
+  margin: 0;
+  color: var(--content-secondary);
+}
+
+.login-register-hr-text-container {
+  line-height: 1;
+  position: relative;
+  padding: var(--spacing-08) 0;
+  font-size: var(--font-size-02);
+
+  &::before {
+    content: '';
+    position: absolute;
+    height: 1px;
+    background-color: var(--neutral-20);
+    top: 50%;
+    left: 0;
+    right: 0;
+  }
+}
+
+.login-register-hr-text {
+  position: relative;
+  background-color: #fff;
+  padding: 0 var(--spacing-05);
+}
+
+.login-register-text,
+.login-register-hr-text-container {
+  margin: 0;
+}
+
+.login-register-text {
+  padding-bottom: var(--spacing-08);
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+}

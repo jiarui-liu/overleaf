@@ -1,0 +1,112 @@
+{
+  "databaseUrl": "HISTORY_CONNECTION_STRING",
+  "databaseUrlReadOnly": "HISTORY_FOLLOWER_CONNECTION_STRING",
+  "herokuDatabaseUrl": "DATABASE_URL",
+  "databasePoolMin": "DATABASE_POOL_MIN",
+  "databasePoolMax": "DATABASE_POOL_MAX",
+  "persistor": {
+    "backend": "PERSISTOR_BACKEND",
+    "s3": {
+      "key": "AWS_ACCESS_KEY_ID",
+      "secret": "AWS_SECRET_ACCESS_KEY",
+      "endpoint": "AWS_S3_ENDPOINT",
+      "pathStyle": "AWS_S3_PATH_STYLE",
+      "maxRetries": "S3_MAX_RETRIES",
+      "httpOptions": {
+        "timeout": "S3_TIMEOUT"
+      }
+    },
+    "gcs": {
+      "deletedBucketSuffix": "GCS_DELETED_BUCKET_SUFFIX",
+      "unlockBeforeDelete": "GCS_UNLOCK_BEFORE_DELETE",
+      "endpoint": {
+        "apiEndpoint": "GCS_API_ENDPOINT",
+        "projectId": "GCS_PROJECT_ID"
+      },
+      "retryOptions": {
+        "maxRetries": "GCS_MAX_RETRIES",
+        "idempotencyStrategy": "GCS_IDEMPOTENCY_STRATEGY"
+      }
+    },
+    "fallback": {
+      "backend": "PERSISTOR_FALLBACK_BACKEND",
+      "buckets": "PERSISTOR_BUCKET_MAPPING"
+    }
+  },
+  "backupPersistor": {
+    "keyEncryptionKeys": "BACKUP_KEY_ENCRYPTION_KEYS",
+    "s3SSEC": {
+      "key": "AWS_ACCESS_KEY_ID",
+      "secret": "AWS_SECRET_ACCESS_KEY",
+      "endpoint": "AWS_S3_ENDPOINT",
+      "pathStyle": "AWS_S3_PATH_STYLE",
+      "maxRetries": "BACKUP_S3_MAX_RETRIES",
+      "httpOptions": {
+        "timeout": "BACKUP_S3_TIMEOUT"
+      }
+    }
+  },
+  "blobStore": {
+    "globalBucket": "OVERLEAF_EDITOR_BLOBS_BUCKET",
+    "projectBucket": "OVERLEAF_EDITOR_PROJECT_BLOBS_BUCKET"
+  },
+  "chunkStore": {
+    "historyStoreConcurrency": "HISTORY_STORE_CONCURRENCY",
+    "bucket": "OVERLEAF_EDITOR_CHUNKS_BUCKET"
+  },
+  "zipStore": {
+    "bucket": "OVERLEAF_EDITOR_ZIPS_BUCKET",
+    "zipTimeoutMs": "ZIP_STORE_ZIP_TIMEOUT_MS"
+  },
+  "backupStore": {
+    "chunksBucket": "BACKUP_OVERLEAF_EDITOR_CHUNKS_BUCKET",
+    "deksBucket": "BACKUP_OVERLEAF_EDITOR_DEKS_BUCKET",
+    "globalBlobsBucket": "BACKUP_OVERLEAF_EDITOR_GLOBAL_BLOBS_BUCKET",
+    "projectBlobsBucket": "BACKUP_OVERLEAF_EDITOR_PROJECT_BLOBS_BUCKET"
+  },
+  "healthCheckBlobs": "HEALTH_CHECK_BLOBS",
+  "healthCheckProjects": "HEALTH_CHECK_PROJECTS",
+  "backupRPOInMS": "BACKUP_RPO_IN_MS",
+  "minSoftDeletionPeriodDays": "MIN_SOFT_DELETION_PERIOD_DAYS",
+  "mongo": {
+    "uri": "MONGO_CONNECTION_STRING"
+  },
+  "basicHttpAuth": {
+    "password": "STAGING_PASSWORD",
+    "oldPassword": "BASIC_HTTP_AUTH_OLD_PASSWORD"
+  },
+  "jwtAuth": {
+    "key": "OT_JWT_AUTH_KEY",
+    "oldKey": "OT_JWT_AUTH_OLD_KEY",
+    "algorithm": "OT_JWT_AUTH_ALG"
+  },
+  "clusterWorkers": "CLUSTER_WORKERS",
+  "maxFileUploadSize": "MAX_FILE_UPLOAD_SIZE",
+  "httpsOnly": "HTTPS_ONLY",
+  "httpRequestTimeout": "HTTP_REQUEST_TIMEOUT",
+  "historyBufferLevel": "HISTORY_BUFFER_LEVEL",
+  "forcePersistBuffer": "FORCE_PERSIST_BUFFER",
+  "nextHistoryBufferLevel": "NEXT_HISTORY_BUFFER_LEVEL",
+  "nextHistoryBufferLevelRolloutPercentage": "NEXT_HISTORY_BUFFER_LEVEL_ROLLOUT_PERCENTAGE",
+  "redis": {
+    "queue": {
+      "host": "QUEUES_REDIS_HOST",
+      "password": "QUEUES_REDIS_PASSWORD",
+      "port": "QUEUES_REDIS_PORT"
+    },
+    "history": {
+      "host": "HISTORY_REDIS_HOST",
+      "password": "HISTORY_REDIS_PASSWORD",
+      "port": "HISTORY_REDIS_PORT"
+    },
+    "lock": {
+      "host": "REDIS_HOST",
+      "password": "REDIS_PASSWORD",
+      "port": "REDIS_PORT"
+    }
+  },
+  "projectHistory": {
+    "host": "PROJECT_HISTORY_HOST",
+    "port": "PROJECT_HISTORY_PORT"
+  }
+}

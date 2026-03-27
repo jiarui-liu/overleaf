@@ -1,0 +1,8 @@
+chat
+--dependencies=mongo
+--env-add=
+--env-pass-through=
+--esmock-loader=False
+--node-version=24.13.0
+--pipeline-owner=🥑 Core
+--public-repo=False
