@@ -53,7 +53,7 @@ docker compose version
 ## 1. Start the Services
 
 ```bash
-cd /home/ubuntu/.jiarui/overleaf/develop
+cd /home/ubuntu/overleaf/develop
 bin/build
 # or try COMPOSE_PARALLEL_LIMIT=1 bin/build
 docker build texlive -t texlive-full
@@ -149,9 +149,11 @@ echo "Done restructuring blob files"
 
 **Note:** This needs to be re-run each time you upload a new project with binary files.
 
-## 7. SSH Tunnel (Access from Local Computer)
+## 7. Access the Site
 
-From your **local machine**, set up an SSH port forward:
+The site is publicly accessible at: **http://184.73.127.245**
+
+Alternatively, you can set up an SSH tunnel from your **local machine**:
 
 ```bash
 ssh -L 8080:localhost:80 <your-user>@<your-linux-machine>
@@ -164,7 +166,7 @@ Then open `http://localhost:8080` in your browser.
 Shell into the web container:
 
 ```bash
-cd /home/ubuntu/.jiarui/overleaf/develop
+cd /home/ubuntu/overleaf/develop
 bin/shell web
 ```
 
@@ -180,10 +182,10 @@ It will print an activation URL like:
 http://127.0.0.1:3000/user/activate?token=<TOKEN>&user_id=<USER_ID>
 ```
 
-Replace `127.0.0.1:3000` with `localhost:8080` and open in your browser to set your password:
+Replace `127.0.0.1:3000` with `184.73.127.245` (or `localhost:8080` if using SSH tunnel) and open in your browser to set your password:
 
 ```
-http://localhost:8080/user/activate?token=<TOKEN>&user_id=<USER_ID>
+http://184.73.127.245/user/activate?token=<TOKEN>&user_id=<USER_ID>
 ```
 
 ## 9. Clean Compile Cache (If Needed)
@@ -201,7 +203,7 @@ Then recompile in the browser.
 After `bin/up` finishes and all containers are running, run these commands in order:
 
 ```bash
-cd /home/ubuntu/.jiarui/overleaf/develop
+cd /home/ubuntu/overleaf/develop
 
 # Fix upload permissions
 docker compose exec --user root web bash -c "mkdir -p /overleaf/services/web/data/uploads && chmod 777 /overleaf/services/web/data/uploads"
