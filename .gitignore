@@ -4,3 +4,8 @@
 # user defined files
 .env_credentials
 docker-compose.override.yml
+
+# LaTeX compilation artifacts
+compiles/
+output/
+latexmkrc
