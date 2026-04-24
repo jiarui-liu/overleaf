@@ -226,6 +226,35 @@ docker compose exec clsi bash -c "rm -rf /overleaf/services/clsi/compiles/*/outp
 Then recompile your project in the browser.
 
 
+## Switching Branches
+
+The dev Docker Compose setup (`develop/docker-compose.yml`) bind-mounts the host source tree into the containers, so `git checkout <branch>` already changes the code the running containers see. What you need to do after switching depends on what the new branch touched:
+
+| What changed on the new branch | Action required |
+| --- | --- |
+| Frontend only (`services/web/frontend/**` — `.tsx`, `.ts`, `.scss`) | Nothing — the `webpack` dev server auto-recompiles on file changes. Hard-refresh the browser (Cmd/Ctrl+Shift+R) if the page looks stale. |
+| Backend (`services/web/app/**` — routes, controllers, `.mjs`, `.pug` views) | Restart the web container: `cd develop && docker compose restart web` (~30–60s downtime). |
+| `docker-compose*.yml`, Dockerfiles, or container env | Rebuild/recreate the affected service: `docker compose up -d --build <service>`. |
+| Other services (`services/clsi`, `services/filestore`, etc.) | Restart or rebuild that specific service the same way. |
+
+Check what changed before switching:
+
+```bash
+git diff --stat <current-branch>..<target-branch> | tail -20
+```
+
+Tail the logs to confirm the change picked up:
+
+```bash
+cd /home/ubuntu/overleaf/develop
+docker compose logs -f --tail=20 webpack   # frontend recompile
+docker compose logs -f --tail=20 web       # backend startup
+```
+
+### Gotcha: the site is HTTP-only
+
+The server listens on port **80 only** — use `http://184.73.127.245/`. There is nothing on port 443, so `https://184.73.127.245/` will time out. If your browser auto-upgrades to HTTPS (HSTS cache), type `http://` explicitly or open an incognito window.
+
 ## Check logs
 
 ```bash
