@@ -329,6 +329,97 @@ async function doCompile(request, stats, timings) {
   return { outputFiles, buildId }
 }
 
+/**
+ * If the compile did not produce output.pdf, copy the most recent
+ * output.pdf from a previous build under the output cache so clients still get a PDF.
+ */
+async function maybeRestoreOutputPdfFromPreviousBuild(
+  { projectId, userId, compileDir, outputDir, preassignedBuildId, stats },
+  rawOutputFiles
+) {
+  if (rawOutputFiles.some(f => f.path === 'output.pdf')) {
+    return rawOutputFiles
+  }
+
+  const cacheRoot = Path.join(outputDir, OutputCacheManager.CACHE_SUBDIR)
+  let entries
+  try {
+    entries = await fsPromises.readdir(cacheRoot, { withFileTypes: true })
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      logger.warn(
+        {
+          projectId,
+          userId,
+          cacheRoot,
+          nOutputFiles: rawOutputFiles.length,
+        },
+        '_saveOutputFiles: no output.pdf in compile dir and no output cache root (nothing to restore from)'
+      )
+      return rawOutputFiles
+    }
+    throw err
+  }
+
+  const buildDirs = entries
+    .filter(
+      d =>
+        d.isDirectory() &&
+        OutputCacheManager.BUILD_REGEX.test(d.name) &&
+        (!preassignedBuildId || d.name !== preassignedBuildId)
+    )
+    .map(d => d.name)
+
+  buildDirs.sort((a, b) => {
+    const ta = parseInt(a.split('-')[0], 16) || 0
+    const tb = parseInt(b.split('-')[0], 16) || 0
+    return tb - ta
+  })
+
+  for (const prevBuildId of buildDirs) {
+    const src = Path.join(cacheRoot, prevBuildId, 'output.pdf')
+    try {
+      await fsPromises.copyFile(
+        src,
+        Path.join(compileDir, 'output.pdf')
+      )
+    } catch (err) {
+      if (err.code === 'ENOENT') {
+        continue
+      }
+      logger.warn(
+        { err, projectId, userId, src },
+        '_saveOutputFiles: could not copy output.pdf from previous build'
+      )
+      continue
+    }
+    if (stats) {
+      stats['output-pdf-restored'] = 1
+    }
+    logger.info(
+      {
+        projectId,
+        userId,
+        restoredFromBuildId: prevBuildId,
+        nOutputFilesBefore: rawOutputFiles.length,
+      },
+      '_saveOutputFiles: restored output.pdf from previous build (current compile produced none)'
+    )
+    return [{ path: 'output.pdf', type: 'pdf' }, ...rawOutputFiles]
+  }
+
+  logger.warn(
+    {
+      projectId,
+      userId,
+      nOutputFiles: rawOutputFiles.length,
+      previousBuildDirsChecked: buildDirs.length,
+    },
+    '_saveOutputFiles: no output.pdf in compile dir and no previous build pdf available to restore'
+  )
+  return rawOutputFiles
+}
+
 async function _saveOutputFiles({
   request,
   compileDir,
@@ -338,17 +429,55 @@ async function _saveOutputFiles({
 }) {
   const start = Date.now()
   const outputDir = getOutputDir(request.project_id, request.user_id)
+  const { project_id: projectId, user_id: userId } = request
 
   const { outputFiles: rawOutputFiles, allEntries } =
     await OutputFileFinder.promises.findOutputFiles(resourceList, compileDir)
 
+  const hasPdfAfterScan = rawOutputFiles.some(f => f.path === 'output.pdf')
+  logger.info(
+    {
+      projectId,
+      userId,
+      preassignedBuildId: request.buildId,
+      nFiles: rawOutputFiles.length,
+      hasOutputPdf: hasPdfAfterScan,
+    },
+    '_saveOutputFiles: after OutputFileFinder scan of compile dir'
+  )
+
+  const filesToSave = await maybeRestoreOutputPdfFromPreviousBuild(
+    {
+      projectId,
+      userId,
+      compileDir,
+      outputDir,
+      preassignedBuildId: request.buildId,
+      stats,
+    },
+    rawOutputFiles
+  )
+
   const { buildId, outputFiles } =
     await OutputCacheManager.promises.saveOutputFiles(
       { request, stats, timings },
-      rawOutputFiles,
+      filesToSave,
       compileDir,
       outputDir
     )
+
+  const hasPdfInResult = outputFiles?.some(f => f.path === 'output.pdf')
+  if (!hasPdfInResult) {
+    logger.warn(
+      {
+        projectId,
+        userId,
+        buildId,
+        nFiles: outputFiles?.length,
+      },
+      '_saveOutputFiles: result has no output.pdf after copy to build cache'
+    )
+  }
 
   timings.output = Date.now() - start
   return { outputFiles, allEntries, buildId }

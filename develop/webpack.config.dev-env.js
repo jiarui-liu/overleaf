@@ -4,7 +4,7 @@ const base = require('./webpack.config.dev')
 
 module.exports = merge(base, {
   devServer: {
-    allowedHosts: 'auto',
+	  allowedHosts: "all",
     devMiddleware: {
       index: false,
     },

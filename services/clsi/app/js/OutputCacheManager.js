@@ -142,6 +142,17 @@ export default OutputCacheManager = {
     outputDir,
     callback
   ) {
+    const nIncoming = outputFiles?.length ?? 0
+    const hasIncomingPdf = outputFiles?.some(f => f.path === 'output.pdf')
+    logger.info(
+      {
+        projectId: request.project_id,
+        userId: request.user_id,
+        nFiles: nIncoming,
+        hasOutputPdf: hasIncomingPdf,
+      },
+      'OutputCacheManager.saveOutputFiles: file list from compile dir before build cache copy'
+    )
     const getBuildId = cb => {
       if (request.buildId) return cb(null, request.buildId)
       OutputCacheManager.generateBuildId(cb)

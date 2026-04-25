@@ -172,7 +172,8 @@ function _buildLatexCommand(mainFile, opts = {}) {
     '-auxdir=$COMPILE_DIR',
     '-outdir=$COMPILE_DIR',
     '-synctex=1',
-    '-interaction=batchmode',
+    '-file-line-error',
+    '-interaction=nonstopmode',
     '-time'
   )
 
