@@ -540,14 +540,25 @@ async function register(req, res, next) {
     })
     res.redirect('/project')
   } catch (err) {
+    const sharedProjectData = req.session.sharedProjectData || {}
+    const newTemplateData = {}
+    if (req.session.templateData != null) {
+      newTemplateData.templateName = req.session.templateData.templateName
+    }
+    const registerViewLocals = {
+      title: 'register',
+      sharedProjectData,
+      newTemplateData,
+      samlBeta: req.session.samlBeta,
+    }
     if (err.message === 'EmailAlreadyRegistered') {
       res.render('user/register', {
-        title: 'register',
+        ...registerViewLocals,
         errorMessage: 'Email already registered. Please log in.',
       })
     } else if (err.message === 'request is not valid') {
       res.render('user/register', {
-        title: 'register',
+        ...registerViewLocals,
         errorMessage: 'Invalid email or password (min 8 characters).',
       })
     } else {
