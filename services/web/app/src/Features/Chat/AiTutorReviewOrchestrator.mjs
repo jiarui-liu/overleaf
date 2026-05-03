@@ -1049,12 +1049,14 @@ export const SUBAGENT_DEFS = [
       '06_writing_style/capitalization_and_acronyms.md',
       '06_writing_style/general_writing_habits.md',
       '06_writing_style/citations_and_references.md',
+      '06_writing_style/affiliations.md',
     ],
     sectionCategories: null, // receives full document
     guidanceKey: null,
     textOnly: true,
     systemPreamble:
       'Review the writing style: grammar, tense consistency, pronoun clarity, vague language, formality, active voice, filler words, capitalization, ' +
+      'affiliations (verify author affiliations follow lab policy), ' +
       'and overall structure — one key idea, storytelling flow, whether first sentences of paragraphs tell the whole story, heading frequency (~every 10-15 lines), and consistency in presentation.',
   },
   {

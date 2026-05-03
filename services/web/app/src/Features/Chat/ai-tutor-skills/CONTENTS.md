@@ -101,6 +101,7 @@ Each file is assigned to one or more **static reviewer subagents** that review t
 | `math_and_formulas.md` | `methods`, `latex_formatting` | TEXT | \mathrm/\bm/\top, equations as sentences, notation consistency, macros |
 | `capitalization_and_acronyms.md` | `writing_style` | TEXT | Lowercase ML terms, abbreviation rules, title vs. sentence capitalization |
 | `general_writing_habits.md` | `writing_style` | TEXT | Write early, outline method, one key idea, terminology consistency, elevator pitch |
+| `affiliations.md` | `writing_style` | TEXT | Official affiliation strings (MPI, Jinesis Lab, EuroSafeAI), when to use lab-only vs. external affiliations |
 
 ---
 
