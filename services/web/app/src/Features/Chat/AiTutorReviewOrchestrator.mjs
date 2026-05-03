@@ -1003,8 +1003,8 @@ export const SUBAGENT_DEFS = [
     textOnly: true,
     systemPreamble:
       'Review the writing style: grammar, tense consistency, pronoun clarity, vague language, formality, active voice, filler words, capitalization, ' +
-      'affiliations (verify author affiliations follow lab policy), ' +
-      'and overall structure — one key idea, storytelling flow, whether first sentences of paragraphs tell the whole story, heading frequency (~every 10-15 lines), and consistency in presentation.',
+      'and overall structure — one key idea, storytelling flow, whether first sentences of paragraphs tell the whole story, heading frequency (~every 10-15 lines), and consistency in presentation. ' +
+      'IMPORTANT: Also review the LaTeX preamble (the author/affiliation block before the document body) for affiliation metadata — check that all affiliation strings match the official lab policy described in the affiliations skill.',
   },
   {
     id: 'latex_formatting',
