@@ -52,6 +52,15 @@ const SKIP_ANONYMITY = process.env.AI_TUTOR_SKIP_ANONYMITY === 'true'
 const SKIP_SOURCE_COMMENTS = process.env.AI_TUTOR_SKIP_SOURCE_COMMENTS === 'true'
 const CONTENT_FOCUS = process.env.AI_TUTOR_CONTENT_FOCUS === 'true'
 
+// Editorial checks appended to every Phase 3 reviewer system prompt.
+const EDITORIAL_REVIEW_CHECKS = `
+
+## Editorial & publication conventions
+When the manuscript touches these patterns, consider a comment if it helps the author:
+- **\\href and URLs**: For scientific papers, books, and similar publications, \\href hyperlinks are not routine — many readers use printed copies where links are not clickable. A visible, typeable URL in the running text or a footnote is often more practical than wrapping the URL in \\href. (Venues that expect a single canonical code/data URL may differ.)
+- **Start of appendix**: Immediately before the first appendix section (or the start of the appendix block), editorial preference is often **\\cleardoublepage** instead of \\newpage or \\clearpage for two-sided documents, so the appendix opens on a recto (odd) page.
+`
+
 // Fuzzy matching threshold (0.0–1.0). Higher = stricter. Default 0.85.
 // Set AI_TUTOR_FUZZY_THRESHOLD in .env to override.
 const FUZZY_THRESHOLD_ENV = parseFloat(process.env.AI_TUTOR_FUZZY_THRESHOLD)
@@ -1073,7 +1082,8 @@ export const SUBAGENT_DEFS = [
     textOnly: true,
     systemPreamble:
       'Review LaTeX formatting and front matter: \\cref usage, table formatting (booktabs, no vertical bars), ' +
-      'equation punctuation, broken references, quotation marks, and the title block ' +
+      'equation punctuation, broken references, quotation marks, \\href vs typeable URLs for print readers, ' +
+      '\\cleardoublepage before the appendix where appropriate, and the title block ' +
       '(author emails must be listed; the first-page footnote must declare preprint status with the current year).',
   },
   {
@@ -1665,7 +1675,7 @@ Do NOT produce:
 - Verbose explanations when a short, direct suggestion suffices — these fail conciseness
 
 ${defaultInstructions}
-${strictBlock}
+${strictBlock}${EDITORIAL_REVIEW_CHECKS}
 
 ## Writing Skills Reference
 ${skillContent}
@@ -1700,7 +1710,7 @@ Do NOT produce:
 - Summaries of what the text already says
 - Verbose explanations when a short, direct suggestion suffices — these fail conciseness
 
-${defaultInstructions}
+${defaultInstructions}${EDITORIAL_REVIEW_CHECKS}
 
 ## Writing Skills Reference
 ${previewText(skillContent)}
