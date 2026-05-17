@@ -100,6 +100,7 @@ The core review engine with 4 phases:
   - A system prompt with its skill file content, type-specific guidance, and role model paper injection (if provided)
   - Review text: either specific sections (for section-focused agents), full document (for style/formatting/venue agents), figure/table environments (for figures agent), or a structural skeleton (for structure agent)
 - All agents run in parallel with 120s timeout per agent
+- When an agent's assigned review text exceeds `MAX_AGENT_INPUT_CHARS` (default 1,000,000; override via `AI_TUTOR_MAX_AGENT_INPUT_CHARS`), the task is decomposed into paragraph-aligned chunks, each reviewed by a parallel lower-level sub-agent; their comments are then merged (per-chunk comment budget scales so the agent total stays ~10)
 - Each returns up to 10 structured comments with `{highlightText, comment, severity}`
 
 **Phase 3 — Comment Position Mapping**
@@ -120,6 +121,7 @@ The core review engine with 4 phases:
 - `extractFigureTableEnvironments(tex)` — regex extraction of figure/table LaTeX environments with surrounding context
 - `buildSkeleton(sections)` — creates a structural overview with section titles and first sentences
 - `buildRoleModelInjection(roleModelTexts, agentId)` — builds agent-specific role model comparison prompts with instructions to focus on structure/style, not content
+- `splitIntoChunks(text, maxChars)` — splits oversized review text into paragraph-aligned chunks (each a verbatim substring) for sub-agent decomposition
 - `generateObjectWithRetry(params)` — LLM call wrapper with automatic context truncation and retry on token limit errors
 - `mapCommentsToDocuments(comments, mergedTex, docContentMap, rootDocPath)` — the three-pass comment positioning engine
 

@@ -57,6 +57,21 @@ const CONTENT_FOCUS = process.env.AI_TUTOR_CONTENT_FOCUS === 'true'
 const FUZZY_THRESHOLD_ENV = parseFloat(process.env.AI_TUTOR_FUZZY_THRESHOLD)
 const FUZZY_THRESHOLD_DEFAULT = 0.85
 
+// Maximum review-text size (in characters) handed to a single sub-agent.
+// When an agent's assigned input exceeds this threshold, the review task is
+// decomposed into smaller chunks, each handled by a lower-level sub-agent
+// running in parallel; their comments are merged afterwards. Default: 1000000
+// (effectively disabled — decomposition only triggers for very large inputs).
+// Set AI_TUTOR_MAX_AGENT_INPUT_CHARS in .env to override.
+const MAX_AGENT_INPUT_CHARS_ENV = parseInt(
+  process.env.AI_TUTOR_MAX_AGENT_INPUT_CHARS,
+  10
+)
+const MAX_AGENT_INPUT_CHARS =
+  Number.isFinite(MAX_AGENT_INPUT_CHARS_ENV) && MAX_AGENT_INPUT_CHARS_ENV > 0
+    ? MAX_AGENT_INPUT_CHARS_ENV
+    : 1_000_000
+
 // ---------------------------------------------------------------------------
 // Skill loader
 // ---------------------------------------------------------------------------
@@ -405,6 +420,37 @@ function truncateText(text, maxChars)
     '\n\n[... truncated due to context length limits ...]\n\n' +
     text.slice(-half)
   )
+}
+
+/**
+ * Split text into chunks no larger than maxChars, breaking at paragraph
+ * boundaries where possible. Each returned chunk is a verbatim substring of
+ * the input, so comment highlightText validation remains exact. Used to
+ * decompose an oversized agent task across parallel lower-level sub-agents.
+ */
+function splitIntoChunks(text, maxChars)
+{
+  if (text.length <= maxChars) return [text]
+  const chunks = []
+  let start = 0
+  while (start < text.length)
+  {
+    if (text.length - start <= maxChars)
+    {
+      chunks.push(text.slice(start))
+      break
+    }
+    let end = start + maxChars
+    // Prefer a paragraph break, but only if it does not produce a tiny chunk
+    const paraBreak = text.lastIndexOf('\n\n', end)
+    if (paraBreak > start + Math.floor(maxChars / 2))
+    {
+      end = paraBreak
+    }
+    chunks.push(text.slice(start, end))
+    start = end
+  }
+  return chunks
 }
 
 /**
@@ -1509,6 +1555,24 @@ async function runSubagent(
     `[AI Tutor] [${def.name}] Review text: ${reviewText.length} chars from ${textSource}`
   )
 
+  // 1b. Decompose the task when the assigned review text exceeds the
+  //     per-sub-agent input threshold. Each chunk becomes a lower-level
+  //     sub-agent that runs in parallel (see step 6); their comments are
+  //     merged afterwards. Small inputs yield a single chunk (no change).
+  const chunks = splitIntoChunks(reviewText, MAX_AGENT_INPUT_CHARS)
+  const decomposed = chunks.length > 1
+  const maxComments = decomposed
+    ? Math.max(4, Math.ceil(10 / chunks.length))
+    : 10
+  if (decomposed)
+  {
+    console.log(
+      `[AI Tutor] [${def.name}] Input exceeds ${MAX_AGENT_INPUT_CHARS}-char threshold — ` +
+      `decomposing into ${chunks.length} parallel sub-agent task(s), ` +
+      `up to ${maxComments} comments each.`
+    )
+  }
+
   // 2. Load skill files
   const skillContent = def.skillFiles
     .map(f =>
@@ -1537,7 +1601,7 @@ async function runSubagent(
   // 3b. Build role model injection
   const roleModelInjection = buildRoleModelInjection(roleModelTexts, def.id)
 
-  // 4. Call LLM
+  // 4. Build the shared system prompt (identical across all sub-agent chunks)
   const strictBlock = STRICT_MODE
     ? `\n\nIMPORTANT — STRICT MODE IS ON:
 You must ONLY report issues that would materially affect a reviewer's assessment, the paper's acceptance chances, or a reader's ability to understand the work. Apply a high bar: if a reviewer would not mention this issue in their review, neither should you.
@@ -1556,8 +1620,8 @@ If the text has few genuine issues, generate fewer comments. It is perfectly acc
     : ''
 
   const defaultInstructions = STRICT_MODE
-    ? `Produce at most 10 comments. Only flag issues at [warning] or [critical] severity. Do not include [suggestion]-level comments. Your comments must be concise, limited to 1 to 3 sentences to ensure readability.`
-    : `Produce at most 10 comments. Prioritize fewer, deeper comments over many shallow ones. Label each comment as one of:
+    ? `Produce at most ${maxComments} comments. Only flag issues at [warning] or [critical] severity. Do not include [suggestion]-level comments. Your comments must be concise, limited to 1 to 3 sentences to ensure readability.`
+    : `Produce at most ${maxComments} comments. Prioritize fewer, deeper comments over many shallow ones. Label each comment as one of:
 [suggestion] (nice to have),
 [warning] (should fix), or
 [critical] (must fix).
@@ -1596,9 +1660,7 @@ ${skillContent}
 ${guidanceInjection}
 ${roleModelInjection}`
 
-  const userPrompt = `Review the following LaTeX text and provide your comments:\n\n${reviewText}`
-
-  // Build log-friendly versions: full template but skill content and review text previewed
+  // Build the log-friendly system prompt (skill content previewed)
   const roleModelLogNote = roleModelTexts.length > 0
     ? `\n\n## Role Model Papers — Structure & Style Reference\n[${roleModelTexts.length} paper(s), ${roleModelTexts.reduce((s, r) => s + r.text.length, 0)} chars total — content omitted from log]`
     : ''
@@ -1633,82 +1695,86 @@ ${previewText(skillContent)}
 ${guidanceInjection}
 ${roleModelLogNote}`
 
-  const logUserPrompt = `Review the following LaTeX text. For each comment, identify a specific passage that could be strengthened and provide either a concrete suggestion for improvement or a concern the author needs to address:\n\n${previewText(reviewText)}`
-
   console.log(
     `[AI Tutor] [${def.name}] System prompt: ${systemPrompt.length} chars ` +
     `(${def.skillFiles.length} skill files, guidance: ${guidanceInjection ? 'yes' : 'none'}, ` +
     `role models: ${roleModelTexts.length > 0 ? roleModelTexts.length + ' paper(s)' : 'none'})`
   )
 
-  const result = await generateObjectWithRetry({
-    model: openai(model),
-    schema: CommentArraySchema,
-    system: systemPrompt,
-    prompt: userPrompt,
-    temperature: 0.4,
-  }, `Phase2-${def.id}`, { system: logSystemPrompt, prompt: logUserPrompt })
-
-  // 5. Validate: only keep comments whose highlightText actually exists in the review text
-  const rawCount = result.object.comments.length
-  const validated = result.object.comments.filter(c =>
+  // 5. Run the sub-agent task(s). Each chunk is reviewed by a lower-level
+  //    sub-agent; the shared system prompt is identical across chunks, so
+  //    only the review text and the per-task log label differ.
+  const reviewOneChunk = async (chunkText, label) =>
   {
-    if (reviewText.includes(c.highlightText)) return true
+    const userPrompt = `Review the following LaTeX text and provide your comments:\n\n${chunkText}`
+    const logUserPrompt = `Review the following LaTeX text. For each comment, identify a specific passage that could be strengthened and provide either a concrete suggestion for improvement or a concern the author needs to address:\n\n${previewText(chunkText)}`
 
-    // Try repairing JSON-escaped LaTeX backslashes
-    const repaired = repairJsonEscapedLatex(c.highlightText)
-    if (repaired !== c.highlightText && reviewText.includes(repaired))
+    const result = await generateObjectWithRetry({
+      model: openai(model),
+      schema: CommentArraySchema,
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: 0.4,
+    }, `Phase2-${label}`, { system: logSystemPrompt, prompt: logUserPrompt })
+
+    // Validate: only keep comments whose highlightText exists in this chunk
+    const rawCount = result.object.comments.length
+    const validated = result.object.comments.filter(c =>
     {
-      console.log(
-        `[AI Tutor] [${def.name}] Repaired JSON-escaped highlightText: "${repaired.slice(0, 80)}..."`
+      if (chunkText.includes(c.highlightText)) return true
+
+      // Try repairing JSON-escaped LaTeX backslashes
+      const repaired = repairJsonEscapedLatex(c.highlightText)
+      if (repaired !== c.highlightText && chunkText.includes(repaired))
+      {
+        c.highlightText = repaired
+        return true
+      }
+
+      // Try fuzzy matching as last resort
+      const fuzzyResult = fuzzyFindInText(c.highlightText, chunkText)
+      if (fuzzyResult)
+      {
+        c.highlightText = fuzzyResult.matchedText
+        return true
+      }
+
+      console.warn(
+        `[AI Tutor] [${def.name}] [${label}] WARN: highlightText not found, discarding: ` +
+        `"${c.highlightText.slice(0, 80)}..."`
       )
-      c.highlightText = repaired
-      return true
+      return false
+    })
+
+    // In strict mode, drop any suggestion-level comments the LLM produced
+    let kept = validated
+    if (STRICT_MODE)
+    {
+      kept = kept.filter(c => c.severity !== 'suggestion')
     }
 
-    // Try fuzzy matching as last resort
-    const fuzzyResult = fuzzyFindInText(c.highlightText, reviewText)
-    if (fuzzyResult)
-    {
-      console.log(
-        `[AI Tutor] [${def.name}] Fuzzy-matched highlightText (sim=${fuzzyResult.similarity.toFixed(3)}): ` +
-        `"${fuzzyResult.matchedText.slice(0, 80)}..."`
-      )
-      c.highlightText = fuzzyResult.matchedText
-      return true
-    }
-
-    console.warn(
-      `[AI Tutor] [${def.name}] WARN: highlightText not found in review text, discarding: ` +
-      `"${c.highlightText.slice(0, 80)}..." (comment: "${c.comment.slice(0, 60)}...")`
+    console.log(
+      `[AI Tutor] [${def.name}] [${label}] ${kept.length}/${rawCount} comment(s) kept`
     )
-    return false
-  })
-
-  // In strict mode, drop any suggestion-level comments the LLM generated despite instructions
-  let finalComments = validated
-  if (STRICT_MODE)
-  {
-    const before = finalComments.length
-    finalComments = finalComments.filter(c => c.severity !== 'suggestion')
-    if (before - finalComments.length > 0)
-    {
-      console.log(
-        `[AI Tutor] [${def.name}] Strict mode: dropped ${before - finalComments.length} suggestion-level comment(s)`
-      )
-    }
+    return kept
   }
 
-  console.log(
-    `[AI Tutor] [${def.name}] Validation: ${finalComments.length}/${rawCount} comments kept` +
-    (rawCount - finalComments.length > 0
-      ? ` (${rawCount - finalComments.length} discarded)`
-      : '')
+  // 6. Run all sub-agent task(s) in parallel and merge their comments
+  const chunkResults = await Promise.all(
+    chunks.map((chunk, i) =>
+      reviewOneChunk(
+        chunk,
+        decomposed ? `${def.id}.${i + 1}/${chunks.length}` : def.id
+      )
+    )
   )
-  for (const c of finalComments)
+  const finalComments = chunkResults.flat()
+
+  if (decomposed)
   {
     console.log(
-      `[AI Tutor] [${def.name}]   [${c.severity}] "${c.highlightText.slice(0, 50)}..." => ${c.comment.slice(0, 80)}...`
+      `[AI Tutor] [${def.name}] Merged ${finalComments.length} comment(s) ` +
+      `from ${chunks.length} sub-agent task(s)`
     )
   }
 
