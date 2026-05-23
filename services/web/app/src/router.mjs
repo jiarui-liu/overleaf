@@ -1098,6 +1098,14 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
       ChatController.reviewWholeProject
     )
 
+    // Citation Sleuth — standalone Semantic Scholar reference check
+    webRouter.post(
+      '/project/:project_id/ai-tutor-citation-check',
+      AuthorizationMiddleware.blockRestrictedUserFromProject,
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      ChatController.citationCheckProject
+    )
+
     // AI Tutor delete all AI Tutor comments
     webRouter.post(
       '/project/:project_id/ai-tutor-delete-comments',
