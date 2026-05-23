@@ -72,6 +72,10 @@ const MAX_AGENT_INPUT_CHARS =
     ? MAX_AGENT_INPUT_CHARS_ENV
     : 1_000_000
 
+// Current review timestamp
+const SUBMISSION_YEAR = new Date().getFullYear()
+const SUBMISSION_DATE_ISO = new Date().toISOString().slice(0, 10)
+
 // ---------------------------------------------------------------------------
 // Skill loader
 // ---------------------------------------------------------------------------
@@ -81,7 +85,10 @@ function loadSkill(relativePath)
   const fullPath = path.join(SKILLS_DIR, relativePath)
   try
   {
-    const content = fs.readFileSync(fullPath, 'utf-8')
+    let content = fs.readFileSync(fullPath, 'utf-8')
+    content = content
+      .replaceAll('{{CURRENT_YEAR}}', String(SUBMISSION_YEAR))
+      .replaceAll('{{CURRENT_DATE}}', SUBMISSION_DATE_ISO)
     console.log(`[AI Tutor] Loaded skill: ${relativePath} (${content.length} chars)`)
     return content
   } catch (err)
@@ -1057,12 +1064,15 @@ export const SUBAGENT_DEFS = [
       '06_writing_style/latex_formatting.md',
       '06_writing_style/math_and_formulas.md',
       '05_figures_and_tables/table_formatting.md',
+      '04_paper_sections/front_matter.md',
     ],
     sectionCategories: null, // receives full document
     guidanceKey: null,
     textOnly: true,
     systemPreamble:
-      'Review LaTeX formatting: \\cref usage, table formatting (booktabs, no vertical bars), equation punctuation, broken references, quotation marks.',
+      'Review LaTeX formatting and front matter: \\cref usage, table formatting (booktabs, no vertical bars), ' +
+      'equation punctuation, broken references, quotation marks, and the title block ' +
+      '(author emails must be listed; the first-page footnote must declare preprint status with the current year).',
   },
   {
     id: 'figures_tables',

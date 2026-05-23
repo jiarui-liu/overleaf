@@ -24,7 +24,7 @@ Inside the main document:
 
 ## Acronym Packages
 
-There are LaTeX packages to enforce consistent acronym usage (e.g., `acronym` or `glossaries` package). See `05_writing_style/capitalization_and_acronyms.md` for abbreviation rules.
+There are LaTeX packages to enforce consistent acronym usage (e.g., `acronym` or `glossaries` package). See `06_writing_style/capitalization_and_acronyms.md` for abbreviation rules.
 
 ## Paper Section Ordering
 
