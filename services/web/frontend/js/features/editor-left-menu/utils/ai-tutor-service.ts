@@ -93,3 +93,38 @@ export async function deleteAiTutorComments(
     `/project/${projectId}/ai-tutor-delete-comments`
   )) as { deleted: number }
 }
+
+export interface CitationCheckStats {
+  verified?: number
+  mismatch?: number
+  fabricated?: number
+  unverified?: number
+  doi_not_found?: number
+  doi_mismatch?: number
+  no_title?: number
+  skipped?: string
+  error?: string
+}
+
+export interface CitationCheckResult extends ReviewResult {
+  citationVerification: CitationCheckStats
+  elapsedSeconds?: number
+}
+
+export async function runCitationCheck(
+  projectId: string
+): Promise<{ success: boolean; result?: CitationCheckResult; error?: string }> {
+  try {
+    const result = (await postJSON(
+      `/project/${projectId}/ai-tutor-citation-check`,
+      { body: {} }
+    )) as CitationCheckResult
+    return { success: true, result }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'An unknown error occurred.',
+    }
+  }
+}

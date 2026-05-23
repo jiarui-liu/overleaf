@@ -12,6 +12,7 @@ import DocumentHelper from '../Documents/DocumentHelper.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runFullReview } from './AiTutorReviewOrchestrator.mjs'
+import { verifyCitations } from './CitationVerifier.mjs'
 
 async function sendMessage(req, res) {
   const { project_id: projectId } = req.params
@@ -806,6 +807,106 @@ async function reviewWholeProject(req, res) {
   }
 }
 
+async function citationCheckProject(req, res) {
+  const { project_id: projectId } = req.params
+  const t0 = Date.now()
+
+  try {
+    if (!process.env.SEMANTIC_SCHOLAR_API_KEY) {
+      return res.status(500).json({
+        error: 'SEMANTIC_SCHOLAR_API_KEY not configured on the server.',
+      })
+    }
+
+    const allDocs = await ProjectEntityHandler.promises.getAllDocs(projectId)
+
+    const bibFiles = []
+    const docPathToId = {}
+    for (const [docPath, docData] of Object.entries(allDocs)) {
+      const normalized = docPath.startsWith('/') ? docPath.slice(1) : docPath
+      docPathToId[normalized] = docData._id.toString()
+      if (!normalized.toLowerCase().endsWith('.bib')) continue
+      const content = Array.isArray(docData.lines)
+        ? docData.lines.join('\n')
+        : docData.lines || ''
+      if (content.length > 0) {
+        bibFiles.push({ path: normalized, content })
+      }
+    }
+
+    if (bibFiles.length === 0) {
+      return res.json({
+        projectId,
+        reviewedAt: new Date().toISOString(),
+        classification: {
+          paperType: 'citation_check',
+          paperTypeSummary: 'No .bib files found in this project.',
+        },
+        commentsByDoc: {},
+        docPathToId,
+        summary: { total: 0, byCategory: {}, bySeverity: {} },
+        failedAgents: [],
+        citationVerification: { skipped: 'no_bib_files' },
+      })
+    }
+
+    console.log(
+      `[Citation Sleuth] Verifying ${bibFiles.length} bib file(s), ` +
+      `${bibFiles.reduce((s, b) => s + b.content.length, 0)} total chars`
+    )
+
+    const cacheDir = path.join('/var/lib/overleaf/ai-tutor-cache', projectId)
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true })
+
+    const { comments, stats } = await verifyCitations({
+      bibFiles,
+      apiKey: process.env.SEMANTIC_SCHOLAR_API_KEY,
+      cacheDir,
+    })
+
+    const commentsByDoc = {}
+    const byCategory = {}
+    const bySeverity = {}
+    for (const c of comments) {
+      if (!commentsByDoc[c.docPath]) commentsByDoc[c.docPath] = []
+      commentsByDoc[c.docPath].push(c)
+      byCategory[c.category] = (byCategory[c.category] || 0) + 1
+      bySeverity[c.severity] = (bySeverity[c.severity] || 0) + 1
+    }
+
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1)
+    console.log(
+      `[Citation Sleuth] Done in ${elapsed}s. ${comments.length} comment(s). ` +
+      `Stats: ${JSON.stringify(stats)}`
+    )
+
+    res.json({
+      projectId,
+      reviewedAt: new Date().toISOString(),
+      classification: {
+        paperType: 'citation_check',
+        paperTypeSummary:
+          `Verified ${(stats.verified || 0) + (stats.mismatch || 0) + (stats.fabricated || 0) + (stats.unverified || 0)} citation(s) against Semantic Scholar.`,
+      },
+      commentsByDoc,
+      docPathToId,
+      summary: {
+        total: comments.length,
+        byCategory,
+        bySeverity,
+      },
+      failedAgents: [],
+      citationVerification: stats,
+      elapsedSeconds: parseFloat(elapsed),
+    })
+  } catch (err) {
+    console.error('[Citation Sleuth] Failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message })
+    }
+  }
+}
+
 async function deleteAiTutorComments(req, res) {
   const { project_id: projectId } = req.params
 
@@ -860,5 +961,6 @@ export default {
   logAITutorSuggestions: expressify(logAITutorSuggestions),
   analyzeWholeProject: expressify(analyzeWholeProject),
   reviewWholeProject: expressify(reviewWholeProject),
+  citationCheckProject: expressify(citationCheckProject),
   deleteAiTutorComments: expressify(deleteAiTutorComments),
 }

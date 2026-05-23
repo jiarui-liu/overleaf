@@ -7,6 +7,7 @@ import { postJSON } from '@/infrastructure/fetch-json'
 import RangesTracker from '@overleaf/ranges-tracker'
 import {
   runFullReview,
+  runCitationCheck,
   deleteAiTutorComments,
   WholeProjectMetadata,
   ReviewResult,
@@ -76,6 +77,10 @@ export default function AiTutorPanel() {
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null)
   const [reviewProgress, setReviewProgress] = useState<string | null>(null)
   const [appliedCount, setAppliedCount] = useState(0)
+
+  // Citation Sleuth state
+  const [isCitationChecking, setIsCitationChecking] = useState(false)
+  const [citationProgress, setCitationProgress] = useState<string | null>(null)
 
   // Auto-apply state
   const [isApplying, setIsApplying] = useState(false)
@@ -291,6 +296,59 @@ export default function AiTutorPanel() {
       setIsReviewing(false)
     }
   }, [projectId, selectedModel, selectedVenue, roleModelTexts])
+
+  const handleCitationCheck = useCallback(async () => {
+    setIsCitationChecking(true)
+    setError(null)
+    setSuccessMessage(null)
+    setCitationProgress(
+      'Cross-checking every reference against Semantic Scholar...'
+    )
+    setReviewResult(null)
+    setAppliedCount(0)
+
+    try {
+      const out = await runCitationCheck(projectId)
+      if (!out.success || !out.result) {
+        setError(out.error || 'Citation check failed.')
+        setCitationProgress(null)
+        return
+      }
+
+      const r = out.result
+      setReviewResult(r)
+      setCitationProgress(null)
+
+      const stats = r.citationVerification || {}
+      const bits: string[] = []
+      if (stats.verified) bits.push(`${stats.verified} verified`)
+      if (stats.mismatch) bits.push(`${stats.mismatch} mismatch`)
+      if (stats.fabricated) bits.push(`${stats.fabricated} fabricated`)
+      if (stats.unverified) bits.push(`${stats.unverified} unverified`)
+      const elapsed = r.elapsedSeconds ? ` in ${r.elapsedSeconds}s` : ''
+
+      if (r.summary.total === 0 && stats.skipped === 'no_bib_files') {
+        setSuccessMessage('No .bib files in this project — nothing to check.')
+      } else if (r.summary.total === 0) {
+        setSuccessMessage(
+          `All references look clean${elapsed}. Nothing to flag.`
+        )
+      } else {
+        setSuccessMessage(
+          `Citation Sleuth: ${r.summary.total} issue(s) found${elapsed}` +
+          (bits.length > 0 ? ` (${bits.join(', ')}).` : '.')
+        )
+      }
+    } catch (err) {
+      console.error('[Citation Sleuth] error:', err)
+      setError(
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
+      setCitationProgress(null)
+    } finally {
+      setIsCitationChecking(false)
+    }
+  }, [projectId])
 
   // -----------------------------------------------------------------------
   // Apply review comments across all documents automatically
@@ -525,6 +583,57 @@ export default function AiTutorPanel() {
             </ul>
           )}
         </OLFormGroup>
+
+        {/* ── Citation Sleuth ── */}
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: 'var(--bg-secondary-themed)',
+            borderRadius: '6px',
+            border: '1px solid var(--border-divider-themed)',
+          }}
+        >
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '8px',
+            }}
+          >
+            <MaterialIcon type="search" />
+            <strong>Citation Sleuth</strong>
+          </span>
+          <p
+            style={{ fontSize: '13px', color: 'var(--content-secondary-themed)', margin: '0 0 8px 0' }}
+          >
+            Cross-checks every reference in your .bib against Semantic Scholar.
+            Catches fabricated cites, wrong years, wrong authors, and venue
+            mismatches. ~10 seconds, no LLM cost.
+          </p>
+          <OLButton
+            variant="primary"
+            onClick={handleCitationCheck}
+            disabled={isCitationChecking || isReviewing || isApplying}
+            style={{ width: '100%', marginBottom: '6px' }}
+          >
+            {isCitationChecking ? 'Checking references...' : 'Check References'}
+          </OLButton>
+          {citationProgress && (
+            <div
+              style={{
+                fontSize: '12px',
+                color: 'var(--blue-50)',
+                padding: '6px 8px',
+                backgroundColor: 'var(--bg-tertiary-themed)',
+                borderRadius: '4px',
+              }}
+            >
+              {citationProgress}
+            </div>
+          )}
+        </div>
 
         {/* ── Full Paper Review ── */}
         <div
