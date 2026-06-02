@@ -75,6 +75,27 @@ Please see the [CONTRIBUTING](CONTRIBUTING.md) file for information on contribut
 
 [The Overleaf Team](https://www.overleaf.com/about)
 
+
+## Citation
+Use this BibTeX to cite the work
+
+```
+@inproceedings{
+liu-etal-2026-papermentor,
+title={{PaperMentor}: {A} Human-Centered Multi-Agent Writing Tutor for {AI} Research Papers in {O}verleaf},
+author={Jiarui Liu and Terry Jingchen Zhang and Ryan Faulkner and Xuanqiang Angelo Huang and Vilém Zouhar and
+Dominik Glandorf and Isabel Dahlgren and Rishit Dagli and Yuen Chen and Felix Leeb and Van Q.
+Truong and Punya Syon Pandey and Yves Bicker and Suvajit Majumder and Wenyuan Jiang and
+Zeju Qiu and Sankalan Pal Chowdhury and Mrinmaya Sachan and
+Bernhard Schölkopf and
+Mona T. Diab and
+Zhijing Jin},
+booktitle={ACL 2026 System Demonstration Track},
+year={2026},
+url={https://drive.google.com/file/d/1W9w2cE5TrsDEzgGdSEVBu4BGSCe3NBtB/}
+}
+```
+
 ## License
 
 The code in this repository is released under the GNU AFFERO GENERAL PUBLIC LICENSE, version 3. A copy can be found in the [`LICENSE`](LICENSE) file.
