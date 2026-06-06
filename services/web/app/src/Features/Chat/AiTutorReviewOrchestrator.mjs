@@ -1027,12 +1027,14 @@ export const SUBAGENT_DEFS = [
       '05_figures_and_tables/caption_writing.md',
       '05_figures_and_tables/figure1_design.md',
       '05_figures_and_tables/experiment_visualization.md',
+      '05_figures_and_tables/table_formatting.md',
     ],
     sectionCategories: null, // special: extracts figure/table environments
     guidanceKey: null,
     textOnly: true, // future: set to false for multimodal
     systemPreamble:
-      'Review figure and table captions for self-containedness, first-sentence-as-statement, abbreviation definitions, and whether the surrounding text properly explains each figure/table.',
+      'Review figure and table captions for self-containedness, first-sentence-as-statement, abbreviation definitions, and whether the surrounding text properly explains each figure/table. ' +
+      'For tables specifically, check APA 7th edition formatting: bold table number, italicized title in title case, stub heading in leftmost column, booktabs-only borders (no vertical bars, no \\hline), and proper table notes using threeparttable.',
   },
 ]
 
