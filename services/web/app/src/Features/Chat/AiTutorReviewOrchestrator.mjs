@@ -2074,9 +2074,9 @@ function generateUnusedFileComments(fileCategories, mergedTex) {
 
   const parts = []
   if (groups.tex.length > 0)
-    parts.push(`Orphaned .tex files (not \\\\input'd or \\\\include'd): ${groups.tex.join(', ')}`)
+    parts.push(`Orphaned .tex files (not \\input'd or \\include'd): ${groups.tex.join(', ')}`)
   if (groups.figures.length > 0)
-    parts.push(`Unreferenced figures (no \\\\includegraphics): ${groups.figures.join(', ')}`)
+    parts.push(`Unreferenced figures (no \\includegraphics): ${groups.figures.join(', ')}`)
   if (groups.bib.length > 0)
     parts.push(`Unreferenced .bib files: ${groups.bib.join(', ')}`)
   if (groups.style.length > 0)
