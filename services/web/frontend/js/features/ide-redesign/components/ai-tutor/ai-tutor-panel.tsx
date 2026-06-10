@@ -8,6 +8,7 @@ import RangesTracker from '@overleaf/ranges-tracker'
 import {
   runFullReview,
   deleteAiTutorComments,
+  fetchPaperFiles,
   WholeProjectMetadata,
   ReviewResult,
   ReviewComment,
@@ -84,9 +85,42 @@ export default function AiTutorPanel() {
   const applyTriggerRef = useRef(0)
   const [applyTrigger, setApplyTrigger] = useState(0)
 
+  // Scoped (per-file) review state
+  const [availableFiles, setAvailableFiles] = useState<string[]>([])
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([])
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false)
+  const [isScopedReviewing, setIsScopedReviewing] = useState(false)
+  const [scopedProgress, setScopedProgress] = useState<string | null>(null)
+
   const { currentDocument, currentDocumentId } = useEditorOpenDocContext()
   const { openDocWithId } = useEditorManagerContext()
   const { projectId } = useProjectContext()
+
+  // Load the list of project .tex files once the panel mounts so the user can
+  // pick a subset for a scoped review.
+  useEffect(() => {
+    let cancelled = false
+    setIsLoadingFiles(true)
+    fetchPaperFiles(projectId)
+      .then(res => {
+        if (cancelled) return
+        if (res.success && res.files) {
+          setAvailableFiles(res.files)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingFiles(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
+
+  const toggleFile = useCallback((path: string) => {
+    setSelectedFiles(prev =>
+      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+    )
+  }, [])
 
   // -----------------------------------------------------------------------
   // Effect: when currentDocument changes during auto-apply, process next batch
@@ -293,6 +327,68 @@ export default function AiTutorPanel() {
   }, [projectId, selectedModel, selectedVenue, roleModelTexts])
 
   // -----------------------------------------------------------------------
+  // Run a scoped review on only the selected files (same pipeline as full
+  // review, restricted to the chosen files server-side).
+  // -----------------------------------------------------------------------
+  const handleScopedReview = useCallback(async () => {
+    if (selectedFiles.length === 0) {
+      setError('Select at least one file to review.')
+      return
+    }
+    setIsScopedReviewing(true)
+    setError(null)
+    setSuccessMessage(null)
+    setScopedProgress(
+      `Reviewing ${selectedFiles.length} selected file(s)... This may take a minute.`
+    )
+    setReviewResult(null)
+    setAppliedCount(0)
+
+    try {
+      const result = await runFullReview(
+        projectId,
+        selectedModel,
+        selectedVenue,
+        roleModelTexts,
+        selectedFiles
+      )
+
+      if (!result.success) {
+        setError(result.error || 'Review failed.')
+        setScopedProgress(null)
+        return
+      }
+
+      setReviewResult(result.result!)
+      setScopedProgress(null)
+
+      const r = result.result!
+      if (r.summary.total === 0) {
+        setSuccessMessage(
+          `Reviewed ${selectedFiles.length} file(s) — nothing to flag.`
+        )
+      } else {
+        const failedNote =
+          r.failedAgents.length > 0
+            ? ` (${r.failedAgents.length} agent(s) skipped)`
+            : ''
+        setSuccessMessage(
+          `Section review complete! ${r.summary.total} comments across ` +
+          `${selectedFiles.length} file(s).${failedNote}`
+        )
+      }
+    } catch (err) {
+      console.error('[AI Tutor] Scoped review error:', err)
+      setError(
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
+      setScopedProgress(null)
+    } finally {
+      setIsScopedReviewing(false)
+    }
+  }, [projectId, selectedModel, selectedVenue, roleModelTexts, selectedFiles])
+
+  // -----------------------------------------------------------------------
   // Apply review comments across all documents automatically
   // -----------------------------------------------------------------------
   const handleApplyComments = useCallback(() => {
@@ -384,7 +480,7 @@ export default function AiTutorPanel() {
           variant="danger"
           size="sm"
           onClick={handleDeleteComments}
-          disabled={isDeleting || isReviewing || isApplying}
+          disabled={isDeleting || isReviewing || isScopedReviewing || isApplying}
           style={{ width: '100%', marginBottom: '12px' }}
         >
           {isDeleting ? 'Deleting...' : 'Delete All Paper Mentor Comments'}
@@ -558,7 +654,7 @@ export default function AiTutorPanel() {
           <OLButton
             variant="primary"
             onClick={handleFullReview}
-            disabled={isReviewing || isApplying}
+            disabled={isReviewing || isScopedReviewing || isApplying}
             style={{ width: '100%', marginBottom: '6px' }}
           >
             {isReviewing ? 'Reviewing paper...' : 'Run Full Review'}
@@ -777,6 +873,120 @@ export default function AiTutorPanel() {
                   )}
                 </div>
               </details>
+            </div>
+          )}
+        </div>
+
+        {/* ── Review Specific Files ── */}
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: 'var(--bg-secondary-themed)',
+            borderRadius: '6px',
+            border: '1px solid var(--border-divider-themed)',
+          }}
+        >
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '8px',
+            }}
+          >
+            <MaterialIcon type="fact_check" />
+            <strong>Review Specific Files</strong>
+          </span>
+          <p
+            style={{ fontSize: '13px', color: 'var(--content-secondary-themed)', margin: '0 0 8px 0' }}
+          >
+            Runs the same multi-agent review on only the files you select —
+            ideal for iterating on one section at a time.
+          </p>
+
+          {/* File selection list */}
+          <div
+            style={{
+              maxHeight: '160px',
+              overflowY: 'auto',
+              border: '1px solid var(--border-divider-themed)',
+              borderRadius: '4px',
+              padding: '6px 8px',
+              marginBottom: '8px',
+              backgroundColor: 'var(--bg-primary-themed)',
+            }}
+          >
+            {isLoadingFiles ? (
+              <span style={{ fontSize: '12px', color: 'var(--content-secondary-themed)' }}>
+                Loading files…
+              </span>
+            ) : availableFiles.length === 0 ? (
+              <span style={{ fontSize: '12px', color: 'var(--content-secondary-themed)' }}>
+                No .tex files found in this project.
+              </span>
+            ) : (
+              availableFiles.map(file => (
+                <label
+                  key={file}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '13px',
+                    padding: '2px 0',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedFiles.includes(file)}
+                    onChange={() => toggleFile(file)}
+                    disabled={isReviewing || isScopedReviewing || isApplying}
+                  />
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {file}
+                  </span>
+                </label>
+              ))
+            )}
+          </div>
+
+          <OLButton
+            variant="primary"
+            onClick={handleScopedReview}
+            disabled={
+              selectedFiles.length === 0 ||
+              isReviewing ||
+              isScopedReviewing ||
+              isApplying
+            }
+            style={{ width: '100%', marginBottom: '6px' }}
+          >
+            {isScopedReviewing
+              ? 'Reviewing selected files...'
+              : `Review Selected Files${
+                  selectedFiles.length > 0 ? ` (${selectedFiles.length})` : ''
+                }`}
+          </OLButton>
+
+          {scopedProgress && (
+            <div
+              style={{
+                fontSize: '12px',
+                color: 'var(--blue-50)',
+                padding: '6px 8px',
+                backgroundColor: 'var(--bg-tertiary-themed)',
+                borderRadius: '4px',
+              }}
+            >
+              {scopedProgress}
             </div>
           )}
         </div>

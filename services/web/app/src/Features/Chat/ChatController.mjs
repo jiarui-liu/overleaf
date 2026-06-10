@@ -538,7 +538,11 @@ async function analyzeWholeProject(req, res) {
 async function reviewWholeProject(req, res) {
   try {
   const { project_id: projectId } = req.params
-  const { model = 'gpt-5.2-chat-latest', venue = 'arxiv', roleModelTexts: rawRoleModelTexts = [] } = req.body
+  const { model = 'gpt-5.2-chat-latest', venue = 'arxiv', roleModelTexts: rawRoleModelTexts = [], docPaths: rawDocPaths = [] } = req.body
+  // Optional: restrict the review to a subset of project files (per-file scoped review)
+  const docPaths = Array.isArray(rawDocPaths)
+    ? rawDocPaths.filter(p => typeof p === 'string' && p.length > 0)
+    : []
   const userId = SessionManager.getLoggedInUserId(req.session)
 
   // Validate roleModelTexts if provided
@@ -751,6 +755,7 @@ async function reviewWholeProject(req, res) {
       docContentMap,
       rootDocPath: normalizedRootPath,
       roleModelTexts,
+      docPaths,
     })
     // Attach metadata to the response so frontend can display file info
     result.metadata = metadata
@@ -790,7 +795,8 @@ async function reviewWholeProject(req, res) {
 
       const logEntry = {
         timestamp: new Date().toISOString(),
-        type: 'full_review',
+        type: docPaths.length > 0 ? 'scoped_review' : 'full_review',
+        reviewScope: docPaths.length > 0 ? docPaths : undefined,
         projectId,
         userId: userId.toString(),
         model,
@@ -957,6 +963,23 @@ async function saveAnnotation(req, res) {
   res.json(annotations[threadId])
 }
 
+// List the project's .tex documents so the frontend can offer a per-file
+// "Review Specific Files" selection. Lightweight: no merge, no LLM.
+async function aiTutorFiles(req, res) {
+  const { project_id: projectId } = req.params
+  try {
+    const allDocs = await ProjectEntityHandler.promises.getAllDocs(projectId)
+    const files = Object.keys(allDocs)
+      .map(p => (p.startsWith('/') ? p.slice(1) : p))
+      .filter(p => p.toLowerCase().endsWith('.tex'))
+      .sort()
+    res.json({ files })
+  } catch (err) {
+    console.error('[AI Tutor] Failed to list files:', err)
+    res.status(500).json({ error: err.message })
+  }
+}
+
 export default {
   sendMessage: expressify(sendMessage),
   getMessages: expressify(getMessages),
@@ -975,4 +998,5 @@ export default {
   deleteAiTutorComments: expressify(deleteAiTutorComments),
   getAnnotations: expressify(getAnnotations),
   saveAnnotation: expressify(saveAnnotation),
+  aiTutorFiles: expressify(aiTutorFiles),
 }

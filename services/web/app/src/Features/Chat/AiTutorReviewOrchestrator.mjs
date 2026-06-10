@@ -2060,6 +2060,7 @@ export async function runFullReview({
   docContentMap,
   rootDocPath,
   roleModelTexts = [],
+  docPaths = [],
 })
 {
   const apiKey = process.env.OPENAI_API_KEY
@@ -2120,6 +2121,48 @@ export async function runFullReview({
     `[AI Tutor] Phase 2 complete in ${phase2Elapsed}s — ` +
     `Paper type: ${classification.paperType} — ${classification.paperTypeSummary}`
   )
+
+  // Scoped review: when docPaths is provided, restrict the review to the
+  // selected files only. Classification (above) still ran on the FULL paper so
+  // paper-type/venue/hybrid context stays accurate; we only narrow the text and
+  // section mapping handed to the reviewer agents. IMPORTANT: Phases 4 & 6 below
+  // continue to use the full `mergedTex` so comment→file/offset mapping is exact.
+  const normSel = new Set(
+    (Array.isArray(docPaths) ? docPaths : []).map(p =>
+      p.startsWith('/') ? p.slice(1) : p
+    )
+  )
+  const isScoped = normSel.size > 0
+  let scopedSections = sections
+  let scopedMapping = classification.sectionMapping
+  let scopedMergedTex = mergedTex
+  let allowedTitles = null
+  if (isScoped)
+  {
+    const parts = []
+    for (const p of normSel)
+    {
+      if (docContentMap[p]) parts.push(docContentMap[p])
+    }
+    scopedMergedTex = parts.join('\n\n')
+    scopedSections = parseSections(scopedMergedTex)
+    allowedTitles = new Set(
+      scopedSections.map(s => s.title.toLowerCase().trim())
+    )
+    scopedMapping = {}
+    for (const [cat, titles] of Object.entries(classification.sectionMapping))
+    {
+      const kept = (titles || []).filter(t =>
+        allowedTitles.has(t.toLowerCase().trim())
+      )
+      if (kept.length) scopedMapping[cat] = kept
+    }
+    console.log(
+      `[AI Tutor] Scoped review: ${normSel.size} file(s) selected ` +
+      `(${[...normSel].join(', ')}), ${scopedSections.length} section(s), ` +
+      `${scopedMergedTex.length} chars`
+    )
+  }
 
   // Build the final list of agents: static defs + dynamic paper-type agent
   // Filter out disabled agents from env config
@@ -2211,6 +2254,11 @@ export async function runFullReview({
     const combos = {} // e.g. "methods+results" → { categories: [...], titles: [...] }
     for (const hs of classification.hybridSections)
     {
+      // In scoped mode, only keep hybrid sections that survive the file filter
+      if (isScoped && !allowedTitles.has(hs.title.toLowerCase().trim()))
+      {
+        continue
+      }
       const key = hs.categories.join('+')
       if (!combos[key])
       {
@@ -2221,6 +2269,8 @@ export async function runFullReview({
 
     for (const [comboKey, combo] of Object.entries(combos))
     {
+      // No surviving sections for this combo (possible in scoped mode) → skip
+      if (!combo.titles.length) continue
       // Find the SUBAGENT_DEFS for each category in this combo
       const relevantDefs = SUBAGENT_DEFS.filter(
         d =>
@@ -2262,8 +2312,9 @@ export async function runFullReview({
         .map(c => c.charAt(0).toUpperCase() + c.slice(1).replace('_', ' '))
         .join(' + ')
 
-      // Add the hybrid section titles to the sectionMapping under the combo key
-      classification.sectionMapping[comboKey] = combo.titles
+      // Add the hybrid section titles to the (scoped) section mapping under the
+      // combo key. scopedMapping === classification.sectionMapping when not scoped.
+      scopedMapping[comboKey] = combo.titles
 
       agentDefs.push({
         id: `hybrid_${comboKey}`,
@@ -2297,10 +2348,10 @@ export async function runFullReview({
       openai,
       model,
       def,
-      sections,
-      classification.sectionMapping,
+      scopedSections,
+      scopedMapping,
       classification.typeSpecificGuidance,
-      mergedTex,
+      scopedMergedTex,
       roleModelTexts
     )
     // Wrap with timeout

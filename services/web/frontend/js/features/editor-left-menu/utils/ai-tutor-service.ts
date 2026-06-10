@@ -62,7 +62,8 @@ export async function runFullReview(
   projectId: string,
   model: string,
   venue: string = 'arxiv',
-  roleModelTexts: Array<{ name: string; text: string }> = []
+  roleModelTexts: Array<{ name: string; text: string }> = [],
+  docPaths: string[] = []
 ): Promise<{ success: boolean; result?: ReviewResult; error?: string }> {
   try {
     const result = (await postJSON(
@@ -73,10 +74,31 @@ export async function runFullReview(
           venue,
           roleModelTexts:
             roleModelTexts.length > 0 ? roleModelTexts : undefined,
+          docPaths: docPaths.length > 0 ? docPaths : undefined,
         },
       }
     )) as ReviewResult
     return { success: true, result }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'An unknown error occurred.',
+    }
+  }
+}
+
+/**
+ * List the project's .tex files so the user can pick a subset to review.
+ */
+export async function fetchPaperFiles(
+  projectId: string
+): Promise<{ success: boolean; files?: string[]; error?: string }> {
+  try {
+    const result = (await postJSON(`/project/${projectId}/ai-tutor-files`, {
+      body: {},
+    })) as { files: string[] }
+    return { success: true, files: result.files }
   } catch (error) {
     return {
       success: false,
