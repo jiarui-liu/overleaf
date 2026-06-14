@@ -2125,8 +2125,11 @@ export async function runFullReview({
   // Scoped review: when docPaths is provided, restrict the review to the
   // selected files only. Classification (above) still ran on the FULL paper so
   // paper-type/venue/hybrid context stays accurate; we only narrow the text and
-  // section mapping handed to the reviewer agents. IMPORTANT: Phases 4 & 6 below
-  // continue to use the full `mergedTex` so comment→file/offset mapping is exact.
+  // section mapping handed to the reviewer agents. Phases 4 & 6 then map against
+  // this scoped text (not the full mergedTex), because a selected file may be a
+  // standalone file that is not \input from the root doc — so it is absent from
+  // mergedTex, and mapping against mergedTex would misattribute its comments to
+  // the root doc (main.tex).
   const normSel = new Set(
     (Array.isArray(docPaths) ? docPaths : []).map(p =>
       p.startsWith('/') ? p.slice(1) : p
@@ -2136,15 +2139,31 @@ export async function runFullReview({
   let scopedSections = sections
   let scopedMapping = classification.sectionMapping
   let scopedMergedTex = mergedTex
+  let scopedDocContentMap = docContentMap
+  let scopedRootDocPath = rootDocPath
   let allowedTitles = null
   if (isScoped)
   {
+    // Wrap each selected file in the same INLINED FROM / END OF markers the
+    // full merge uses, so buildInlineMap() in Phase 6 can attribute each comment
+    // to the correct selected file rather than the root doc.
     const parts = []
+    const selectedDocMap = {}
     for (const p of normSel)
     {
-      if (docContentMap[p]) parts.push(docContentMap[p])
+      if (docContentMap[p])
+      {
+        parts.push(
+          `% ========== INLINED FROM: ${p} ==========\n` +
+          docContentMap[p] +
+          `\n% ========== END OF: ${p} ==========`
+        )
+        selectedDocMap[p] = docContentMap[p]
+      }
     }
     scopedMergedTex = parts.join('\n\n')
+    scopedDocContentMap = selectedDocMap
+    scopedRootDocPath = Object.keys(selectedDocMap)[0] || rootDocPath
     scopedSections = parseSections(scopedMergedTex)
     allowedTitles = new Set(
       scopedSections.map(s => s.title.toLowerCase().trim())
@@ -2163,6 +2182,13 @@ export async function runFullReview({
       `${scopedMergedTex.length} chars`
     )
   }
+
+  // Text/doc-map/root used by Phases 4 & 6 to map comments back to documents.
+  // For a scoped review these are the scoped equivalents so comments resolve to
+  // the selected files; otherwise they are the full-project values.
+  const mappingMergedTex = isScoped ? scopedMergedTex : mergedTex
+  const mappingDocContentMap = isScoped ? scopedDocContentMap : docContentMap
+  const mappingRootDocPath = isScoped ? scopedRootDocPath : rootDocPath
 
   // Build the final list of agents: static defs + dynamic paper-type agent
   // Filter out disabled agents from env config
@@ -2425,7 +2451,7 @@ export async function runFullReview({
 
   // Phase 4: Deduplicate overlapping comments across agents
   const phase4Start = Date.now()
-  const dedupedComments = deduplicateComments(allComments, mergedTex)
+  const dedupedComments = deduplicateComments(allComments, mappingMergedTex)
   const phase4Elapsed = ((Date.now() - phase4Start) / 1000).toFixed(2)
   const removed = allComments.length - dedupedComments.length
   if (removed > 0)
@@ -2457,9 +2483,9 @@ export async function runFullReview({
   const phase6Start = Date.now()
   const mappedComments = mapCommentsToDocuments(
     prunedComments,
-    mergedTex,
-    docContentMap,
-    rootDocPath
+    mappingMergedTex,
+    mappingDocContentMap,
+    mappingRootDocPath
   )
   const phase6Elapsed = ((Date.now() - phase6Start) / 1000).toFixed(2)
   console.log(
