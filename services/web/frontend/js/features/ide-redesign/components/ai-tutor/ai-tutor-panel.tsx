@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import RailPanelHeader from '@/features/ide-react/components/rail/rail-panel-header'
+import { useRailContext } from '@/features/ide-react/context/rail-context'
 import { useEditorOpenDocContext } from '@/features/ide-react/context/editor-open-doc-context'
 import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
 import { useProjectContext } from '@/shared/context/project-context'
@@ -95,10 +96,16 @@ export default function AiTutorPanel() {
   const { currentDocument, currentDocumentId } = useEditorOpenDocContext()
   const { openDocWithId } = useEditorManagerContext()
   const { projectId } = useProjectContext()
+  const { selectedTab } = useRailContext()
 
-  // Load the list of project .tex files once the panel mounts so the user can
-  // pick a subset for a scoped review.
+  // Load the list of project .tex files whenever the Paper Mentor tab becomes
+  // active so the user can pick a subset for a scoped review. The rail keeps
+  // panels mounted across tab switches, so a mount-only fetch goes stale when
+  // the user adds/removes files and returns to the tab. Keying on selectedTab
+  // re-fetches on every activation (and the initial mount, since the tab is
+  // already active then) without needing a page refresh.
   useEffect(() => {
+    if (selectedTab !== 'ai-tutor') return
     let cancelled = false
     setIsLoadingFiles(true)
     fetchPaperFiles(projectId)
@@ -114,7 +121,7 @@ export default function AiTutorPanel() {
     return () => {
       cancelled = true
     }
-  }, [projectId])
+  }, [projectId, selectedTab])
 
   const toggleFile = useCallback((path: string) => {
     setSelectedFiles(prev =>
