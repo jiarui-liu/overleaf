@@ -760,6 +760,56 @@ async function reviewWholeProject(req, res) {
     // Attach metadata to the response so frontend can display file info
     result.metadata = metadata
 
+    // For a scoped review, replace the whole-project "File details" with
+    // metadata reflecting ONLY the reviewed file(s), so the panel matches what
+    // was actually reviewed (otherwise it confusingly lists main.tex et al.).
+    if (docPaths.length > 0) {
+      const selected = docPaths.map(p => (p.startsWith('/') ? p.slice(1) : p))
+      const selectedTex = selected.filter(p => docContentMap[p] !== undefined)
+      const scopedContent = selectedTex.map(p => docContentMap[p]).join('\n\n')
+
+      // Figures/bib referenced within the selected files only.
+      const scopedFigureRefs = new Set()
+      const scopedBibRefs = new Set()
+      let refMatch
+      const scopedGraphicsRe = /\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}/g
+      while ((refMatch = scopedGraphicsRe.exec(scopedContent)) !== null) {
+        scopedFigureRefs.add(refMatch[1].trim())
+      }
+      const scopedBibRe = /\\(?:bibliography|addbibresource)\{([^}]+)\}/g
+      while ((refMatch = scopedBibRe.exec(scopedContent)) !== null) {
+        for (const b of refMatch[1].split(',')) scopedBibRefs.add(b.trim())
+      }
+
+      // Map those references back to actual project files (reuse project lists).
+      const scopedFigureFiles = figureFiles.filter(fp => {
+        const noExt = fp.replace(/\.[^.]+$/, '')
+        return [...scopedFigureRefs].some(ref => {
+          const refNoExt = ref.replace(/\.[^.]+$/, '')
+          return fp === ref || fp.endsWith('/' + ref) || noExt === refNoExt || noExt.endsWith('/' + refNoExt)
+        })
+      })
+      const scopedBibFiles = bibFiles.filter(p => {
+        const noExt = p.replace(/\.bib$/, '')
+        return [...scopedBibRefs].some(ref => {
+          const refNoExt = ref.replace(/\.bib$/, '')
+          return p === ref || p === ref + '.bib' || noExt === refNoExt || noExt.endsWith('/' + refNoExt)
+        })
+      })
+
+      result.metadata = {
+        ...metadata,
+        scoped: true,
+        categories: {
+          ...metadata.categories,
+          texFiles: { files: selectedTex, count: selectedTex.length },
+          figures: { files: scopedFigureFiles, references: [...scopedFigureRefs], count: scopedFigureFiles.length },
+          bibFiles: { files: scopedBibFiles, references: [...scopedBibRefs], count: scopedBibFiles.length },
+        },
+        mergedTexLength: scopedContent.length,
+      }
+    }
+
     // Build docPath -> docId mapping so frontend can open the correct document
     const docPathToId = {}
     for (const [docPath, docData] of Object.entries(allDocs)) {
