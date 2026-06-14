@@ -763,8 +763,11 @@ async function reviewWholeProject(req, res) {
     // For a scoped review, replace the whole-project "File details" with
     // metadata reflecting ONLY the reviewed file(s), so the panel matches what
     // was actually reviewed (otherwise it confusingly lists main.tex et al.).
-    if (docPaths.length > 0) {
-      const selected = docPaths.map(p => (p.startsWith('/') ? p.slice(1) : p))
+    // buildScopedMetadata produces this for any subset of doc paths, so we can
+    // build both an aggregate (all selected files) and a per-file entry that the
+    // panel shows inside each reviewed file's card.
+    const buildScopedMetadata = paths => {
+      const selected = paths.map(p => (p.startsWith('/') ? p.slice(1) : p))
       const selectedTex = selected.filter(p => docContentMap[p] !== undefined)
       const scopedContent = selectedTex.map(p => docContentMap[p]).join('\n\n')
 
@@ -797,7 +800,7 @@ async function reviewWholeProject(req, res) {
         })
       })
 
-      result.metadata = {
+      return {
         ...metadata,
         scoped: true,
         categories: {
@@ -808,6 +811,18 @@ async function reviewWholeProject(req, res) {
         },
         mergedTexLength: scopedContent.length,
       }
+    }
+
+    if (docPaths.length > 0) {
+      result.metadata = buildScopedMetadata(docPaths)
+      // Per-file metadata so the panel can show "File details" inside each
+      // reviewed file's card. Keys match commentsByDoc (leading slash stripped).
+      result.metadataByDoc = Object.fromEntries(
+        docPaths.map(p => [
+          p.startsWith('/') ? p.slice(1) : p,
+          buildScopedMetadata([p]),
+        ])
+      )
     }
 
     // Build docPath -> docId mapping so frontend can open the correct document

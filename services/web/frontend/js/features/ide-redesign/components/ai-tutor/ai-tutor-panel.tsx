@@ -987,10 +987,11 @@ export default function AiTutorPanel() {
             </div>
           )}
 
-          {/* Per-file apply/delete + summary + file details for the scoped review */}
+          {/* Per-file apply/delete + per-file summary + file details (scoped) */}
           {reviewResult && reviewSource === 'scoped' && (
             <div style={{ marginTop: '8px' }}>
               <ScopedFileControls
+                reviewResult={reviewResult}
                 commentsByDoc={reviewResult.commentsByDoc}
                 onApply={applyCommentsForDocPaths}
                 onDelete={handleDeleteCommentsForDoc}
@@ -1001,10 +1002,6 @@ export default function AiTutorPanel() {
                 deleteProgress={deleteProgress}
                 appliedCount={appliedCount}
               />
-              <ReviewSummary reviewResult={reviewResult} />
-              {projectMetadata && (
-                <FileDetails projectMetadata={projectMetadata} />
-              )}
             </div>
           )}
         </div>

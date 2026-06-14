@@ -124,6 +124,23 @@
     }
   }
 
+  // Per-file "Review summary" + "File details" collapsibles, sitting between
+  // the severity line and the apply/delete actions. Read as secondary to the
+  // card header: muted, indented, with a divider from the summary above.
+  &__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-divider-themed);
+    color: var(--content-secondary-themed);
+
+    summary {
+      font-size: 12px;
+      font-weight: 500;
+    }
+  }
+
   &__actions {
     display: flex;
     gap: 8px;

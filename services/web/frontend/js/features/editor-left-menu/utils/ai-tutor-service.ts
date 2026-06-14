@@ -56,6 +56,9 @@ export interface ReviewResult {
   failedAgents: Array<{ id: string; name: string; reason: string }>
   roleModelPapers?: string[]
   metadata?: WholeProjectMetadata
+  // Scoped reviews only: metadata for each reviewed file, keyed by doc path
+  // (matching commentsByDoc), so the panel can render per-file "File details".
+  metadataByDoc?: Record<string, WholeProjectMetadata>
 }
 
 export async function runFullReview(

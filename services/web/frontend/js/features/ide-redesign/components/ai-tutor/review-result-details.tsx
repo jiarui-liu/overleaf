@@ -18,6 +18,94 @@ function severityCounts(comments: ReviewComment[]) {
   return { critical, warning, suggestion }
 }
 
+// Count a file's comments by category for the per-file "Review summary".
+function categoryCounts(comments: ReviewComment[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const c of comments) {
+    counts[c.category] = (counts[c.category] || 0) + 1
+  }
+  return counts
+}
+
+// Per-file "Review summary" + "File details" collapsibles, shown inside each
+// reviewed file's card. The category/severity breakdowns are derived from that
+// file's own comments; paper type / role models / skipped agents are global and
+// repeated per card so each card reads as self-contained. File details reuses
+// the shared FileDetails component, driven by this file's scoped metadata.
+function FileCardSummary({
+  comments,
+  perFileMetadata,
+  classification,
+  roleModelPapers,
+  failedAgents,
+}: {
+  comments: ReviewComment[]
+  perFileMetadata?: WholeProjectMetadata
+  classification: ReviewResult['classification']
+  roleModelPapers?: string[]
+  failedAgents: ReviewResult['failedAgents']
+}) {
+  const byCategory = categoryCounts(comments)
+  const { critical, warning, suggestion } = severityCounts(comments)
+  return (
+    <div className="ai-tutor-file-card__meta">
+      <div style={{ fontSize: '12px' }}>
+        <details>
+          <summary
+            style={{ cursor: 'pointer', color: 'var(--content-primary-themed)' }}
+          >
+            Review summary ({comments.length} comments)
+          </summary>
+          <div style={{ padding: '6px 0' }}>
+            <p style={{ margin: '0 0 4px 0' }}>
+              <strong>Paper type:</strong> {classification.paperType} —{' '}
+              {classification.paperTypeSummary}
+            </p>
+            {roleModelPapers && roleModelPapers.length > 0 && (
+              <p style={{ margin: '0 0 4px 0' }}>
+                <strong>Role models:</strong> {roleModelPapers.join(', ')}
+              </p>
+            )}
+            <p style={{ margin: '0 0 4px 0' }}>
+              <strong>By category:</strong>
+            </p>
+            <ul style={{ margin: '2px 0 6px 0', paddingLeft: '18px' }}>
+              {Object.entries(byCategory).map(([cat, count]) => (
+                <li key={cat}>
+                  {cat}: {count}
+                </li>
+              ))}
+            </ul>
+            <p style={{ margin: '0 0 4px 0' }}>
+              <strong>By severity:</strong>
+            </p>
+            <ul style={{ margin: '2px 0 6px 0', paddingLeft: '18px' }}>
+              <li>critical: {critical}</li>
+              <li>warning: {warning}</li>
+              <li>suggestion: {suggestion}</li>
+            </ul>
+            {failedAgents.length > 0 && (
+              <>
+                <p style={{ margin: '0 0 4px 0', color: 'var(--red-50)' }}>
+                  <strong>Skipped agents:</strong>
+                </p>
+                <ul style={{ margin: '2px 0 6px 0', paddingLeft: '18px' }}>
+                  {failedAgents.map(a => (
+                    <li key={a.id}>
+                      {a.name}: {a.reason}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        </details>
+      </div>
+      {perFileMetadata && <FileDetails projectMetadata={perFileMetadata} />}
+    </div>
+  )
+}
+
 // Per-file apply/delete results for a scoped ("Review Specific Files") run.
 // Shows a master summary bar (Apply all / Delete all) above one card per
 // reviewed file that has issues — each with a severity breakdown and its own
@@ -25,6 +113,7 @@ function severityCounts(comments: ReviewComment[]) {
 // (applying/deleting + progress/applied messages) is owned by the panel and
 // passed in, so this component stays presentational.
 export function ScopedFileControls({
+  reviewResult,
   commentsByDoc,
   onApply,
   onDelete,
@@ -35,6 +124,7 @@ export function ScopedFileControls({
   deleteProgress,
   appliedCount,
 }: {
+  reviewResult: ReviewResult
   commentsByDoc: Record<string, ReviewComment[]>
   onApply: (docPaths: string[]) => void
   onDelete: (docPath: string) => void
@@ -109,6 +199,13 @@ export function ScopedFileControls({
                 {suggestion} suggestion
               </span>
             </div>
+            <FileCardSummary
+              comments={comments}
+              perFileMetadata={reviewResult.metadataByDoc?.[docPath]}
+              classification={reviewResult.classification}
+              roleModelPapers={reviewResult.roleModelPapers}
+              failedAgents={reviewResult.failedAgents}
+            />
             <div className="ai-tutor-file-card__actions">
               <OLButton
                 variant="success"
