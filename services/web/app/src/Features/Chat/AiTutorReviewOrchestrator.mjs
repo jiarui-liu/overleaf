@@ -1800,13 +1800,28 @@ export function mapCommentsToDocuments(
   comments,
   mergedTex,
   docContentMap,
-  rootDocPath
+  rootDocPath,
+  allowedDocPaths = null
 )
 {
   const inlineMap = buildInlineMap(mergedTex)
   const normalizedRoot = rootDocPath.startsWith('/')
     ? rootDocPath.slice(1)
     : rootDocPath
+
+  // Scope invariant: during a scoped review, comments may ONLY map to the
+  // selected files. An empty/absent set means "full review — allow all docs".
+  // Normalize the same way as docContentMap keys (strip any leading slash).
+  const allowedSet = new Set(
+    (allowedDocPaths instanceof Set
+      ? [...allowedDocPaths]
+      : Array.isArray(allowedDocPaths)
+        ? allowedDocPaths
+        : []
+    ).map(p => (typeof p === 'string' && p.startsWith('/') ? p.slice(1) : p))
+  )
+  const isDocAllowed = docPath =>
+    allowedSet.size === 0 || allowedSet.has(docPath)
 
   console.log(
     `[AI Tutor] Phase 6: Mapping ${comments.length} comments to documents. ` +
@@ -1867,10 +1882,13 @@ export function mapCommentsToDocuments(
     const originalContent = docContentMap[originalFile]
     if (!originalContent)
     {
-      // Fallback: search all docs for the highlightText (exact, then fuzzy)
+      // Fallback: search all docs for the highlightText (exact, then fuzzy).
+      // Scope guard: skip docs outside the selection so a scoped review can
+      // never mis-target a comment onto an unselected file.
       let found = false
       for (const [docPath, content] of Object.entries(docContentMap))
       {
+        if (!isDocAllowed(docPath)) continue
         const idx = content.indexOf(comment.highlightText)
         if (idx !== -1)
         {
@@ -1896,6 +1914,7 @@ export function mapCommentsToDocuments(
         let bestDocPath = null
         for (const [docPath, content] of Object.entries(docContentMap))
         {
+          if (!isDocAllowed(docPath)) continue
           const fuzzyResult = fuzzyFindInText(comment.highlightText, content)
           if (fuzzyResult && (!bestFuzzy || fuzzyResult.similarity > bestFuzzy.similarity))
           {
@@ -1954,10 +1973,12 @@ export function mapCommentsToDocuments(
         continue
       }
 
-      // Fallback: try searching all docs (exact, then fuzzy)
+      // Fallback: try searching all docs (exact, then fuzzy).
+      // Scope guard: skip docs outside the selection (see branch above).
       let found = false
       for (const [docPath, content] of Object.entries(docContentMap))
       {
+        if (!isDocAllowed(docPath)) continue
         const idx = content.indexOf(comment.highlightText)
         if (idx !== -1)
         {
@@ -1983,6 +2004,7 @@ export function mapCommentsToDocuments(
         let bestDocPath = null
         for (const [docPath, content] of Object.entries(docContentMap))
         {
+          if (!isDocAllowed(docPath)) continue
           const fuzzyResult = fuzzyFindInText(comment.highlightText, content)
           if (fuzzyResult && (!bestFuzzy || fuzzyResult.similarity > bestFuzzy.similarity))
           {
@@ -2027,14 +2049,35 @@ export function mapCommentsToDocuments(
     directMapped++
   }
 
+  // Belt-and-suspenders: enforce the scope invariant one final time. Any comment
+  // that resolved (via any branch above) to a doc outside the selection is
+  // dropped rather than mis-attributed.
+  let scopeDropped = 0
+  const scopedMapped =
+    allowedSet.size === 0
+      ? mapped
+      : mapped.filter(c => {
+          const ok = allowedSet.has(c.docPath)
+          if (!ok)
+          {
+            scopeDropped++
+            console.warn(
+              `[AI Tutor] Phase 6: Scope guard dropped comment mapped to ` +
+              `"${c.docPath}" (not in selected files) [${c.agentName}]`
+            )
+          }
+          return ok
+        })
+
   console.log(
     `[AI Tutor] Phase 6: Mapping complete — ` +
     `${directMapped} direct, ${fallbackMapped} fallback, ${fuzzyMapped} fuzzy, ` +
-    `${notFoundInMerged} not in merged.tex, ${unmapped} unmapped. ` +
-    `Total mapped: ${mapped.length}/${comments.length}`
+    `${notFoundInMerged} not in merged.tex, ${unmapped} unmapped` +
+    (allowedSet.size > 0 ? `, ${scopeDropped} scope-dropped` : '') + `. ` +
+    `Total mapped: ${scopedMapped.length}/${comments.length}`
   )
 
-  return mapped
+  return scopedMapped
 }
 
 // ---------------------------------------------------------------------------
@@ -2052,7 +2095,10 @@ export function mapCommentsToDocuments(
  * @param {string} opts.rootDocPath - normalized root doc path
  * @returns {object} { comments, classification, summary, failedAgents }
  */
-export async function runFullReview({
+// Core single-pass review: full project (docPaths empty) or a single selected
+// file (docPaths === [oneFile]). Multi-file scoped reviews fan out to one call
+// of this per file via the runFullReview dispatcher below.
+async function runReviewCore({
   projectId,
   model,
   venue = 'arxiv',
@@ -2061,6 +2107,7 @@ export async function runFullReview({
   rootDocPath,
   roleModelTexts = [],
   docPaths = [],
+  skipResultCache = false,
 })
 {
   const apiKey = process.env.OPENAI_API_KEY
@@ -2485,7 +2532,8 @@ export async function runFullReview({
     prunedComments,
     mappingMergedTex,
     mappingDocContentMap,
-    mappingRootDocPath
+    mappingRootDocPath,
+    isScoped ? normSel : null
   )
   const phase6Elapsed = ((Date.now() - phase6Start) / 1000).toFixed(2)
   console.log(
@@ -2542,10 +2590,15 @@ export async function runFullReview({
     roleModelPapers: roleModelTexts.length > 0 ? roleModelTexts.map(rm => rm.name) : undefined,
   }
 
-  // Cache results
-  const reviewPath = path.join(cacheDir, 'review_comments.json')
-  fs.writeFileSync(reviewPath, JSON.stringify(reviewResult, null, 2))
-  console.log(`[AI Tutor] Review cached to ${reviewPath}`)
+  // Cache results. Skipped for per-file sub-reviews (the runFullReview
+  // dispatcher writes the merged result once) to avoid concurrent writes to
+  // the same file.
+  if (!skipResultCache)
+  {
+    const reviewPath = path.join(cacheDir, 'review_comments.json')
+    fs.writeFileSync(reviewPath, JSON.stringify(reviewResult, null, 2))
+    console.log(`[AI Tutor] Review cached to ${reviewPath}`)
+  }
 
   const overallElapsed = ((Date.now() - overallStart) / 1000).toFixed(1)
   console.log('='.repeat(80))
@@ -2558,6 +2611,111 @@ export async function runFullReview({
   console.log(`[AI Tutor]   By document: ${Object.entries(commentsByDoc).map(([d, c]) => `${d}(${c.length})`).join(', ')}`)
   console.log(`[AI Tutor]   Failed/skipped agents: ${failedAgents.length > 0 ? failedAgents.map(a => `${a.name}: ${a.reason}`).join('; ') : 'none'}`)
   console.log(`[AI Tutor]   Timing: Phase 1: ${phase1Elapsed}s, Phase 2: ${phase2Elapsed}s, Phase 3: ${phase3Elapsed}s, Phase 4: ${phase4Elapsed}s, Phase 5: ${phase5Elapsed}s, Phase 6: ${phase6Elapsed}s`)
+  console.log('='.repeat(80))
+
+  return reviewResult
+}
+
+/**
+ * Public review entry point.
+ *
+ * - No selection (full review) or exactly one selected file → a single
+ *   review pass via runReviewCore (unchanged behavior).
+ * - Two or more selected files → review EACH file independently and in
+ *   parallel, then merge the per-file results into one combined result of the
+ *   same shape. Reviewing files separately (instead of as one merged text)
+ *   guarantees each selected file gets its own comments and avoids the
+ *   first-occurrence mapping collapse that happens when selected files share
+ *   content (e.g. a common preamble or near-duplicate files).
+ *
+ * @returns {object} { projectId, model, reviewedAt, classification,
+ *   commentsByDoc, summary, failedAgents, roleModelPapers? }
+ */
+export async function runFullReview(opts)
+{
+  const docPaths = Array.isArray(opts.docPaths) ? opts.docPaths : []
+
+  if (docPaths.length <= 1)
+  {
+    return runReviewCore(opts)
+  }
+
+  console.log('='.repeat(80))
+  console.log(
+    `[AI Tutor] Per-file scoped review: reviewing ${docPaths.length} files ` +
+    `independently in parallel — ${docPaths.join(', ')}`
+  )
+  console.log('='.repeat(80))
+
+  // One independent review per selected file. Sub-runs skip their own result
+  // cache write; the merged result is cached here once.
+  const perFile = await Promise.all(
+    docPaths.map(p =>
+      runReviewCore({ ...opts, docPaths: [p], skipResultCache: true })
+    )
+  )
+
+  // Merge per-file results. Each sub-run only maps comments to its own file
+  // (enforced by the scope guard in mapCommentsToDocuments), so docPath keys
+  // do not overlap — but we concat defensively in case a file appears twice.
+  const commentsByDoc = {}
+  const byCategory = {}
+  const bySeverity = {}
+  const failedById = new Map()
+  let total = 0
+  for (const r of perFile)
+  {
+    for (const [docPath, comments] of Object.entries(r.commentsByDoc))
+    {
+      commentsByDoc[docPath] = (commentsByDoc[docPath] || []).concat(comments)
+    }
+    for (const [cat, n] of Object.entries(r.summary.byCategory))
+    {
+      byCategory[cat] = (byCategory[cat] || 0) + n
+    }
+    for (const [sev, n] of Object.entries(r.summary.bySeverity))
+    {
+      bySeverity[sev] = (bySeverity[sev] || 0) + n
+    }
+    total += r.summary.total
+    // Union skipped agents by id; a single union entry is enough for the UI.
+    for (const a of r.failedAgents || [])
+    {
+      if (!failedById.has(a.id)) failedById.set(a.id, a)
+    }
+  }
+
+  const first = perFile[0]
+  const reviewResult = {
+    projectId: first.projectId,
+    model: first.model,
+    reviewedAt: new Date().toISOString(),
+    classification: first.classification,
+    commentsByDoc,
+    summary: { total, byCategory, bySeverity },
+    failedAgents: [...failedById.values()],
+    roleModelPapers: first.roleModelPapers,
+  }
+
+  try
+  {
+    const reviewPath = path.join(opts.cacheDir, 'review_comments.json')
+    fs.writeFileSync(reviewPath, JSON.stringify(reviewResult, null, 2))
+    console.log(`[AI Tutor] Combined per-file review cached to ${reviewPath}`)
+  }
+  catch (err)
+  {
+    console.warn(
+      `[AI Tutor] Failed to cache combined per-file review: ${err.message}`
+    )
+  }
+
+  console.log('='.repeat(80))
+  console.log(
+    `[AI Tutor] PER-FILE REVIEW COMPLETE — ${total} comments across ` +
+    `${Object.keys(commentsByDoc).length} file(s). ` +
+    `By document: ${Object.entries(commentsByDoc).map(([d, c]) => `${d}(${c.length})`).join(', ')}`
+  )
   console.log('='.repeat(80))
 
   return reviewResult

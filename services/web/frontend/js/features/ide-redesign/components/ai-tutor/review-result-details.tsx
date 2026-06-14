@@ -1,8 +1,150 @@
+import OLButton from '@/shared/components/ol/ol-button'
 import {
   ReviewComment,
   ReviewResult,
   WholeProjectMetadata,
 } from '@/features/editor-left-menu/utils/ai-tutor-service'
+
+// Count a file's comments by severity for the per-file card breakdown line.
+function severityCounts(comments: ReviewComment[]) {
+  let critical = 0
+  let warning = 0
+  let suggestion = 0
+  for (const c of comments) {
+    if (c.severity === 'critical') critical++
+    else if (c.severity === 'warning') warning++
+    else suggestion++
+  }
+  return { critical, warning, suggestion }
+}
+
+// Per-file apply/delete results for a scoped ("Review Specific Files") run.
+// Shows a master summary bar (Apply all / Delete all) above one card per
+// reviewed file that has issues — each with a severity breakdown and its own
+// Apply / Delete actions. Files with zero comments are hidden. All async state
+// (applying/deleting + progress/applied messages) is owned by the panel and
+// passed in, so this component stays presentational.
+export function ScopedFileControls({
+  commentsByDoc,
+  onApply,
+  onDelete,
+  onDeleteAll,
+  isApplying,
+  isDeleting,
+  applyProgress,
+  deleteProgress,
+  appliedCount,
+}: {
+  commentsByDoc: Record<string, ReviewComment[]>
+  onApply: (docPaths: string[]) => void
+  onDelete: (docPath: string) => void
+  onDeleteAll: () => void
+  isApplying: boolean
+  isDeleting: boolean
+  applyProgress?: string | null
+  deleteProgress?: string | null
+  appliedCount: number
+}) {
+  const entries = Object.entries(commentsByDoc).filter(
+    ([, comments]) => comments.length > 0
+  )
+  if (entries.length === 0) return null
+
+  const allDocPaths = entries.map(([docPath]) => docPath)
+  const totalComments = entries.reduce(
+    (sum, [, comments]) => sum + comments.length,
+    0
+  )
+  const busy = isApplying || isDeleting
+
+  return (
+    <div className="ai-tutor-scoped-results">
+      {entries.length > 1 && (
+        <div className="ai-tutor-scoped-summary-bar">
+          <span className="ai-tutor-scoped-summary-bar__label">
+            Reviewed {entries.length} files · {totalComments} comments
+          </span>
+          <div className="ai-tutor-scoped-summary-bar__actions">
+            <OLButton
+              variant="success"
+              size="sm"
+              onClick={() => onApply(allDocPaths)}
+              disabled={busy}
+            >
+              Apply all {totalComments}
+            </OLButton>
+            <OLButton
+              variant="danger"
+              size="sm"
+              onClick={onDeleteAll}
+              disabled={busy}
+            >
+              Delete all
+            </OLButton>
+          </div>
+        </div>
+      )}
+
+      {entries.map(([docPath, comments]) => {
+        const { critical, warning, suggestion } = severityCounts(comments)
+        return (
+          <div key={docPath} className="ai-tutor-file-card">
+            <div className="ai-tutor-file-card__header">
+              <span
+                className="ai-tutor-file-card__filename"
+                title={docPath}
+              >
+                {docPath}
+              </span>
+              <span className="ai-tutor-file-card__count">
+                {comments.length} {comments.length === 1 ? 'issue' : 'issues'}
+              </span>
+            </div>
+            <div className="ai-tutor-file-card__severity">
+              <span className="ai-tutor-sev--critical">{critical} critical</span>
+              {' · '}
+              <span className="ai-tutor-sev--warning">{warning} warning</span>
+              {' · '}
+              <span className="ai-tutor-sev--suggestion">
+                {suggestion} suggestion
+              </span>
+            </div>
+            <div className="ai-tutor-file-card__actions">
+              <OLButton
+                variant="success"
+                size="sm"
+                onClick={() => onApply([docPath])}
+                disabled={busy}
+              >
+                Apply {comments.length} changes
+              </OLButton>
+              <OLButton
+                variant="danger"
+                size="sm"
+                onClick={() => onDelete(docPath)}
+                disabled={busy}
+              >
+                Delete
+              </OLButton>
+            </div>
+          </div>
+        )
+      })}
+
+      {applyProgress && (
+        <div className="ai-tutor-scoped-progress">{applyProgress}</div>
+      )}
+      {deleteProgress && (
+        <div className="ai-tutor-scoped-progress">{deleteProgress}</div>
+      )}
+      {appliedCount > 0 && !isApplying && (
+        <p className="ai-tutor-scoped-applied">
+          {appliedCount} comment(s) applied.
+        </p>
+      )}
+    </div>
+  )
+}
 
 // Collapsible summary of a review result (paper type, counts by category and
 // severity, comments per document, and any skipped agents). Shared by the Full

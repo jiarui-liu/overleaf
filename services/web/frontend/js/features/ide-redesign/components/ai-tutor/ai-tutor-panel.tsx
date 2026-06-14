@@ -25,7 +25,11 @@ import {
   extractTextFromPdf,
   RoleModelPaper,
 } from './extract-pdf-text'
-import { ReviewSummary, FileDetails } from './review-result-details'
+import {
+  ReviewSummary,
+  FileDetails,
+  ScopedFileControls,
+} from './review-result-details'
 
 const MODEL_OPTIONS = [
   { value: 'gpt-4o', label: 'GPT-4o' },
@@ -80,6 +84,10 @@ export default function AiTutorPanel() {
   )
   const deleteTriggerRef = useRef(0)
   const [deleteTrigger, setDeleteTrigger] = useState(0)
+  // Delete-all queue: remaining docPaths to delete after the current one. The
+  // per-file delete is a single-pending-ref/open-doc flow, so a "Delete all"
+  // must run them one at a time — the delete effect advances this on completion.
+  const deleteQueueRef = useRef<string[]>([])
 
   // Full review state
   const [isReviewing, setIsReviewing] = useState(false)
@@ -531,6 +539,20 @@ export default function AiTutorPanel() {
     [reviewResult, currentDocumentId, openDocWithId]
   )
 
+  // Delete every reviewed file's Paper Mentor comments, one file at a time.
+  // Seeds the delete queue with all-but-the-first docPath and kicks off the
+  // first; the delete effect's finally drains the rest sequentially.
+  const handleDeleteAllScoped = useCallback(() => {
+    if (!reviewResult) return
+    const docPathToId = reviewResult.docPathToId || {}
+    const docPaths = Object.entries(reviewResult.commentsByDoc)
+      .filter(([docPath, comments]) => comments.length > 0 && docPathToId[docPath])
+      .map(([docPath]) => docPath)
+    if (docPaths.length === 0) return
+    deleteQueueRef.current = docPaths.slice(1)
+    handleDeleteCommentsForDoc(docPaths[0])
+  }, [reviewResult, handleDeleteCommentsForDoc])
+
   // When the document for a pending per-file delete is open, read its comment
   // thread ids and delete the Paper Mentor ones, then remove those ranges.
   useEffect(() => {
@@ -570,9 +592,17 @@ export default function AiTutorPanel() {
           err instanceof Error ? err.message : 'Failed to delete comments.'
         )
       } finally {
-        setIsDeleting(false)
-        setDeleteProgress(null)
         pendingDeleteRef.current = null
+        // Delete-all: if more files are queued, start the next one and keep the
+        // deleting state on; otherwise we're done.
+        const queue = deleteQueueRef.current
+        if (queue.length > 0) {
+          const next = queue.shift() as string
+          handleDeleteCommentsForDoc(next)
+        } else {
+          setIsDeleting(false)
+          setDeleteProgress(null)
+        }
       }
     }
 
@@ -627,77 +657,6 @@ export default function AiTutorPanel() {
         )}
       </>
     ) : null
-
-  // Per-file apply/delete controls for a scoped review: one row per reviewed
-  // file with a 70%-width "Apply N Changes to <file>" button and a 30%-width
-  // "Delete All Comments" button that removes only that file's comments.
-  const renderPerFileControls = () => {
-    if (!reviewResult) return null
-    const entries = Object.entries(reviewResult.commentsByDoc).filter(
-      ([, comments]) => (comments as ReviewComment[]).length > 0
-    )
-    if (entries.length === 0) return null
-
-    const progressStyle = {
-      fontSize: '12px',
-      color: 'var(--blue-50)',
-      padding: '6px 8px',
-      backgroundColor: 'var(--bg-tertiary-themed)',
-      borderRadius: '4px',
-      marginBottom: '6px',
-    }
-
-    return (
-      <div style={{ marginBottom: '6px' }}>
-        {entries.map(([docPath, comments]) => (
-          <div
-            key={docPath}
-            style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}
-          >
-            <OLButton
-              variant="success"
-              onClick={() => applyCommentsForDocPaths([docPath])}
-              disabled={isApplying || isDeleting}
-              style={{
-                flex: '0 0 70%',
-                minWidth: '0',
-                fontSize: '12px',
-                whiteSpace: 'normal',
-              }}
-            >
-              {`Apply ${(comments as ReviewComment[]).length} Changes to ${docPath}`}
-            </OLButton>
-            <OLButton
-              variant="danger"
-              onClick={() => handleDeleteCommentsForDoc(docPath)}
-              disabled={isApplying || isDeleting}
-              style={{
-                flex: '0 0 30%',
-                minWidth: '0',
-                fontSize: '12px',
-                whiteSpace: 'normal',
-              }}
-            >
-              Delete All Comments
-            </OLButton>
-          </div>
-        ))}
-        {applyProgress && <div style={progressStyle}>{applyProgress}</div>}
-        {deleteProgress && <div style={progressStyle}>{deleteProgress}</div>}
-        {appliedCount > 0 && !isApplying && (
-          <p
-            style={{
-              fontSize: '12px',
-              color: 'var(--green-50)',
-              margin: '0 0 6px 0',
-            }}
-          >
-            {appliedCount} comment(s) applied.
-          </p>
-        )}
-      </div>
-    )
-  }
 
   return (
     <div className="ai-tutor-panel" style={{ color: 'var(--content-primary-themed)' }}>
@@ -1031,7 +990,17 @@ export default function AiTutorPanel() {
           {/* Per-file apply/delete + summary + file details for the scoped review */}
           {reviewResult && reviewSource === 'scoped' && (
             <div style={{ marginTop: '8px' }}>
-              {renderPerFileControls()}
+              <ScopedFileControls
+                commentsByDoc={reviewResult.commentsByDoc}
+                onApply={applyCommentsForDocPaths}
+                onDelete={handleDeleteCommentsForDoc}
+                onDeleteAll={handleDeleteAllScoped}
+                isApplying={isApplying}
+                isDeleting={isDeleting}
+                applyProgress={applyProgress}
+                deleteProgress={deleteProgress}
+                appliedCount={appliedCount}
+              />
               <ReviewSummary reviewResult={reviewResult} />
               {projectMetadata && (
                 <FileDetails projectMetadata={projectMetadata} />
