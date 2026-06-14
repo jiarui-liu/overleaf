@@ -882,6 +882,13 @@ async function reviewWholeProject(req, res) {
 async function deleteAiTutorComments(req, res) {
   const { project_id: projectId } = req.params
 
+  // Optional per-file scope: when threadIds is provided, only delete Paper
+  // Mentor comments among those thread ids (the caller passes the thread ids
+  // from one document's ranges). Without it, delete project-wide.
+  const requestedThreadIds = Array.isArray(req.body?.threadIds)
+    ? new Set(req.body.threadIds.filter(id => typeof id === 'string'))
+    : null
+
   try {
     // 1. Fetch all threads for this project
     const threads = await ChatApiHandler.promises.getThreads(projectId)
@@ -890,6 +897,7 @@ async function deleteAiTutorComments(req, res) {
     const aiTutorRe = /^\[(AI Tutor|critical|warning|suggestion)\]/
     const aiTutorThreadIds = []
     for (const [threadId, thread] of Object.entries(threads)) {
+      if (requestedThreadIds && !requestedThreadIds.has(threadId)) continue
       if (thread.messages && thread.messages.length > 0) {
         const firstMsg = thread.messages[0].content || ''
         if (aiTutorRe.test(firstMsg)) {
@@ -899,7 +907,7 @@ async function deleteAiTutorComments(req, res) {
     }
 
     if (aiTutorThreadIds.length === 0) {
-      return res.json({ deleted: 0 })
+      return res.json({ deleted: 0, deletedIds: [] })
     }
 
     // 3. Delete each AI Tutor thread and emit socket events
@@ -909,9 +917,10 @@ async function deleteAiTutorComments(req, res) {
     }
 
     console.log(
-      `[AI Tutor] Deleted ${aiTutorThreadIds.length} AI Tutor comment threads from project ${projectId}`
+      `[AI Tutor] Deleted ${aiTutorThreadIds.length} AI Tutor comment threads from project ${projectId}` +
+      (requestedThreadIds ? ` (scoped to ${requestedThreadIds.size} thread id(s))` : '')
     )
-    res.json({ deleted: aiTutorThreadIds.length })
+    res.json({ deleted: aiTutorThreadIds.length, deletedIds: aiTutorThreadIds })
   } catch (err) {
     console.error('[AI Tutor] Failed to delete comments:', err)
     res.status(500).json({ error: err.message })

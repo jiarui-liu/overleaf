@@ -108,10 +108,19 @@ export async function fetchPaperFiles(
   }
 }
 
+/**
+ * Delete Paper Mentor comments. With no threadIds, deletes every Paper Mentor
+ * comment in the project. With threadIds, deletes only those threads that are
+ * Paper Mentor comments (used for per-file deletion: the caller passes the
+ * thread ids found in one document's ranges). Returns the ids actually deleted
+ * so the caller can remove the matching comment ranges from the open document.
+ */
 export async function deleteAiTutorComments(
-  projectId: string
-): Promise<{ deleted: number }> {
+  projectId: string,
+  threadIds?: string[]
+): Promise<{ deleted: number; deletedIds: string[] }> {
   return (await postJSON(
-    `/project/${projectId}/ai-tutor-delete-comments`
-  )) as { deleted: number }
+    `/project/${projectId}/ai-tutor-delete-comments`,
+    threadIds && threadIds.length > 0 ? { body: { threadIds } } : undefined
+  )) as { deleted: number; deletedIds: string[] }
 }
