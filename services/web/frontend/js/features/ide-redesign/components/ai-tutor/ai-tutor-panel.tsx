@@ -474,7 +474,7 @@ export default function AiTutorPanel() {
   return (
     <div className="ai-tutor-panel" style={{ color: 'var(--content-primary-themed)' }}>
       <RailPanelHeader title="Paper Mentor" />
-      <div style={{ padding: '12px 16px' }}>
+      <div className="ai-tutor-panel-body" style={{ padding: '12px 16px' }}>
         {/* ── Delete AI Tutor Comments ── */}
         <OLButton
           variant="danger"

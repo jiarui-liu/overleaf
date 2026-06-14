@@ -1,5 +1,21 @@
 .ai-tutor-panel {
+  // Fill the rail tab pane (which is height: 100%) and lay the header + body
+  // out as a column so the body can scroll independently. Without this the
+  // panel's content overflows the fixed-height pane and gets clipped.
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   color: var(--content-primary-themed);
+
+  // Scrollable content region. The RailPanelHeader stays pinned at the top
+  // while everything below scrolls when it exceeds the available height.
+  .ai-tutor-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 
   .form-label {
     color: var(--content-primary-themed);
