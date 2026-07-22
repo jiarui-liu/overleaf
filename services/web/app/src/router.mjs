@@ -1098,6 +1098,14 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
       ChatController.reviewWholeProject
     )
 
+    // AI Tutor — list project .tex files for per-file scoped review
+    webRouter.post(
+      '/project/:project_id/ai-tutor-files',
+      AuthorizationMiddleware.blockRestrictedUserFromProject,
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      ChatController.aiTutorFiles
+    )
+
     // AI Tutor delete all AI Tutor comments
     webRouter.post(
       '/project/:project_id/ai-tutor-delete-comments',

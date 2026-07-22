@@ -1,5 +1,21 @@
 .ai-tutor-panel {
+  // Fill the rail tab pane (which is height: 100%) and lay the header + body
+  // out as a column so the body can scroll independently. Without this the
+  // panel's content overflows the fixed-height pane and gets clipped.
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   color: var(--content-primary-themed);
+
+  // Scrollable content region. The RailPanelHeader stays pinned at the top
+  // while everything below scrolls when it exceeds the available height.
+  .ai-tutor-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 
   .form-label {
     color: var(--content-primary-themed);
@@ -17,4 +33,137 @@
     background-color: var(--bg-secondary-themed);
     border-color: var(--border-divider-themed);
   }
+}
+
+// ── Scoped review: per-file apply/delete results ──
+// Rendered by <ScopedFileControls/> after a "Review Specific Files" run. A
+// master summary bar sits above one card per reviewed file that has issues.
+.ai-tutor-scoped-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ai-tutor-scoped-summary-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-divider-themed);
+  border-radius: 6px;
+  background-color: var(--bg-secondary-themed);
+
+  &__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--content-primary-themed);
+  }
+
+  &__actions {
+    display: flex;
+    gap: 8px;
+
+    .btn {
+      flex: 1 1 0;
+      min-width: 0;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+  }
+}
+
+.ai-tutor-file-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-divider-themed);
+  border-radius: 6px;
+  background-color: var(--bg-secondary-themed);
+
+  &__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  &__filename {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--content-primary-themed);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__count {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--content-secondary-themed);
+  }
+
+  &__severity {
+    font-size: 11px;
+    color: var(--content-secondary-themed);
+
+    .ai-tutor-sev--critical {
+      color: var(--red-50);
+      font-weight: 600;
+    }
+
+    .ai-tutor-sev--warning {
+      color: var(--yellow-50);
+      font-weight: 600;
+    }
+
+    .ai-tutor-sev--suggestion {
+      color: var(--blue-50);
+      font-weight: 600;
+    }
+  }
+
+  // Per-file "Review summary" + "File details" collapsibles, sitting between
+  // the severity line and the apply/delete actions. Read as secondary to the
+  // card header: muted, indented, with a divider from the summary above.
+  &__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-divider-themed);
+    color: var(--content-secondary-themed);
+
+    summary {
+      font-size: 12px;
+      font-weight: 500;
+    }
+  }
+
+  &__actions {
+    display: flex;
+    gap: 8px;
+
+    .btn {
+      flex: 1 1 0;
+      min-width: 0;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+  }
+}
+
+.ai-tutor-scoped-progress {
+  font-size: 12px;
+  color: var(--blue-50);
+  padding: 6px 8px;
+  background-color: var(--bg-tertiary-themed);
+  border-radius: 4px;
+}
+
+.ai-tutor-scoped-applied {
+  font-size: 12px;
+  color: var(--green-50);
+  margin: 0;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import RailPanelHeader from '@/features/ide-react/components/rail/rail-panel-header'
+import { useRailContext } from '@/features/ide-react/context/rail-context'
 import { useEditorOpenDocContext } from '@/features/ide-react/context/editor-open-doc-context'
 import { useEditorManagerContext } from '@/features/ide-react/context/editor-manager-context'
 import { useProjectContext } from '@/shared/context/project-context'
@@ -8,6 +9,7 @@ import RangesTracker from '@overleaf/ranges-tracker'
 import {
   runFullReview,
   deleteAiTutorComments,
+  fetchPaperFiles,
   WholeProjectMetadata,
   ReviewResult,
   ReviewComment,
@@ -23,6 +25,11 @@ import {
   extractTextFromPdf,
   RoleModelPaper,
 } from './extract-pdf-text'
+import {
+  ReviewSummary,
+  FileDetails,
+  ScopedFileControls,
+} from './review-result-details'
 
 const MODEL_OPTIONS = [
   { value: 'gpt-4o', label: 'GPT-4o' },
@@ -70,12 +77,28 @@ export default function AiTutorPanel() {
 
   // Delete comments state
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState<string | null>(null)
+  // Per-file delete: the document we must open to read its comment ranges.
+  const pendingDeleteRef = useRef<{ docPath: string; docId: string } | null>(
+    null
+  )
+  const deleteTriggerRef = useRef(0)
+  const [deleteTrigger, setDeleteTrigger] = useState(0)
+  // Delete-all queue: remaining docPaths to delete after the current one. The
+  // per-file delete is a single-pending-ref/open-doc flow, so a "Delete all"
+  // must run them one at a time — the delete effect advances this on completion.
+  const deleteQueueRef = useRef<string[]>([])
 
   // Full review state
   const [isReviewing, setIsReviewing] = useState(false)
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null)
   const [reviewProgress, setReviewProgress] = useState<string | null>(null)
   const [appliedCount, setAppliedCount] = useState(0)
+  // Tracks which action produced the current reviewResult, so the summary,
+  // file details, and apply controls render under the section that ran it.
+  const [reviewSource, setReviewSource] = useState<
+    'full' | 'scoped' | 'citation' | null
+  >(null)
 
   // Auto-apply state
   const [isApplying, setIsApplying] = useState(false)
@@ -84,9 +107,48 @@ export default function AiTutorPanel() {
   const applyTriggerRef = useRef(0)
   const [applyTrigger, setApplyTrigger] = useState(0)
 
+  // Scoped (per-file) review state
+  const [availableFiles, setAvailableFiles] = useState<string[]>([])
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([])
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false)
+  const [isScopedReviewing, setIsScopedReviewing] = useState(false)
+  const [scopedProgress, setScopedProgress] = useState<string | null>(null)
+
   const { currentDocument, currentDocumentId } = useEditorOpenDocContext()
   const { openDocWithId } = useEditorManagerContext()
   const { projectId } = useProjectContext()
+  const { selectedTab } = useRailContext()
+
+  // Load the list of project .tex files whenever the Paper Mentor tab becomes
+  // active so the user can pick a subset for a scoped review. The rail keeps
+  // panels mounted across tab switches, so a mount-only fetch goes stale when
+  // the user adds/removes files and returns to the tab. Keying on selectedTab
+  // re-fetches on every activation (and the initial mount, since the tab is
+  // already active then) without needing a page refresh.
+  useEffect(() => {
+    if (selectedTab !== 'ai-tutor') return
+    let cancelled = false
+    setIsLoadingFiles(true)
+    fetchPaperFiles(projectId)
+      .then(res => {
+        if (cancelled) return
+        if (res.success && res.files) {
+          setAvailableFiles(res.files)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingFiles(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, selectedTab])
+
+  const toggleFile = useCallback((path: string) => {
+    setSelectedFiles(prev =>
+      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+    )
+  }, [])
 
   // -----------------------------------------------------------------------
   // Effect: when currentDocument changes during auto-apply, process next batch
@@ -252,6 +314,7 @@ export default function AiTutorPanel() {
       'Analyzing project structure and running multi-agent review... This may take 1-2 minutes.'
     )
     setReviewResult(null)
+    setReviewSource(null)
     setAppliedCount(0)
 
     try {
@@ -270,6 +333,7 @@ export default function AiTutorPanel() {
       }
 
       setReviewResult(result.result!)
+      setReviewSource('full')
       setReviewProgress(null)
 
       const r = result.result!
@@ -293,56 +357,135 @@ export default function AiTutorPanel() {
   }, [projectId, selectedModel, selectedVenue, roleModelTexts])
 
   // -----------------------------------------------------------------------
-  // Apply review comments across all documents automatically
+  // Run a scoped review on only the selected files (same pipeline as full
+  // review, restricted to the chosen files server-side).
   // -----------------------------------------------------------------------
-  const handleApplyComments = useCallback(() => {
-    if (!reviewResult) {
-      setError('No review results available.')
+  const handleScopedReview = useCallback(async () => {
+    if (selectedFiles.length === 0) {
+      setError('Select at least one file to review.')
       return
     }
-
-    const docPathToId = reviewResult.docPathToId || {}
-
-    // Build a queue of (docPath, docId, comments) entries
-    const entries: CommentQueue['entries'] = []
-    for (const [docPath, comments] of Object.entries(reviewResult.commentsByDoc)) {
-      const docId = docPathToId[docPath]
-      if (docId && (comments as ReviewComment[]).length > 0) {
-        entries.push({ docPath, docId, comments: comments as ReviewComment[] })
-      }
-    }
-
-    if (entries.length === 0) {
-      setError('No comments could be mapped to documents.')
-      return
-    }
-
-    // Initialize the queue
-    commentQueueRef.current = {
-      entries,
-      currentIndex: 0,
-      totalApplied: 0,
-      totalSkipped: 0,
-    }
-
-    setIsApplying(true)
-    setAppliedCount(0)
+    setIsScopedReviewing(true)
     setError(null)
     setSuccessMessage(null)
-    setApplyProgress(
-      `Applying comments... processing ${entries[0].docPath} (1/${entries.length})`
+    setScopedProgress(
+      `Reviewing ${selectedFiles.length} selected file(s)... This may take a minute.`
     )
+    setReviewResult(null)
+    setReviewSource(null)
+    setAppliedCount(0)
 
-    // Open the first document (or trigger if already open)
-    const firstDocId = entries[0].docId
-    if (currentDocumentId === firstDocId) {
-      // Document is already open — trigger the effect manually
-      applyTriggerRef.current++
-      setApplyTrigger(applyTriggerRef.current)
-    } else {
-      openDocWithId(firstDocId)
+    try {
+      const result = await runFullReview(
+        projectId,
+        selectedModel,
+        selectedVenue,
+        roleModelTexts,
+        selectedFiles
+      )
+
+      if (!result.success) {
+        setError(result.error || 'Review failed.')
+        setScopedProgress(null)
+        return
+      }
+
+      setReviewResult(result.result!)
+      setReviewSource('scoped')
+      setScopedProgress(null)
+
+      const r = result.result!
+      if (r.summary.total === 0) {
+        setSuccessMessage(
+          `Reviewed ${selectedFiles.length} file(s) — nothing to flag.`
+        )
+      } else {
+        const failedNote =
+          r.failedAgents.length > 0
+            ? ` (${r.failedAgents.length} agent(s) skipped)`
+            : ''
+        setSuccessMessage(
+          `Section review complete! ${r.summary.total} comments across ` +
+          `${selectedFiles.length} file(s).${failedNote}`
+        )
+      }
+    } catch (err) {
+      console.error('[AI Tutor] Scoped review error:', err)
+      setError(
+        err instanceof Error ? err.message : 'An unexpected error occurred.'
+      )
+      setScopedProgress(null)
+    } finally {
+      setIsScopedReviewing(false)
     }
-  }, [reviewResult, currentDocumentId, openDocWithId])
+  }, [projectId, selectedModel, selectedVenue, roleModelTexts, selectedFiles])
+
+  // -----------------------------------------------------------------------
+  // Apply review comments. Pass a list of docPaths to apply only those files'
+  // comments (per-file apply); pass nothing to apply across all reviewed docs.
+  // -----------------------------------------------------------------------
+  const applyCommentsForDocPaths = useCallback(
+    (docPathFilter?: string[]) => {
+      if (!reviewResult) {
+        setError('No review results available.')
+        return
+      }
+
+      const docPathToId = reviewResult.docPathToId || {}
+      const filterSet = docPathFilter ? new Set(docPathFilter) : null
+
+      // Build a queue of (docPath, docId, comments) entries
+      const entries: CommentQueue['entries'] = []
+      for (const [docPath, comments] of Object.entries(
+        reviewResult.commentsByDoc
+      )) {
+        if (filterSet && !filterSet.has(docPath)) continue
+        const docId = docPathToId[docPath]
+        if (docId && (comments as ReviewComment[]).length > 0) {
+          entries.push({ docPath, docId, comments: comments as ReviewComment[] })
+        }
+      }
+
+      if (entries.length === 0) {
+        setError('No comments could be mapped to documents.')
+        return
+      }
+
+      // Initialize the queue
+      commentQueueRef.current = {
+        entries,
+        currentIndex: 0,
+        totalApplied: 0,
+        totalSkipped: 0,
+      }
+
+      setIsApplying(true)
+      setAppliedCount(0)
+      setError(null)
+      setSuccessMessage(null)
+      setApplyProgress(
+        `Applying comments... processing ${entries[0].docPath} (1/${entries.length})`
+      )
+
+      // Open the first document (or trigger if already open)
+      const firstDocId = entries[0].docId
+      if (currentDocumentId === firstDocId) {
+        // Document is already open — trigger the effect manually
+        applyTriggerRef.current++
+        setApplyTrigger(applyTriggerRef.current)
+      } else {
+        openDocWithId(firstDocId)
+      }
+    },
+    [reviewResult, currentDocumentId, openDocWithId]
+  )
+
+  // Apply every reviewed document's comments (used by the Full Paper Review
+  // section's single "Apply to All Files" button).
+  const handleApplyComments = useCallback(
+    () => applyCommentsForDocPaths(),
+    [applyCommentsForDocPaths]
+  )
 
   // -----------------------------------------------------------------------
   // Delete all AI Tutor comments
@@ -371,20 +514,160 @@ export default function AiTutorPanel() {
     }
   }, [projectId])
 
+  // Delete only this document's Paper Mentor comments. We open the doc so we
+  // can read its comment thread ids from ranges, then ask the server to delete
+  // the Paper Mentor ones among them (handled by the effect below).
+  const handleDeleteCommentsForDoc = useCallback(
+    (docPath: string) => {
+      const docId = reviewResult?.docPathToId?.[docPath]
+      if (!docId) {
+        setError(`Could not resolve document "${docPath}".`)
+        return
+      }
+      pendingDeleteRef.current = { docPath, docId }
+      setIsDeleting(true)
+      setError(null)
+      setSuccessMessage(null)
+      setDeleteProgress(`Deleting comments in ${docPath}...`)
+      if (currentDocumentId === docId) {
+        deleteTriggerRef.current++
+        setDeleteTrigger(deleteTriggerRef.current)
+      } else {
+        openDocWithId(docId)
+      }
+    },
+    [reviewResult, currentDocumentId, openDocWithId]
+  )
+
+  // Delete every reviewed file's Paper Mentor comments, one file at a time.
+  // Seeds the delete queue with all-but-the-first docPath and kicks off the
+  // first; the delete effect's finally drains the rest sequentially.
+  const handleDeleteAllScoped = useCallback(() => {
+    if (!reviewResult) return
+    const docPathToId = reviewResult.docPathToId || {}
+    const docPaths = Object.entries(reviewResult.commentsByDoc)
+      .filter(([docPath, comments]) => comments.length > 0 && docPathToId[docPath])
+      .map(([docPath]) => docPath)
+    if (docPaths.length === 0) return
+    deleteQueueRef.current = docPaths.slice(1)
+    handleDeleteCommentsForDoc(docPaths[0])
+  }, [reviewResult, handleDeleteCommentsForDoc])
+
+  // When the document for a pending per-file delete is open, read its comment
+  // thread ids and delete the Paper Mentor ones, then remove those ranges.
+  useEffect(() => {
+    const pending = pendingDeleteRef.current
+    if (!pending || !currentDocument || !currentDocumentId) return
+    if (pending.docId !== currentDocumentId) return
+    if (currentDocument.doc_id !== currentDocumentId) return
+
+    const ranges = (
+      currentDocument as unknown as {
+        ranges?: {
+          comments?: Array<{ id: string }>
+          removeCommentId?: (id: string) => void
+        }
+      }
+    ).ranges
+
+    const runDelete = async () => {
+      try {
+        const threadIds = (ranges?.comments || []).map(c => c.id)
+        if (threadIds.length === 0) {
+          setSuccessMessage(`No comments to delete in ${pending.docPath}.`)
+        } else {
+          const res = await deleteAiTutorComments(projectId, threadIds)
+          for (const id of res.deletedIds || []) {
+            ranges?.removeCommentId?.(id)
+          }
+          setSuccessMessage(
+            res.deleted > 0
+              ? `Deleted ${res.deleted} Paper Mentor comment(s) in ${pending.docPath}.`
+              : `No Paper Mentor comments to delete in ${pending.docPath}.`
+          )
+        }
+      } catch (err) {
+        console.error('[AI Tutor] Per-file delete error:', err)
+        setError(
+          err instanceof Error ? err.message : 'Failed to delete comments.'
+        )
+      } finally {
+        pendingDeleteRef.current = null
+        // Delete-all: if more files are queued, start the next one and keep the
+        // deleting state on; otherwise we're done.
+        const queue = deleteQueueRef.current
+        if (queue.length > 0) {
+          const next = queue.shift() as string
+          handleDeleteCommentsForDoc(next)
+        } else {
+          setIsDeleting(false)
+          setDeleteProgress(null)
+        }
+      }
+    }
+
+    runDelete()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDocument, currentDocumentId, deleteTrigger])
+
   // Helper to extract metadata from review result
   const projectMetadata: WholeProjectMetadata | undefined =
     reviewResult?.metadata
 
+  // Renders the "Apply N Comments to <scope>" button plus its progress and
+  // done messages. Shared by the full-review and scoped-review sections — only
+  // the scope wording differs.
+  const renderApplyControls = (scopeLabel: string) =>
+    reviewResult ? (
+      <>
+        <OLButton
+          variant="success"
+          onClick={handleApplyComments}
+          disabled={isApplying}
+          style={{ width: '100%', marginBottom: '6px' }}
+        >
+          {isApplying
+            ? 'Applying comments...'
+            : `Apply ${reviewResult.summary.total} Comments to ${scopeLabel}`}
+        </OLButton>
+        {applyProgress && (
+          <div
+            style={{
+              fontSize: '12px',
+              color: 'var(--blue-50)',
+              padding: '6px 8px',
+              backgroundColor: 'var(--bg-tertiary-themed)',
+              borderRadius: '4px',
+              marginBottom: '6px',
+            }}
+          >
+            {applyProgress}
+          </div>
+        )}
+        {appliedCount > 0 && !isApplying && (
+          <p
+            style={{
+              fontSize: '12px',
+              color: 'var(--green-50)',
+              margin: '0 0 6px 0',
+            }}
+          >
+            {appliedCount} comment(s) applied to {scopeLabel}.
+          </p>
+        )}
+      </>
+    ) : null
+
   return (
     <div className="ai-tutor-panel" style={{ color: 'var(--content-primary-themed)' }}>
       <RailPanelHeader title="Paper Mentor" />
-      <div style={{ padding: '12px 16px' }}>
+      <div className="ai-tutor-panel-body" style={{ padding: '12px 16px' }}>
         {/* ── Delete AI Tutor Comments ── */}
         <OLButton
           variant="danger"
           size="sm"
           onClick={handleDeleteComments}
-          disabled={isDeleting || isReviewing || isApplying}
+          disabled={isDeleting || isReviewing || isScopedReviewing || isApplying}
           style={{ width: '100%', marginBottom: '12px' }}
         >
           {isDeleting ? 'Deleting...' : 'Delete All Paper Mentor Comments'}
@@ -558,7 +841,7 @@ export default function AiTutorPanel() {
           <OLButton
             variant="primary"
             onClick={handleFullReview}
-            disabled={isReviewing || isApplying}
+            disabled={isReviewing || isScopedReviewing || isApplying}
             style={{ width: '100%', marginBottom: '6px' }}
           >
             {isReviewing ? 'Reviewing paper...' : 'Run Full Review'}
@@ -579,204 +862,146 @@ export default function AiTutorPanel() {
             </div>
           )}
 
-          {/* Apply comments */}
-          {reviewResult && (
-            <>
-              <OLButton
-                variant="success"
-                onClick={handleApplyComments}
-                disabled={isApplying}
-                style={{ width: '100%', marginBottom: '6px' }}
-              >
-                {isApplying
-                  ? 'Applying comments...'
-                  : `Apply ${reviewResult.summary.total} Comments to All Files`}
-              </OLButton>
-              {applyProgress && (
-                <div
-                  style={{
-                    fontSize: '12px',
-                    color: 'var(--blue-50)',
-                    padding: '6px 8px',
-                    backgroundColor: 'var(--bg-tertiary-themed)',
-                    borderRadius: '4px',
-                    marginBottom: '6px',
-                  }}
-                >
-                  {applyProgress}
-                </div>
-              )}
-              {appliedCount > 0 && !isApplying && (
-                <p
-                  style={{
-                    fontSize: '12px',
-                    color: 'var(--green-50)',
-                    margin: '0 0 6px 0',
-                  }}
-                >
-                  {appliedCount} comment(s) applied across all files.
-                </p>
-              )}
-            </>
+          {/* Apply comments + summary + file details (full review / citation) */}
+          {reviewSource !== 'scoped' && renderApplyControls('All Files')}
+
+          {reviewResult && reviewSource !== 'scoped' && (
+            <ReviewSummary reviewResult={reviewResult} />
           )}
 
-          {/* Review summary */}
-          {reviewResult && (
-            <div style={{ marginTop: '4px', fontSize: '12px' }}>
-              <details>
-                <summary style={{ cursor: 'pointer', color: 'var(--content-primary-themed)' }}>
-                  Review summary ({reviewResult.summary.total} comments)
-                </summary>
-                <div style={{ padding: '6px 0' }}>
-                  <p style={{ margin: '0 0 4px 0' }}>
-                    <strong>Paper type:</strong>{' '}
-                    {reviewResult.classification.paperType} —{' '}
-                    {reviewResult.classification.paperTypeSummary}
-                  </p>
-                  {reviewResult.roleModelPapers &&
-                    reviewResult.roleModelPapers.length > 0 && (
-                      <p style={{ margin: '0 0 4px 0' }}>
-                        <strong>Role models:</strong>{' '}
-                        {reviewResult.roleModelPapers.join(', ')}
-                      </p>
-                    )}
-                  <p style={{ margin: '0 0 4px 0' }}>
-                    <strong>By category:</strong>
-                  </p>
-                  <ul
+          {projectMetadata && reviewSource !== 'scoped' && (
+            <FileDetails projectMetadata={projectMetadata} />
+          )}
+        </div>
+
+        {/* ── Review Specific Files ── */}
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px',
+            backgroundColor: 'var(--bg-secondary-themed)',
+            borderRadius: '6px',
+            border: '1px solid var(--border-divider-themed)',
+          }}
+        >
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '8px',
+            }}
+          >
+            <MaterialIcon type="fact_check" />
+            <strong>Review Specific Files</strong>
+          </span>
+          <p
+            style={{ fontSize: '13px', color: 'var(--content-secondary-themed)', margin: '0 0 8px 0' }}
+          >
+            Runs the same multi-agent review on only the files you select —
+            ideal for iterating on one section at a time.
+          </p>
+
+          {/* File selection list */}
+          <div
+            style={{
+              maxHeight: '160px',
+              overflowY: 'auto',
+              border: '1px solid var(--border-divider-themed)',
+              borderRadius: '4px',
+              padding: '6px 8px',
+              marginBottom: '8px',
+              backgroundColor: 'var(--bg-primary-themed)',
+            }}
+          >
+            {isLoadingFiles ? (
+              <span style={{ fontSize: '12px', color: 'var(--content-secondary-themed)' }}>
+                Loading files…
+              </span>
+            ) : availableFiles.length === 0 ? (
+              <span style={{ fontSize: '12px', color: 'var(--content-secondary-themed)' }}>
+                No .tex files found in this project.
+              </span>
+            ) : (
+              availableFiles.map(file => (
+                <label
+                  key={file}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '13px',
+                    padding: '2px 0',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedFiles.includes(file)}
+                    onChange={() => toggleFile(file)}
+                    disabled={isReviewing || isScopedReviewing || isApplying}
+                  />
+                  <span
                     style={{
-                      margin: '2px 0 6px 0',
-                      paddingLeft: '18px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    {Object.entries(reviewResult.summary.byCategory).map(
-                      ([cat, count]) => (
-                        <li key={cat}>
-                          {cat}: {count as number}
-                        </li>
-                      )
-                    )}
-                  </ul>
-                  <p style={{ margin: '0 0 4px 0' }}>
-                    <strong>By severity:</strong>
-                  </p>
-                  <ul
-                    style={{
-                      margin: '2px 0 6px 0',
-                      paddingLeft: '18px',
-                    }}
-                  >
-                    {Object.entries(reviewResult.summary.bySeverity).map(
-                      ([sev, count]) => (
-                        <li key={sev}>
-                          {sev}: {count as number}
-                        </li>
-                      )
-                    )}
-                  </ul>
-                  <p style={{ margin: '0 0 4px 0' }}>
-                    <strong>Comments by document:</strong>
-                  </p>
-                  <ul
-                    style={{
-                      margin: '2px 0 6px 0',
-                      paddingLeft: '18px',
-                    }}
-                  >
-                    {Object.entries(reviewResult.commentsByDoc).map(
-                      ([docPath, comments]) => (
-                        <li key={docPath}>
-                          {docPath}: {(comments as ReviewComment[]).length}
-                        </li>
-                      )
-                    )}
-                  </ul>
-                  {reviewResult.failedAgents.length > 0 && (
-                    <>
-                      <p
-                        style={{
-                          margin: '0 0 4px 0',
-                          color: 'var(--red-50)',
-                        }}
-                      >
-                        <strong>Skipped agents:</strong>
-                      </p>
-                      <ul
-                        style={{
-                          margin: '2px 0 6px 0',
-                          paddingLeft: '18px',
-                        }}
-                      >
-                        {reviewResult.failedAgents.map(
-                          (a: { id: string; name: string; reason: string }) => (
-                            <li key={a.id}>
-                              {a.name}: {a.reason}
-                            </li>
-                          )
-                        )}
-                      </ul>
-                    </>
-                  )}
-                </div>
-              </details>
+                    {file}
+                  </span>
+                </label>
+              ))
+            )}
+          </div>
+
+          <OLButton
+            variant="primary"
+            onClick={handleScopedReview}
+            disabled={
+              selectedFiles.length === 0 ||
+              isReviewing ||
+              isScopedReviewing ||
+              isApplying
+            }
+            style={{ width: '100%', marginBottom: '6px' }}
+          >
+            {isScopedReviewing
+              ? 'Reviewing selected files...'
+              : `Review Selected Files${
+                  selectedFiles.length > 0 ? ` (${selectedFiles.length})` : ''
+                }`}
+          </OLButton>
+
+          {scopedProgress && (
+            <div
+              style={{
+                fontSize: '12px',
+                color: 'var(--blue-50)',
+                padding: '6px 8px',
+                backgroundColor: 'var(--bg-tertiary-themed)',
+                borderRadius: '4px',
+              }}
+            >
+              {scopedProgress}
             </div>
           )}
 
-          {/* File details from analysis metadata */}
-          {projectMetadata && (
-            <div style={{ marginTop: '4px', fontSize: '12px' }}>
-              <details>
-                <summary style={{ cursor: 'pointer', color: 'var(--content-primary-themed)' }}>
-                  File details ({projectMetadata.categories.texFiles.count} TeX,{' '}
-                  {projectMetadata.categories.figures.count} figures,{' '}
-                  {projectMetadata.mergedTexLength.toLocaleString()} chars
-                  merged)
-                </summary>
-                <div style={{ padding: '4px 0' }}>
-                  <strong>TeX files (merged):</strong>
-                  <ul style={{ margin: '2px 0 6px 0', paddingLeft: '18px' }}>
-                    {projectMetadata.categories.texFiles.files.map(
-                      (f: string) => (
-                        <li key={f}>{f}</li>
-                      )
-                    )}
-                  </ul>
-                  {projectMetadata.categories.figures.count > 0 && (
-                    <>
-                      <strong>Figures:</strong>
-                      <ul
-                        style={{
-                          margin: '2px 0 6px 0',
-                          paddingLeft: '18px',
-                        }}
-                      >
-                        {projectMetadata.categories.figures.files.map(
-                          (f: string) => (
-                            <li key={f}>{f}</li>
-                          )
-                        )}
-                      </ul>
-                    </>
-                  )}
-                  {projectMetadata.categories.bibFiles.count > 0 && (
-                    <>
-                      <strong>Bib files:</strong>
-                      <ul
-                        style={{
-                          margin: '2px 0 6px 0',
-                          paddingLeft: '18px',
-                        }}
-                      >
-                        {projectMetadata.categories.bibFiles.files.map(
-                          (f: string) => (
-                            <li key={f}>{f}</li>
-                          )
-                        )}
-                      </ul>
-                    </>
-                  )}
-                </div>
-              </details>
+          {/* Per-file apply/delete + per-file summary + file details (scoped) */}
+          {reviewResult && reviewSource === 'scoped' && (
+            <div style={{ marginTop: '8px' }}>
+              <ScopedFileControls
+                reviewResult={reviewResult}
+                commentsByDoc={reviewResult.commentsByDoc}
+                onApply={applyCommentsForDocPaths}
+                onDelete={handleDeleteCommentsForDoc}
+                onDeleteAll={handleDeleteAllScoped}
+                isApplying={isApplying}
+                isDeleting={isDeleting}
+                applyProgress={applyProgress}
+                deleteProgress={deleteProgress}
+                appliedCount={appliedCount}
+              />
             </div>
           )}
         </div>

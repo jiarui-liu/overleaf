@@ -1802,13 +1802,28 @@ export function mapCommentsToDocuments(
   comments,
   mergedTex,
   docContentMap,
-  rootDocPath
+  rootDocPath,
+  allowedDocPaths = null
 )
 {
   const inlineMap = buildInlineMap(mergedTex)
   const normalizedRoot = rootDocPath.startsWith('/')
     ? rootDocPath.slice(1)
     : rootDocPath
+
+  // Scope invariant: during a scoped review, comments may ONLY map to the
+  // selected files. An empty/absent set means "full review — allow all docs".
+  // Normalize the same way as docContentMap keys (strip any leading slash).
+  const allowedSet = new Set(
+    (allowedDocPaths instanceof Set
+      ? [...allowedDocPaths]
+      : Array.isArray(allowedDocPaths)
+        ? allowedDocPaths
+        : []
+    ).map(p => (typeof p === 'string' && p.startsWith('/') ? p.slice(1) : p))
+  )
+  const isDocAllowed = docPath =>
+    allowedSet.size === 0 || allowedSet.has(docPath)
 
   console.log(
     `[AI Tutor] Phase 6: Mapping ${comments.length} comments to documents. ` +
@@ -1869,10 +1884,13 @@ export function mapCommentsToDocuments(
     const originalContent = docContentMap[originalFile]
     if (!originalContent)
     {
-      // Fallback: search all docs for the highlightText (exact, then fuzzy)
+      // Fallback: search all docs for the highlightText (exact, then fuzzy).
+      // Scope guard: skip docs outside the selection so a scoped review can
+      // never mis-target a comment onto an unselected file.
       let found = false
       for (const [docPath, content] of Object.entries(docContentMap))
       {
+        if (!isDocAllowed(docPath)) continue
         const idx = content.indexOf(comment.highlightText)
         if (idx !== -1)
         {
@@ -1898,6 +1916,7 @@ export function mapCommentsToDocuments(
         let bestDocPath = null
         for (const [docPath, content] of Object.entries(docContentMap))
         {
+          if (!isDocAllowed(docPath)) continue
           const fuzzyResult = fuzzyFindInText(comment.highlightText, content)
           if (fuzzyResult && (!bestFuzzy || fuzzyResult.similarity > bestFuzzy.similarity))
           {
@@ -1956,10 +1975,12 @@ export function mapCommentsToDocuments(
         continue
       }
 
-      // Fallback: try searching all docs (exact, then fuzzy)
+      // Fallback: try searching all docs (exact, then fuzzy).
+      // Scope guard: skip docs outside the selection (see branch above).
       let found = false
       for (const [docPath, content] of Object.entries(docContentMap))
       {
+        if (!isDocAllowed(docPath)) continue
         const idx = content.indexOf(comment.highlightText)
         if (idx !== -1)
         {
@@ -1985,6 +2006,7 @@ export function mapCommentsToDocuments(
         let bestDocPath = null
         for (const [docPath, content] of Object.entries(docContentMap))
         {
+          if (!isDocAllowed(docPath)) continue
           const fuzzyResult = fuzzyFindInText(comment.highlightText, content)
           if (fuzzyResult && (!bestFuzzy || fuzzyResult.similarity > bestFuzzy.similarity))
           {
@@ -2029,14 +2051,35 @@ export function mapCommentsToDocuments(
     directMapped++
   }
 
+  // Belt-and-suspenders: enforce the scope invariant one final time. Any comment
+  // that resolved (via any branch above) to a doc outside the selection is
+  // dropped rather than mis-attributed.
+  let scopeDropped = 0
+  const scopedMapped =
+    allowedSet.size === 0
+      ? mapped
+      : mapped.filter(c => {
+          const ok = allowedSet.has(c.docPath)
+          if (!ok)
+          {
+            scopeDropped++
+            console.warn(
+              `[AI Tutor] Phase 6: Scope guard dropped comment mapped to ` +
+              `"${c.docPath}" (not in selected files) [${c.agentName}]`
+            )
+          }
+          return ok
+        })
+
   console.log(
     `[AI Tutor] Phase 6: Mapping complete — ` +
     `${directMapped} direct, ${fallbackMapped} fallback, ${fuzzyMapped} fuzzy, ` +
-    `${notFoundInMerged} not in merged.tex, ${unmapped} unmapped. ` +
-    `Total mapped: ${mapped.length}/${comments.length}`
+    `${notFoundInMerged} not in merged.tex, ${unmapped} unmapped` +
+    (allowedSet.size > 0 ? `, ${scopeDropped} scope-dropped` : '') + `. ` +
+    `Total mapped: ${scopedMapped.length}/${comments.length}`
   )
 
-  return mapped
+  return scopedMapped
 }
 
 // ---------------------------------------------------------------------------
@@ -2114,7 +2157,10 @@ function generateUnusedFileComments(fileCategories, mergedTex) {
  * @param {object} [opts.fileCategories] - file categorization from project analysis (for unused-file reviewer)
  * @returns {object} { comments, classification, summary, failedAgents }
  */
-export async function runFullReview({
+// Core single-pass review: full project (docPaths empty) or a single selected
+// file (docPaths === [oneFile]). Multi-file scoped reviews fan out to one call
+// of this per file via the runFullReview dispatcher below.
+async function runReviewCore({
   projectId,
   model,
   venue = 'arxiv',
@@ -2122,6 +2168,8 @@ export async function runFullReview({
   docContentMap,
   rootDocPath,
   roleModelTexts = [],
+  docPaths = [],
+  skipResultCache = false,
   fileCategories = null,
 })
 {
@@ -2183,6 +2231,74 @@ export async function runFullReview({
     `[AI Tutor] Phase 2 complete in ${phase2Elapsed}s — ` +
     `Paper type: ${classification.paperType} — ${classification.paperTypeSummary}`
   )
+
+  // Scoped review: when docPaths is provided, restrict the review to the
+  // selected files only. Classification (above) still ran on the FULL paper so
+  // paper-type/venue/hybrid context stays accurate; we only narrow the text and
+  // section mapping handed to the reviewer agents. Phases 4 & 6 then map against
+  // this scoped text (not the full mergedTex), because a selected file may be a
+  // standalone file that is not \input from the root doc — so it is absent from
+  // mergedTex, and mapping against mergedTex would misattribute its comments to
+  // the root doc (main.tex).
+  const normSel = new Set(
+    (Array.isArray(docPaths) ? docPaths : []).map(p =>
+      p.startsWith('/') ? p.slice(1) : p
+    )
+  )
+  const isScoped = normSel.size > 0
+  let scopedSections = sections
+  let scopedMapping = classification.sectionMapping
+  let scopedMergedTex = mergedTex
+  let scopedDocContentMap = docContentMap
+  let scopedRootDocPath = rootDocPath
+  let allowedTitles = null
+  if (isScoped)
+  {
+    // Wrap each selected file in the same INLINED FROM / END OF markers the
+    // full merge uses, so buildInlineMap() in Phase 6 can attribute each comment
+    // to the correct selected file rather than the root doc.
+    const parts = []
+    const selectedDocMap = {}
+    for (const p of normSel)
+    {
+      if (docContentMap[p])
+      {
+        parts.push(
+          `% ========== INLINED FROM: ${p} ==========\n` +
+          docContentMap[p] +
+          `\n% ========== END OF: ${p} ==========`
+        )
+        selectedDocMap[p] = docContentMap[p]
+      }
+    }
+    scopedMergedTex = parts.join('\n\n')
+    scopedDocContentMap = selectedDocMap
+    scopedRootDocPath = Object.keys(selectedDocMap)[0] || rootDocPath
+    scopedSections = parseSections(scopedMergedTex)
+    allowedTitles = new Set(
+      scopedSections.map(s => s.title.toLowerCase().trim())
+    )
+    scopedMapping = {}
+    for (const [cat, titles] of Object.entries(classification.sectionMapping))
+    {
+      const kept = (titles || []).filter(t =>
+        allowedTitles.has(t.toLowerCase().trim())
+      )
+      if (kept.length) scopedMapping[cat] = kept
+    }
+    console.log(
+      `[AI Tutor] Scoped review: ${normSel.size} file(s) selected ` +
+      `(${[...normSel].join(', ')}), ${scopedSections.length} section(s), ` +
+      `${scopedMergedTex.length} chars`
+    )
+  }
+
+  // Text/doc-map/root used by Phases 4 & 6 to map comments back to documents.
+  // For a scoped review these are the scoped equivalents so comments resolve to
+  // the selected files; otherwise they are the full-project values.
+  const mappingMergedTex = isScoped ? scopedMergedTex : mergedTex
+  const mappingDocContentMap = isScoped ? scopedDocContentMap : docContentMap
+  const mappingRootDocPath = isScoped ? scopedRootDocPath : rootDocPath
 
   // Build the final list of agents: static defs + dynamic paper-type agent
   // Filter out disabled agents from env config
@@ -2274,6 +2390,11 @@ export async function runFullReview({
     const combos = {} // e.g. "methods+results" → { categories: [...], titles: [...] }
     for (const hs of classification.hybridSections)
     {
+      // In scoped mode, only keep hybrid sections that survive the file filter
+      if (isScoped && !allowedTitles.has(hs.title.toLowerCase().trim()))
+      {
+        continue
+      }
       const key = hs.categories.join('+')
       if (!combos[key])
       {
@@ -2284,6 +2405,8 @@ export async function runFullReview({
 
     for (const [comboKey, combo] of Object.entries(combos))
     {
+      // No surviving sections for this combo (possible in scoped mode) → skip
+      if (!combo.titles.length) continue
       // Find the SUBAGENT_DEFS for each category in this combo
       const relevantDefs = SUBAGENT_DEFS.filter(
         d =>
@@ -2325,8 +2448,9 @@ export async function runFullReview({
         .map(c => c.charAt(0).toUpperCase() + c.slice(1).replace('_', ' '))
         .join(' + ')
 
-      // Add the hybrid section titles to the sectionMapping under the combo key
-      classification.sectionMapping[comboKey] = combo.titles
+      // Add the hybrid section titles to the (scoped) section mapping under the
+      // combo key. scopedMapping === classification.sectionMapping when not scoped.
+      scopedMapping[comboKey] = combo.titles
 
       agentDefs.push({
         id: `hybrid_${comboKey}`,
@@ -2360,10 +2484,10 @@ export async function runFullReview({
       openai,
       model,
       def,
-      sections,
-      classification.sectionMapping,
+      scopedSections,
+      scopedMapping,
       classification.typeSpecificGuidance,
-      mergedTex,
+      scopedMergedTex,
       roleModelTexts
     )
     // Wrap with timeout
@@ -2451,7 +2575,7 @@ export async function runFullReview({
 
   // Phase 4: Deduplicate overlapping comments across agents
   const phase4Start = Date.now()
-  const dedupedComments = deduplicateComments(allComments, mergedTex)
+  const dedupedComments = deduplicateComments(allComments, mappingMergedTex)
   const phase4Elapsed = ((Date.now() - phase4Start) / 1000).toFixed(2)
   const removed = allComments.length - dedupedComments.length
   if (removed > 0)
@@ -2483,9 +2607,10 @@ export async function runFullReview({
   const phase6Start = Date.now()
   const mappedComments = mapCommentsToDocuments(
     prunedComments,
-    mergedTex,
-    docContentMap,
-    rootDocPath
+    mappingMergedTex,
+    mappingDocContentMap,
+    mappingRootDocPath,
+    isScoped ? normSel : null
   )
   const phase6Elapsed = ((Date.now() - phase6Start) / 1000).toFixed(2)
   console.log(
@@ -2542,10 +2667,15 @@ export async function runFullReview({
     roleModelPapers: roleModelTexts.length > 0 ? roleModelTexts.map(rm => rm.name) : undefined,
   }
 
-  // Cache results
-  const reviewPath = path.join(cacheDir, 'review_comments.json')
-  fs.writeFileSync(reviewPath, JSON.stringify(reviewResult, null, 2))
-  console.log(`[AI Tutor] Review cached to ${reviewPath}`)
+  // Cache results. Skipped for per-file sub-reviews (the runFullReview
+  // dispatcher writes the merged result once) to avoid concurrent writes to
+  // the same file.
+  if (!skipResultCache)
+  {
+    const reviewPath = path.join(cacheDir, 'review_comments.json')
+    fs.writeFileSync(reviewPath, JSON.stringify(reviewResult, null, 2))
+    console.log(`[AI Tutor] Review cached to ${reviewPath}`)
+  }
 
   const overallElapsed = ((Date.now() - overallStart) / 1000).toFixed(1)
   console.log('='.repeat(80))
@@ -2558,6 +2688,111 @@ export async function runFullReview({
   console.log(`[AI Tutor]   By document: ${Object.entries(commentsByDoc).map(([d, c]) => `${d}(${c.length})`).join(', ')}`)
   console.log(`[AI Tutor]   Failed/skipped agents: ${failedAgents.length > 0 ? failedAgents.map(a => `${a.name}: ${a.reason}`).join('; ') : 'none'}`)
   console.log(`[AI Tutor]   Timing: Phase 1: ${phase1Elapsed}s, Phase 2: ${phase2Elapsed}s, Phase 3: ${phase3Elapsed}s, Phase 4: ${phase4Elapsed}s, Phase 5: ${phase5Elapsed}s, Phase 6: ${phase6Elapsed}s`)
+  console.log('='.repeat(80))
+
+  return reviewResult
+}
+
+/**
+ * Public review entry point.
+ *
+ * - No selection (full review) or exactly one selected file → a single
+ *   review pass via runReviewCore (unchanged behavior).
+ * - Two or more selected files → review EACH file independently and in
+ *   parallel, then merge the per-file results into one combined result of the
+ *   same shape. Reviewing files separately (instead of as one merged text)
+ *   guarantees each selected file gets its own comments and avoids the
+ *   first-occurrence mapping collapse that happens when selected files share
+ *   content (e.g. a common preamble or near-duplicate files).
+ *
+ * @returns {object} { projectId, model, reviewedAt, classification,
+ *   commentsByDoc, summary, failedAgents, roleModelPapers? }
+ */
+export async function runFullReview(opts)
+{
+  const docPaths = Array.isArray(opts.docPaths) ? opts.docPaths : []
+
+  if (docPaths.length <= 1)
+  {
+    return runReviewCore(opts)
+  }
+
+  console.log('='.repeat(80))
+  console.log(
+    `[AI Tutor] Per-file scoped review: reviewing ${docPaths.length} files ` +
+    `independently in parallel — ${docPaths.join(', ')}`
+  )
+  console.log('='.repeat(80))
+
+  // One independent review per selected file. Sub-runs skip their own result
+  // cache write; the merged result is cached here once.
+  const perFile = await Promise.all(
+    docPaths.map(p =>
+      runReviewCore({ ...opts, docPaths: [p], skipResultCache: true })
+    )
+  )
+
+  // Merge per-file results. Each sub-run only maps comments to its own file
+  // (enforced by the scope guard in mapCommentsToDocuments), so docPath keys
+  // do not overlap — but we concat defensively in case a file appears twice.
+  const commentsByDoc = {}
+  const byCategory = {}
+  const bySeverity = {}
+  const failedById = new Map()
+  let total = 0
+  for (const r of perFile)
+  {
+    for (const [docPath, comments] of Object.entries(r.commentsByDoc))
+    {
+      commentsByDoc[docPath] = (commentsByDoc[docPath] || []).concat(comments)
+    }
+    for (const [cat, n] of Object.entries(r.summary.byCategory))
+    {
+      byCategory[cat] = (byCategory[cat] || 0) + n
+    }
+    for (const [sev, n] of Object.entries(r.summary.bySeverity))
+    {
+      bySeverity[sev] = (bySeverity[sev] || 0) + n
+    }
+    total += r.summary.total
+    // Union skipped agents by id; a single union entry is enough for the UI.
+    for (const a of r.failedAgents || [])
+    {
+      if (!failedById.has(a.id)) failedById.set(a.id, a)
+    }
+  }
+
+  const first = perFile[0]
+  const reviewResult = {
+    projectId: first.projectId,
+    model: first.model,
+    reviewedAt: new Date().toISOString(),
+    classification: first.classification,
+    commentsByDoc,
+    summary: { total, byCategory, bySeverity },
+    failedAgents: [...failedById.values()],
+    roleModelPapers: first.roleModelPapers,
+  }
+
+  try
+  {
+    const reviewPath = path.join(opts.cacheDir, 'review_comments.json')
+    fs.writeFileSync(reviewPath, JSON.stringify(reviewResult, null, 2))
+    console.log(`[AI Tutor] Combined per-file review cached to ${reviewPath}`)
+  }
+  catch (err)
+  {
+    console.warn(
+      `[AI Tutor] Failed to cache combined per-file review: ${err.message}`
+    )
+  }
+
+  console.log('='.repeat(80))
+  console.log(
+    `[AI Tutor] PER-FILE REVIEW COMPLETE — ${total} comments across ` +
+    `${Object.keys(commentsByDoc).length} file(s). ` +
+    `By document: ${Object.entries(commentsByDoc).map(([d, c]) => `${d}(${c.length})`).join(', ')}`
+  )
   console.log('='.repeat(80))
 
   return reviewResult

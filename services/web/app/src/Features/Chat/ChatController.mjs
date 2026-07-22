@@ -538,7 +538,11 @@ async function analyzeWholeProject(req, res) {
 async function reviewWholeProject(req, res) {
   try {
   const { project_id: projectId } = req.params
-  const { model = 'gpt-5.2-chat-latest', venue = 'arxiv', roleModelTexts: rawRoleModelTexts = [] } = req.body
+  const { model = 'gpt-5.2-chat-latest', venue = 'arxiv', roleModelTexts: rawRoleModelTexts = [], docPaths: rawDocPaths = [] } = req.body
+  // Optional: restrict the review to a subset of project files (per-file scoped review)
+  const docPaths = Array.isArray(rawDocPaths)
+    ? rawDocPaths.filter(p => typeof p === 'string' && p.length > 0)
+    : []
   const userId = SessionManager.getLoggedInUserId(req.session)
 
   // Validate roleModelTexts if provided
@@ -751,6 +755,7 @@ async function reviewWholeProject(req, res) {
       docContentMap,
       rootDocPath: normalizedRootPath,
       roleModelTexts,
+      docPaths,
       fileCategories: {
         texFilesOrdered,
         figureFiles,
@@ -761,6 +766,71 @@ async function reviewWholeProject(req, res) {
     })
     // Attach metadata to the response so frontend can display file info
     result.metadata = metadata
+
+    // For a scoped review, replace the whole-project "File details" with
+    // metadata reflecting ONLY the reviewed file(s), so the panel matches what
+    // was actually reviewed (otherwise it confusingly lists main.tex et al.).
+    // buildScopedMetadata produces this for any subset of doc paths, so we can
+    // build both an aggregate (all selected files) and a per-file entry that the
+    // panel shows inside each reviewed file's card.
+    const buildScopedMetadata = paths => {
+      const selected = paths.map(p => (p.startsWith('/') ? p.slice(1) : p))
+      const selectedTex = selected.filter(p => docContentMap[p] !== undefined)
+      const scopedContent = selectedTex.map(p => docContentMap[p]).join('\n\n')
+
+      // Figures/bib referenced within the selected files only.
+      const scopedFigureRefs = new Set()
+      const scopedBibRefs = new Set()
+      let refMatch
+      const scopedGraphicsRe = /\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}/g
+      while ((refMatch = scopedGraphicsRe.exec(scopedContent)) !== null) {
+        scopedFigureRefs.add(refMatch[1].trim())
+      }
+      const scopedBibRe = /\\(?:bibliography|addbibresource)\{([^}]+)\}/g
+      while ((refMatch = scopedBibRe.exec(scopedContent)) !== null) {
+        for (const b of refMatch[1].split(',')) scopedBibRefs.add(b.trim())
+      }
+
+      // Map those references back to actual project files (reuse project lists).
+      const scopedFigureFiles = figureFiles.filter(fp => {
+        const noExt = fp.replace(/\.[^.]+$/, '')
+        return [...scopedFigureRefs].some(ref => {
+          const refNoExt = ref.replace(/\.[^.]+$/, '')
+          return fp === ref || fp.endsWith('/' + ref) || noExt === refNoExt || noExt.endsWith('/' + refNoExt)
+        })
+      })
+      const scopedBibFiles = bibFiles.filter(p => {
+        const noExt = p.replace(/\.bib$/, '')
+        return [...scopedBibRefs].some(ref => {
+          const refNoExt = ref.replace(/\.bib$/, '')
+          return p === ref || p === ref + '.bib' || noExt === refNoExt || noExt.endsWith('/' + refNoExt)
+        })
+      })
+
+      return {
+        ...metadata,
+        scoped: true,
+        categories: {
+          ...metadata.categories,
+          texFiles: { files: selectedTex, count: selectedTex.length },
+          figures: { files: scopedFigureFiles, references: [...scopedFigureRefs], count: scopedFigureFiles.length },
+          bibFiles: { files: scopedBibFiles, references: [...scopedBibRefs], count: scopedBibFiles.length },
+        },
+        mergedTexLength: scopedContent.length,
+      }
+    }
+
+    if (docPaths.length > 0) {
+      result.metadata = buildScopedMetadata(docPaths)
+      // Per-file metadata so the panel can show "File details" inside each
+      // reviewed file's card. Keys match commentsByDoc (leading slash stripped).
+      result.metadataByDoc = Object.fromEntries(
+        docPaths.map(p => [
+          p.startsWith('/') ? p.slice(1) : p,
+          buildScopedMetadata([p]),
+        ])
+      )
+    }
 
     // Build docPath -> docId mapping so frontend can open the correct document
     const docPathToId = {}
@@ -797,7 +867,8 @@ async function reviewWholeProject(req, res) {
 
       const logEntry = {
         timestamp: new Date().toISOString(),
-        type: 'full_review',
+        type: docPaths.length > 0 ? 'scoped_review' : 'full_review',
+        reviewScope: docPaths.length > 0 ? docPaths : undefined,
         projectId,
         userId: userId.toString(),
         model,
@@ -833,6 +904,13 @@ async function reviewWholeProject(req, res) {
 async function deleteAiTutorComments(req, res) {
   const { project_id: projectId } = req.params
 
+  // Optional per-file scope: when threadIds is provided, only delete Paper
+  // Mentor comments among those thread ids (the caller passes the thread ids
+  // from one document's ranges). Without it, delete project-wide.
+  const requestedThreadIds = Array.isArray(req.body?.threadIds)
+    ? new Set(req.body.threadIds.filter(id => typeof id === 'string'))
+    : null
+
   try {
     // 1. Fetch all threads for this project
     const threads = await ChatApiHandler.promises.getThreads(projectId)
@@ -841,6 +919,7 @@ async function deleteAiTutorComments(req, res) {
     const aiTutorRe = /^\[(AI Tutor|critical|warning|suggestion)\]/
     const aiTutorThreadIds = []
     for (const [threadId, thread] of Object.entries(threads)) {
+      if (requestedThreadIds && !requestedThreadIds.has(threadId)) continue
       if (thread.messages && thread.messages.length > 0) {
         const firstMsg = thread.messages[0].content || ''
         if (aiTutorRe.test(firstMsg)) {
@@ -850,7 +929,7 @@ async function deleteAiTutorComments(req, res) {
     }
 
     if (aiTutorThreadIds.length === 0) {
-      return res.json({ deleted: 0 })
+      return res.json({ deleted: 0, deletedIds: [] })
     }
 
     // 3. Delete each AI Tutor thread and emit socket events
@@ -860,9 +939,10 @@ async function deleteAiTutorComments(req, res) {
     }
 
     console.log(
-      `[AI Tutor] Deleted ${aiTutorThreadIds.length} AI Tutor comment threads from project ${projectId}`
+      `[AI Tutor] Deleted ${aiTutorThreadIds.length} AI Tutor comment threads from project ${projectId}` +
+      (requestedThreadIds ? ` (scoped to ${requestedThreadIds.size} thread id(s))` : '')
     )
-    res.json({ deleted: aiTutorThreadIds.length })
+    res.json({ deleted: aiTutorThreadIds.length, deletedIds: aiTutorThreadIds })
   } catch (err) {
     console.error('[AI Tutor] Failed to delete comments:', err)
     res.status(500).json({ error: err.message })
@@ -964,6 +1044,23 @@ async function saveAnnotation(req, res) {
   res.json(annotations[threadId])
 }
 
+// List the project's .tex documents so the frontend can offer a per-file
+// "Review Specific Files" selection. Lightweight: no merge, no LLM.
+async function aiTutorFiles(req, res) {
+  const { project_id: projectId } = req.params
+  try {
+    const allDocs = await ProjectEntityHandler.promises.getAllDocs(projectId)
+    const files = Object.keys(allDocs)
+      .map(p => (p.startsWith('/') ? p.slice(1) : p))
+      .filter(p => p.toLowerCase().endsWith('.tex'))
+      .sort()
+    res.json({ files })
+  } catch (err) {
+    console.error('[AI Tutor] Failed to list files:', err)
+    res.status(500).json({ error: err.message })
+  }
+}
+
 export default {
   sendMessage: expressify(sendMessage),
   getMessages: expressify(getMessages),
@@ -982,4 +1079,5 @@ export default {
   deleteAiTutorComments: expressify(deleteAiTutorComments),
   getAnnotations: expressify(getAnnotations),
   saveAnnotation: expressify(saveAnnotation),
+  aiTutorFiles: expressify(aiTutorFiles),
 }
