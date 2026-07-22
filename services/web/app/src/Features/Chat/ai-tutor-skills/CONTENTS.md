@@ -86,7 +86,7 @@ Each file is assigned to one or more **static reviewer subagents** that review t
 | `experiment_visualization.md` | `figures_tables` | MULTIMODAL | One key message per figure, chart type, data ordering, numeric precision |
 | `color_palettes.md` | — | MULTIMODAL | Nature-style palettes, colorblind accessibility, grayscale fallback |
 | `data_visualization.md` | — | MULTIMODAL | Dataset paper visuals: 3 required elements |
-| `table_formatting.md` | `latex_formatting` | TEXT+MULTIMODAL | No vertical bars, booktabs LaTeX template |
+| `table_formatting.md` | `latex_formatting`, `figures_tables` | TEXT+MULTIMODAL | APA 7th edition table style: bold numbering, italicized titles, column headings, body alignment, three-type notes (threeparttable), booktabs-only borders, placement rules, and compliant LaTeX template |
 | `caption_writing.md` | `figures_tables` | TEXT | Self-contained captions, first sentence as statement |
 
 ---

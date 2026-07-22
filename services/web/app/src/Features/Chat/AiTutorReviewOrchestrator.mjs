@@ -1027,12 +1027,14 @@ export const SUBAGENT_DEFS = [
       '05_figures_and_tables/caption_writing.md',
       '05_figures_and_tables/figure1_design.md',
       '05_figures_and_tables/experiment_visualization.md',
+      '05_figures_and_tables/table_formatting.md',
     ],
     sectionCategories: null, // special: extracts figure/table environments
     guidanceKey: null,
     textOnly: true, // future: set to false for multimodal
     systemPreamble:
-      'Review figure and table captions for self-containedness, first-sentence-as-statement, abbreviation definitions, and whether the surrounding text properly explains each figure/table.',
+      'Review figure and table captions for self-containedness, first-sentence-as-statement, abbreviation definitions, and whether the surrounding text properly explains each figure/table. ' +
+      'For tables specifically, check APA 7th edition formatting: bold table number, italicized title in title case, stub heading in leftmost column, booktabs-only borders (no vertical bars, no \\hline), and proper table notes using threeparttable.',
   },
 ]
 
@@ -2085,6 +2087,65 @@ export function mapCommentsToDocuments(
 // ---------------------------------------------------------------------------
 
 /**
+ * Deterministic reviewer: generates comments about unused project files.
+ * No LLM call — purely based on the file categorization from project analysis.
+ *
+ * @param {object} fileCategories - { irrelevantFiles, texFilesOrdered, figureFiles, bibFiles, usefulFiles }
+ * @param {string} mergedTex - the merged LaTeX content
+ * @returns {Array} array of comment objects
+ */
+function generateUnusedFileComments(fileCategories, mergedTex) {
+  const { irrelevantFiles } = fileCategories
+  if (!irrelevantFiles || irrelevantFiles.length === 0) return []
+
+  // Find \documentclass line as anchor for project-level comments
+  const docclassMatch = mergedTex.match(/\\documentclass(\[[^\]]*\])?\{[^}]+\}/)
+  const highlightText = docclassMatch ? docclassMatch[0] : '\\documentclass'
+
+  const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.pdf', '.svg', '.eps', '.gif', '.tiff'])
+  const STYLE_EXTS = new Set(['.sty', '.cls', '.bst', '.def', '.cfg', '.clo', '.fd'])
+
+  const groups = { tex: [], figures: [], bib: [], style: [], other: [] }
+
+  for (const filePath of irrelevantFiles) {
+    const dotIdx = filePath.lastIndexOf('.')
+    const ext = dotIdx !== -1 ? filePath.slice(dotIdx).toLowerCase() : ''
+    if (ext === '.tex') groups.tex.push(filePath)
+    else if (IMAGE_EXTS.has(ext)) groups.figures.push(filePath)
+    else if (ext === '.bib') groups.bib.push(filePath)
+    else if (STYLE_EXTS.has(ext)) groups.style.push(filePath)
+    else groups.other.push(filePath)
+  }
+
+  const parts = []
+  if (groups.tex.length > 0)
+    parts.push(`Orphaned .tex files (not \\input'd or \\include'd): ${groups.tex.join(', ')}`)
+  if (groups.figures.length > 0)
+    parts.push(`Unreferenced figures (no \\includegraphics): ${groups.figures.join(', ')}`)
+  if (groups.bib.length > 0)
+    parts.push(`Unreferenced .bib files: ${groups.bib.join(', ')}`)
+  if (groups.style.length > 0)
+    parts.push(`Unreferenced style/class files: ${groups.style.join(', ')}`)
+  if (groups.other.length > 0)
+    parts.push(`Other unused files: ${groups.other.join(', ')}`)
+
+  if (parts.length === 0) return []
+
+  return [{
+    highlightText,
+    comment:
+      `This project contains ${irrelevantFiles.length} file(s) not referenced by any LaTeX command. ` +
+      `Consider removing them to keep the project clean:\n` +
+      parts.join('\n'),
+    severity: 'suggestion',
+    category: 'unused_files',
+    agentName: 'Unused File Reviewer',
+  }]
+}
+
+// ---------------------------------------------------------------------------
+
+/**
  * Run the full multi-agent paper review.
  *
  * @param {object} opts
@@ -2093,6 +2154,7 @@ export function mapCommentsToDocuments(
  * @param {string} opts.cacheDir - path to the project's cache directory
  * @param {object} opts.docContentMap - { normalizedPath: contentString }
  * @param {string} opts.rootDocPath - normalized root doc path
+ * @param {object} [opts.fileCategories] - file categorization from project analysis (for unused-file reviewer)
  * @returns {object} { comments, classification, summary, failedAgents }
  */
 // Core single-pass review: full project (docPaths empty) or a single selected
@@ -2108,6 +2170,7 @@ async function runReviewCore({
   roleModelTexts = [],
   docPaths = [],
   skipResultCache = false,
+  fileCategories = null,
 })
 {
   const apiKey = process.env.OPENAI_API_KEY
@@ -2495,6 +2558,20 @@ async function runReviewCore({
     `[AI Tutor] Phase 3 complete in ${phase3Elapsed}s. ` +
     `Total raw comments: ${allComments.length}, failed/skipped agents: ${failedAgents.length}`
   )
+
+  // Deterministic: unused file reviewer (no LLM cost)
+  if (fileCategories)
+  {
+    const unusedComments = generateUnusedFileComments(fileCategories, mergedTex)
+    if (unusedComments.length > 0)
+    {
+      console.log(`[AI Tutor] Unused File Reviewer: ${unusedComments.length} comment(s) for ${fileCategories.irrelevantFiles.length} unused file(s)`)
+      allComments.push(...unusedComments)
+    } else
+    {
+      console.log('[AI Tutor] Unused File Reviewer: no unused files found')
+    }
+  }
 
   // Phase 4: Deduplicate overlapping comments across agents
   const phase4Start = Date.now()

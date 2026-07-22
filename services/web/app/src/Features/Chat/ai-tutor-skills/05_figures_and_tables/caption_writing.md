@@ -29,3 +29,7 @@ The first sentence of a caption should state the figure's key trend or message â
 - Always describe the significance of each figure and table within the manuscript text.
 - Explain why the visualization is included and what its implications are.
 - Do not introduce a figure or table and then immediately change subjects without interpreting it.
+
+## Table Titles vs. Figure Captions
+
+APA style treats table titles differently from figure captions. Table titles go *above* the table (bold number + italicized title), while figure captions go *below* the figure. See `table_formatting.md` for full APA table title and note rules.

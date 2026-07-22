@@ -756,6 +756,13 @@ async function reviewWholeProject(req, res) {
       rootDocPath: normalizedRootPath,
       roleModelTexts,
       docPaths,
+      fileCategories: {
+        texFilesOrdered,
+        figureFiles,
+        bibFiles,
+        usefulFiles,
+        irrelevantFiles,
+      },
     })
     // Attach metadata to the response so frontend can display file info
     result.metadata = metadata
