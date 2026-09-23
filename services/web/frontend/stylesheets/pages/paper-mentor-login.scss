@@ -1,0 +1,166 @@
+// Paper Mentor login page. Deliberately avoids Overleaf's green accents and
+// chrome so users don't mistake it for overleaf.com.
+.pm-login {
+  --pm-ink: #1b2a41;
+  --pm-ink-soft: #33466a;
+  --pm-paper: #f6f3ec;
+  --pm-notice-bg: #fff4dc;
+  --pm-notice-edge: #c98a00;
+
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-07);
+  padding: var(--spacing-09) var(--spacing-06);
+  background: var(--pm-paper);
+}
+
+.pm-login-card {
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  width: 100%;
+  max-width: 860px;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgb(27 42 65 / 12%);
+
+  @include media-breakpoint-down(md) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pm-login-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--spacing-04);
+  padding: var(--spacing-10) var(--spacing-09);
+  background: var(--pm-ink);
+  color: #fff;
+
+  @include media-breakpoint-down(md) {
+    padding: var(--spacing-08);
+  }
+}
+
+.pm-login-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: auto;
+  border: 2px solid rgb(255 255 255 / 70%);
+  border-radius: 8px;
+  font-family: $font-family-serif;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+
+  @include media-breakpoint-down(md) {
+    margin-bottom: var(--spacing-06);
+  }
+}
+
+.pm-login-wordmark {
+  margin: 0;
+  font-family: $font-family-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.pm-login-tagline {
+  margin: 0;
+  max-width: 28ch;
+  color: rgb(255 255 255 / 78%);
+  line-height: 1.5;
+}
+
+.pm-login-panel {
+  padding: var(--spacing-10) var(--spacing-09);
+
+  @include media-breakpoint-down(md) {
+    padding: var(--spacing-08);
+  }
+
+  .form-group {
+    margin-bottom: var(--spacing-06);
+  }
+
+  .form-control:focus {
+    border-color: var(--pm-ink-soft);
+    box-shadow: 0 0 0 3px rgb(51 70 106 / 20%);
+  }
+}
+
+.pm-login-title {
+  margin: 0 0 var(--spacing-06);
+  font-family: $font-family-serif;
+  font-size: 1.625rem;
+  color: var(--pm-ink);
+}
+
+.pm-login-notice {
+  margin-bottom: var(--spacing-07);
+  padding: var(--spacing-05) var(--spacing-06);
+  border-left: 4px solid var(--pm-notice-edge);
+  border-radius: 4px;
+  background: var(--pm-notice-bg);
+  color: var(--pm-ink);
+  line-height: 1.45;
+}
+
+.pm-login-submit {
+  width: 100%;
+  padding: var(--spacing-04) var(--spacing-06);
+  border: 0;
+  border-radius: 8px;
+  background: var(--pm-ink);
+  color: #fff;
+  font-weight: 600;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--pm-ink-soft);
+    color: #fff;
+  }
+
+  &:disabled {
+    background: var(--pm-ink-soft);
+    color: rgb(255 255 255 / 80%);
+  }
+}
+
+.pm-login-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--spacing-04);
+  margin-top: var(--spacing-05);
+
+  a {
+    color: var(--pm-ink-soft);
+  }
+}
+
+.pm-login-support {
+  margin: var(--spacing-07) 0 0;
+  padding-top: var(--spacing-06);
+  border-top: 1px solid var(--border-divider);
+  text-align: center;
+}
+
+.pm-login-footnote {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--pm-ink-soft);
+  font-size: var(--font-size-02);
+  text-align: center;
+
+  a {
+    color: inherit;
+    text-decoration: underline;
+  }
+}
