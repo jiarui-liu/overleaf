@@ -1,0 +1,1476 @@
+Competition of Mechanisms:
+Tracing How Language Models Handle Facts and Counterfactuals
+Francesco Ortu∗
+University of Trieste
+francesco.ortu@studenti.units.it
+Zhijing Jin∗
+MPI & ETH Zürich
+jinzhi@ethz.ch
+Diego Doimo
+AREA Science Park
+diego.doimo@areasciencepark.it
+Mrinmaya Sachan
+ETH Zürich
+msachan@ethz.ch
+Alberto Cazzaniga†
+AREA Science Park
+alberto.cazzaniga@areasciencepark.it
+Bernhard Schölkopf†
+MPI for Intelligent in Systems
+bs@tue.mpg.de
+Abstract
+Interpretability research aims to bridge the gap
+between empirical success and our scientific
+understanding of the inner workings of large
+language models (LLMs). However, most ex￾isting research focuses on analyzing a single
+mechanism, such as how models copy or re￾call factual knowledge. In this work, we pro￾pose a formulation of competition of mecha￾nisms, which focuses on the interplay of mul￾tiple mechanisms instead of individual mech￾anisms and traces how one of them becomes
+dominant in the final prediction. We uncover
+how and where mechanisms compete within
+LLMs using two interpretability methods: logit
+inspection and attention modification. Our find￾ings show traces of the mechanisms and their
+competition across various model components
+and reveal attention positions that effectively
+control the strength of certain mechanisms.1
+1 Introduction
+Recent advancements in large language models
+(LLMs) have brought unprecedented performance
+improvements to NLP (Brown et al., 2020; Tou￾vron et al., 2023; OpenAI, 2023; Anil et al., 2023,
+inter alia). However, the black-box nature of these
+models obfuscates our scientific understanding of
+how these models achieve certain capabilities, and
+how can we trace the problem when they fail at
+other tasks. This has brought an increasing focus
+on interpretability research to help us understand
+the inner workings of LLMs.
+Existing interpretability research has been largely
+focused on discovering the existence of single
+mechanisms, such as the copy mechanism in induc￾tion heads of LLMs (Elhage et al., 2021; Olsson
+et al., 2022), and factual knowledge recall in the
+∗ Equal contributions.
+† Co-supervision.
+1Code: https://github.com/francescortu/comp-mech. Data:
+https://huggingface.co/datasets/francescortu/comp-mech.
+Redefine:
+iPhone
+was
+developed
+by
+Google
+iPhone
+was
+developed
+by
+Apple
+Factual Token
+Attention layer 10,11
+Final
+Prediction
+Knowledge Recall
+MLP layer 0
+Induction Circuit
+Counterfactual Token
+Attention layer 5-9
+Knowledge Recall
+MLP layer 0
+Apple
+Mechanism 2. Counterfactual statement comprehension:
+Aligning to the in-context new statement of iPhone
+Failure to Recognize the Counterfactual Mechanism
+Redefine: iPhone was developed by Google.
+iPhone was developed by
+Apple
+Mechanism 1. Factual knowledge recall: Recalling
+from its memory that iPhone was developed by Apple
+LLMs might mis-activate
+Mechanism 1 instead of 2
+Inspection of the Competition of Mechanisms
+Competition of Mechanisms
+. Intermediate
+positions
+Figure 1: Top: An example showing that LLMs can
+fail to recognize the correct mechanism when multiple
+possible mechanisms exist. Bottom: Our mechanistic
+inspection of where and how the competition of mecha￾nisms takes place within the LLMs.
+MLP layers (Geva et al., 2021; Meng et al., 2022;
+Geva et al., 2023). However, different from discov￾ering what mechanisms exist in LLMs, we propose a
+more fundamental question: how do different mech￾anisms interact in the decision-making of LLMs?
+We show a motivating example in Figure 1, where
+the model fails to recognize the correct mechanism
+when it needs to judge between two possible mech￾anisms: whether to recall the factual knowledge on
+who developed the iPhone (i.e., Mechanism 1) or
+to follow its counterfactual redefinition in the new
+given context (i.e., Mechanism 2).
+We propose a novel formulation of competition of
+mechanisms, which focuses on tracing each mech￾anism in the model and understanding how one
+of them becomes dominant in the final prediction
+arXiv:2402.11655v2 [cs.CL] 6 Jun 2024
+
+by winning the “competition”. Specifically, we
+build our work on two single mechanisms that are
+well-studied separately in literature: (1) the factual
+knowledge recall mechanism, which can be located
+in the MLP layers (Geva et al., 2021; Meng et al.,
+2022; Geva et al., 2023); and (2) the in-context
+adaptation to a counterfactual statement, which is
+enabled by the copy mechanism conducted by in￾duction heads of attention layers (Elhage et al.,
+2021; Olsson et al., 2022). Based on the latest tools
+to inspect each of these two mechanisms (Nostalge￾braist, 2020; Wang et al., 2023; Geva et al., 2023),
+we then unfold how and where the competition of
+the two mechanisms happen, and how it leads to
+the overall success or failure of LLMs.
+Technically, we deploy two main methods: logit
+inspection (Nostalgebraist, 2020; Geva et al., 2022)
+by projecting the outputs of each model component
+by an unembedding matrix, and attention modifica￾tion (Geva et al., 2023; Wang et al., 2023). Using
+these methods, we assess the contributions of vari￾ous model components, both from a macroscopic
+view (e.g., each layer) and a microscopic view (e.g.,
+attention heads), and identify critical positions and
+attention heads involved in the competition of the
+two mechanisms. Moreover, we locate a few local￾ized positions of some attention head matrices that
+can significantly control the strength of the factual
+mechanism. We summarize our main findings as
+follows:
+1. In early layers, the factual attribute is encoded
+in the subject position, while the counterfac￾tual is in the attribute position (Section 6.1);
+2. The attention blocks write most of the fac￾tual and counterfactual information to the last
+position (Section 6.2);
+3. All the highly activated heads attend to the at￾tribute position regardless of the specific type
+of information they promote. The factual in￾formation flows by penalizing the counterfac￾tual attribute rather than promoting the factual
+one (Section 6.3);
+4. We find that we can up-weight the value of
+a few very localized values of the attention
+head matrix to strengthen factual mechanisms
+substantially (Section 6.4).
+2 Related Work on Interpretability
+As deep learning approaches show increasingly
+impressive performance in NLP, their black-box
+nature has hindered the scientific understanding of
+these models and their effective future improve￾ments. To this end, interpretability research has
+been a rising research direction to understand the
+internal workings of these models.
+Interpreting the Representations. One major
+type of work in interpretability has focused on un￾derstanding what has been encoded in the represen￾tations of deep learning models. (Alain and Bengio,
+2016; Conneau et al., 2018; Hupkes et al., 2018;
+Hewitt and Liang, 2019; Tenney et al., 2019; Jiang
+et al., 2020; Elazar et al., 2021, inter alia), or by
+geometric methods (Doimo et al., 2020; Valeriani
+et al., 2024; Park et al., 2024; Cheng et al., 2024).
+Example features of interest include part of speech
+(Belinkov et al., 2017), verb tense (Conneau et al.,
+2018), syntax (Hewitt and Manning, 2019), and
+factual knowledge (Petroni et al., 2019).
+Interpreting the Mechanisms/Functions. Be￾yond interpreting the representations in the hidden
+states of the black-box models, another research di￾rection is to interpret the mechanisms or functions
+that the models have learned, giving rise to the field
+of mechanistic interpretability (Olah et al., 2020;
+Elhage et al., 2021; Olsson et al., 2022; Nanda
+et al., 2023, inter alia). Some example mechanisms
+decoded in recent work include mathematical op￾erations such as modular addition (Nanda et al.,
+2023) and the greater-than operation (Hanna et al.,
+2023); natural language-related operations such as
+the copy mechanism achieved by induction heads
+in LLMs Olsson et al. (2022) and factual knowl￾edge recall achieved by MLP layers (Geva et al.,
+2021; Meng et al., 2022; Geva et al., 2023), which
+we describe below.
+The Single Mechanism of Copy: One of the basic
+actions in LLMs is the copy mechanism, which
+is found to be operationalized by attending to the
+copied token in the attention heads and passing it
+on to the next token prediction (Elhage et al., 2021;
+Olsson et al., 2022). This foundational mechanism
+enables further research to decode more complex
+mechanisms, such as indirect object identification
+(Wang et al., 2023).
+The Single Mechanism of Factual Knowledge Re￾call: Another major direction is understanding how
+LLMs mechanistically recall factual information
+(Geva et al., 2021; Meng et al., 2022; Geva et al.,
+2023). For example, Meng et al. (2022) develop
+
+the causal tracing method to show that the factual
+information is found in the mid-layer MLP units
+in GPT-2. A followup work (Geva et al., 2023)
+shows that MLPs of early layers enrich the sub￾ject embeddings with related attributes, and late
+attention blocks select and write the correct factual
+information to the sentence’s last position.
+Interplay of Multiple Mechanisms: In the final
+stage of our project in December 2023, we noticed
+a related study by Yu et al. (2023), which also in￾vestigates the role of two different mechanisms in
+LLMs. Specifically, they inspect a type of prompt
+whose subjects are the capital cities and whose at￾tributes are the countries, examine the dynamics
+of the factual recall mechanism and the effect of
+the in-context counterfactual statement, and find
+that the subject and attribute frequency in the pre￾training set can affect the ability of factual recall.
+Differently, the methods in our work are applied to
+a broader set of prompts; moreover, we also estab￾lish novel analyses of the underlying mechanistic
+details of the competition, and precisely localize
+the path where the information flows at the level
+of single attention map activations, based on which
+we discover new findings that are unique to our
+study.
+3 Problem Setup
+Following the setup of many existing interpretabil￾ity studies (Olah et al., 2020; Elhage et al., 2021;
+Olsson et al., 2022; Nanda et al., 2023, inter alia),
+we look into the next token prediction behavior
+of autoregressive LLMs in their inference mode,
+namely
+P(tk|t<k), (1)
+which predicts the k-th token tk given all the previ￾ous tokens in the context.
+Next, we design the task to incorporate the compe￾tition of mechanisms as in Figure 1. Specifically,
+for each factual statement f := (t
+f
+1
+, . . . , tf
+k
+) con￾sisting of k tokens (e.g., “iPhone was developed
+by Apple.”), we compose a corresponding counter￾factual statement c := (t
+c
+1
+, . . . , tc
+k
+′) (e.g., “iPhone
+was developed by Google.”). Then, we compose
+a prompt connecting the two statements as “Rede￾fine: c. f1:k−1.”, such as “Redefine: iPhone was
+developed by Google. iPhone was developed by
+___”.
+The two mechanisms can be traced by inspecting
+the rise and fall of the factual token t
+f
+k
+and the
+counterfactual token t
+c
+k
+′. For the simplicity of nota￾tion, we take the tokens out of the context of their
+exact position and denote them as tfact and tcofa,
+respectively, in the rest of the paper.
+4 Method and Background
+Method 1: Logit Inspection. To inspect the in￾ner workings of the two mechanisms, we trace the
+residual stream (Elhage et al., 2021), or logits of
+each component in the LLM. Given a text sequence
+of k tokens, LLMs map it into the residual stream,
+namely a matrix x ∈ R
+d×k
+, where d is the dimen￾sion of the internal states of the model. We use the
+term x
+l
+i
+to specify the residual stream at position i
+and layer l.
+An LLM produces the initial residual stream x
+0
+i
+by
+applying an embedding matrix WE ∈ R
+|V |×d
+to
+each token ti
+, where |V | is the size of the vocab￾ulary. Then, it modifies the residual stream by a
+sequence of L layers, each consisting of an atten￾tion block a
+l
+and MLP ml
+. Finally, after the last
+layer, it projects the internal state of the residual
+stream back to the vocabulary space with an un￾embedding matrix WU ∈ R
+d×|V |
+. Formally, the
+update of the residual stream at the l
+th layer is:
+x
+l = x
+l−1 + a
+l + ml
+, (2)
+where both the attention and the MLP block take
+as input the x after layer normalization norm:
+a
+l = a
+l
+(norm(x
+l−1
+)) , (3)
+ml = ml
+(norm(x
+l−1 + a
+l
+)) . (4)
+To understand which token the residual stream x
+l
+favors, we follow the common practice in previ￾ous work (Halawi et al., 2023; Geva et al., 2023;
+Dar et al., 2023; Geva et al., 2022) to project it
+to the vocabulary space using the aforementioned
+unembedding matrix WU which maps the latent
+embeddings to actual tokens in the vocabulary, en￾abling us to obtain the logits of the factual tfact and
+counterfactual token tcofa.
+Known as the Logit Lens (Nostalgebraist, 2020),
+this method is broadly adopted due to its consistent
+success in yielding interpretable results, demon￾strating its effectiveness through broad empirical
+usage. However, it is important to note that it can
+
+occasionally fail to reflect the actual importance of
+vocabulary items, especially in the early layers of
+the network (Belrose et al., 2023).
+Method 2: Attention Modification. Modifying
+or ablating the activation of a specific model com￾ponent is also a strategy used to improve the un￾derstanding of the information flow within LLMs,
+including techniques such as causal tracing (Meng
+et al., 2022) and attention knockout (Wang et al.,
+2023; Geva et al., 2023).
+In our work, we focus on modifying a small number
+of entries in the attention matrix. Namely, in the
+attention matrix Ahl of the h-th head of the l-th
+attention layer a
+l
+, we focus on a certain entry, e.g.,
+at the (i, j) position, where j < i, which is the
+attention value of the token x
+l
+i
+attending to one of
+its earlier tokens x
+l
+j
+. Following recent work (Yu
+et al., 2023) , the modification is after the softmax
+layer, so the other attention values of the matrix
+stay unchanged. For the target entry Ahl
+ij , we scale
+it up by a multiplier of α:
+A
+hl
+ij ← α · A
+hl
+ij , where j < i . (5)
+5 Experimental Setup
+Data Creation To compose the factual and coun￾terfactual statements as introduced in Section 3,
+we adopt COUNTERFACT2
+(Meng et al., 2022),
+commonly used dataset to interpret models’ ability
+of factual knowledge recall. We select 10K data
+points by considering only examples where the at￾tributes are represented by a single token and where
+the model completes the sentence in a factually ac￾curate manner.
+Each instance of COUNTERFACT expresses a re￾lation r between a subject s and an attribute a:
+(s, r, a). For example, in the sentence “iPhone was
+developed by Apple”, s = “iPhone”, r = “was
+developed by”, a =“Apple”. Moreover, each (s, r)
+instance is provided two values of the attribute a,
+namely a factual token tfact, and a counterfactual
+token tcofa, representing a false fact.
+Using this source data, we compose each
+instance of our test set in the format of
+(“Redefine:”, s, r, tcofa, s, r, _), such as “Re￾define: iPhone was developed by Google. iPhone
+was developed by ___”. We preprocess the original
+dataset by keeping only the data points whose
+2
+https://rome.baulab.info/data/
+attribute is a single token (for the simplicity of our
+implementation), and where the model correctly
+predicts the factual token tfact when completing
+the sentence (s, r, _). We randomly select 10K
+test samples into our test set from 219,180
+such samples. We open-source our dataset at
+https://huggingface.co/datasets/francescortu/comp￾mech.
+Models For this work, we first choose the GPT-2
+small (Radford et al., 2019) model as it is the most
+commonly used one in previous interpretability
+studies (e.g., Meng et al., 2022; Wang et al., 2023;
+Conmy et al., 2023; Hanna et al., 2023). Aligning
+the same model with those studies can communi￾cate the findings of this work better in the context
+of existing literature. Then, in addition to GPT￾2, we check the generalizability of our work by
+provide supplemental results of Pythia-6.9B (Bi￾derman et al., 2023) in Appendix A, to show the
+robustness of our findings across the two LLMs
+of different architectures and scales. In this way,
+having similar results across the two very diverse
+models makes the finding stronger than existing
+studies, most of which are only on GPT-2.
+Implementation Details As for experimental de￾tails, GPT-2 small has 117M parameters, consisting
+of 12 layers with 12 self-attention heads each and
+a residual stream of 768 dimensions. Pythia-6.9B
+has 32 layers with 32 self-attention heads each and
+a model dimension of 4,096, with a 30x increase in
+the number of parameters. For all our experiments,
+we deploy the pre-trained models from the Hug￾gingface Hub (Wolf et al., 2020), and inspect the
+residual streams by the LogitLens tool in the Trans￾formerLens library (Nanda and Bloom, 2022).
+6 Results and Findings
+In this section, we trace the competition of the
+mechanisms within the LLM via the two methods
+introduced in Section 4, i.e., inspecting the resid￾ual stream and intervening on the attention. We
+provide mechanistic analyses on five research ques￾tions in the following subsections:
+1. Macroscopic view: Which layers and token
+positions contribute to the two mechanisms?
+(Section 6.1)
+2. Intermediate view: How do we attribute the
+prediction to attention and MLP blocks? (Sec￾tion 6.2)
+
+iPhone
+was developed
+by
+iPhone
+was developed
+by
+Google
+iPhone
+was developed
+by
+iPhone
+was developed
+by
+Google
+(a) The logit values for the factual token tfact (blue), and
+counterfactual token tcofa (red).
+0
+5
+10
+15
+0 1 2 3 4 5 6 7 8 9 10 11
+Layer
+Logit in the Last Position
+Counterfactual Token Factual Token
+(b) The average logits of tfact (blue) and tcofa (red) in the
+last token position.
+Figure 2: Logits of the factual token tfact and counterfactual token tcofa across different positions and layers in
+GPT-2. The logit of tfact is higher in the subject position in the initial layers and in the last position of the premise
+and second sentence in the final layers. The logit of tcofa is higher in the attribute position in the first layers and in
+the last position of the second sentence at the end of the network.
+3. Microscopic view: How do individual atten￾tion heads contribute to the prediction? (Sec￾tion 6.3)
+4. Intrinsic intervention: Can we edit the model
+activations to modify the strength of a certain
+mechanism? (Section 6.4)
+5. Behavioral analysis: What word choice varies
+the strength of the counterfactual mechanism
+in the given context? (Section 6.5)
+6.1 Macroscopic Inspection across Layers and
+Token Positions
+In the main model that we inspect, GPT-2, we find
+that it can usually identify the counterfactual mech￾anism in 96% of the 10K test examples. This means
+that, in the last sequence position, at the output of
+the network, the counterfactual token, tcofa, gets
+most of the times a higher probability than tfact. In
+the following, we will inspect how the “winning”
+of the counterfactual mechanism happens across
+the layers of the LLM.
+Method. We study how tfact and tcofa are en￾coded in the residual stream using the logit in￾spection method described in Section 4. Specif￾ically, for a given token position i and a layer
+l, we project the embedding x
+l
+i
+, i.e., the resid￾ual stream in Eq. (2), to the vocabulary space by
+˜x
+l
+i = WU · norm(x
+l
+i
+), where WU is the unembed￾ding matrix and norm is the normalization of the
+last layer of the model. By varying l, we measure
+the values of the logits of tfact and tcofa as they
+evolve in the residual stream after the first attention
+block.
+Results. Our results reveal the prevalence of each
+mechanism by varying the layer l and position i.
+Finding 1: Information flows from different tokens
+for different mechanisms. We analyze the role of
+previous context at various token positions with
+respect to different depths of the layers. In Fig￾ure 2a, the blue heatmap above shows the logits of
+the factual token tfact, and the red heatmap below
+shows those of the counterfactual token tcofa.
+Looking at the blue heatmap, we see that the sub￾ject position is the main contributor to the logits of
+tfact in early layers, which is consistent with a pre￾vious finding (Geva et al., 2023). Specifically, we
+also locate the factual attribute in the subject posi￾tions by the first MLP layer, and find they increase
+on average the value of tfact from 0.38 to 0.74 in
+the premise and from 0.9 to 1.93 in the second
+sentence. Then, in the later layers, the strongest
+contributor is the last tokens before the attribute,
+as the last token position is used to predict the at￾tribute. From the red heatmap, we see the evolution
+of tcofa’s logits. The observations of later layers
+are similar across two mechanisms, in that the last
+token contributes the most. However, in early lay￾ers, the counterfactual mechanism’s tcofa token is
+best encoded in the attribute position instead of the
+
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+0 1 2 3 4 5 6 7 8 9 10 11
+Layer
+∆
+c
+o
+f
+a
+Attention Block
+(a) Logit difference ∆cofa of the last token position after the
+attention block in each layer of GPT-2.
+−1.0
+−0.5
+0.0
+0.5
+1.0
+1.5
+0 1 2 3 4 5 6 7 8 9 10 11
+Layer
+∆
+c
+o
+f
+a
+MLP Block
+(b) Logit difference ∆cofa of the last token position after the
+MLP block in each layer of GPT-2.
+Figure 3: Contributions of the attention and MLP blocks to the competition of the mechanisms. The attention blocks
+(left) contribute more to the marginal win of the counterfactual mechanism than the MLP blocks (right).
+subject position for the factual mechanism.
+Such information flow between different token po￾sitions suggests a major role played by the attention
+mechanism in moving such information to the last
+position, resonating with observations in Geva et al.
+(2023).
+Finding 2: Both the individual mechanisms and
+competition take place in late, but not early layers.
+We trace the competition of the two mechanisms
+across the layers by plotting in Figure 2b the scale
+of the logits corresponding to the two mechanisms
+in the last token position. The first observation
+is that the strength of each individual mechanism
+increases monotonically across the layers, from
+a relatively small logit below 1 in early layers to
+large values of around 15 in the final layer.
+Another observation is that, although both mecha￾nisms increase in strength, stronger signals of the
+competition (where the counterfactual mechanism
+prevails the factual one) start after the fifth layer,
+and this prevalence gradually grows in later lay￾ers. The logits of the counterfactual mechanism
+are, in most of the examples, the highest in the
+50K-dimensional vocabulary of GPT-2, making
+tfact dominant in 96% of the examples.
+6.2 Intermediate Inspection of Attention and
+MLP Blocks
+Behind the overall win of the counterfactual mech￾anism, we want to trace the contributions from the
+attention and MLP blocks in each layer.
+Method. For each attention or MLP block, it pro￾cesses the input embedding and outputs the logits
+of tfact and tcofa to be added to the residual stream.
+We can consider the contribution of each block as
+its added logit values to the residual stream. Intu￾itively, if the added logit value for tcofa is higher
+than that of tfact, then this block pushes the over￾all prediction to lean towards the counterfactual
+mechanism; otherwise, this block suppresses the
+counterfactual mechanism.
+Hence, we inspect the margin of the added logit of
+tcofa over that of tfact in each block, represented
+by ∆cofa := BlockLogit(tcofa)−BlockLogit(tfact).
+To this end, we apply the logit inspection method
+to analyze the logit distribution at WU aN
+l
+and
+WUmN
+l
+, where N denotes the last token position
+in the sequence. The logit contribution of the atten￾tion block is the sum over that of all the attention
+heads. As for the result, a positive value of ∆cofa
+for a block means that it supports the counterfac￾tual mechanism in the competition, and a negative
+value indicates suppression.
+Results. We quantify the contribution of each
+block in each layer by plotting the ∆cofa values in
+Figure 3.
+Finding 1: The attention blocks play a larger role
+in the competition of mechanisms than the MLP
+blocks. Contrasting the ∆cofa margin of the added
+logits of the attention blocks in Figure 3a and MLP
+blocks in Figure 3b, we see that the size of ∆cofa
+is almost always larger in the attention blocks than
+in MLP blocks. This is consistent with the work
+of Geva et al. (2023) showing that the attention
+blocks adds most of the information about tcofa to
+the residual stream.
+Finding 2: Only late but not early layers contribute
+to the competition of the mechanisms. We find that
+the early layers have almost no contribution to the
+competition of the mechanisms, reflected by the
+close-to-zero margin ∆cofa in Layer 0-4 for both
+types of blocks. However, later layers contribute to
+
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+0 1 2 3 4 5 6 7 8 9 10 11
+Layer
+Head
+∆cofa −0.4 0.0 0.4
+(a) Direct contribution to ∆cofa of all heads in GPT-2. Heads
+favoring tfact are colored in blue, and those favoring tcofa in
+red.
+Layer 9 | Head 6
+Layer 9 | Head 9
+Layer 10 | Head 0
+Layer 10 | Head 7
+Layer 10 | Head 10
+Layer 11 | Head 10
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Attention
+Score:
+0.1
+0.2
+0.3
+0.4
+Attention
+Score:
+0.1
+0.2
+0.3
+0.4
+(b) Attention scores of relevant heads for the last position. A
+large attention score in the attribute position is found in all
+highly activated heads.
+Figure 4: Attention pattern for relevant attention heads.
+substantially to the increase of the margin ∆cofa, by
+a relatively smaller rate for the MLP blocks, and a
+larger overall rate for the attention blocks, together
+with a large variance.
+Note that we observe a negative ∆cofa around -
+0.8 in the last attention block, somewhat favoring
+tfact, which might be since the factual information
+is moved to the last position in the last layers, as
+already noted by Geva et al. 2023.
+6.3 Microscopic Inspection of Individual
+Attention Heads
+Beyond the overall contributions of the attention
+block, we further study the contribution of each
+individual attention head in this section.
+Method. We analyze the effect of each individual
+attention head with the logit inspection method by
+projecting the outputs of each attention head to the
+last sequence position N in the vocabulary space.
+Formally, we consider ∆cofa = HeadLogit(tcofa)−
+HeadLogit(tfact) with the logits from the projec￾tion WU aN
+h,l of each head h. Here aN is the
+output of the attention head h after it has been pro￾cessed by the output matrix of the Attention Block
+but before its sum to the residual stream.
+Results. We plot the contributions of individual
+attention heads to ∆cofa in Figure 4, and introduce
+the main findings as follows.
+Finding 1: A few specialized attention heads con￾tribute the most to the competition. As we can see
+from the overall contributions of all attention heads
+across all the layers in Figure 4a, several attention
+heads (e.g., L9H6, L9H9, L10H0, and L10H10)
+strongly promote the counterfactual mechanism,
+i.e., with a positive value of ∆cofa colored in dark
+red, and two attention heads (L10H7 and L11H10)
+strongly support the factual mechanism instead,
+reflected by the large negative ∆cofa in dark blue.
+For example, the sum of L7H2 and L7H10 equals
+75% of the large positive ∆cofa contribution of
+Layer 7. The sum of L9H6 and L9H9 explains
+65% of the ∆cofa at Layer 9.
+On the other hand, the two attention heads, L10H7
+and L11H10, explain almost the 70% of the total
+negative contribution to ∆cofa in the entire network
+(33% and 37% respectively). This also explains
+the reason behind the negative ∆cofa in Figure 3a
+of the previous section. Our study is consistent
+with McDougall et al. (2023) showing that these
+two heads are responsible for suppressing the copy
+mechanisms in GPT-2 small. In our setting, the
+joint ablation of these two heads decreases the fac￾tual recall of GPT-2 small from 4.13% to 0.65%.
+Finding 2: All the highly activated heads attend to
+the same position – the attribute token. Focusing
+on the heads with large absolute values of ∆cofa,
+we show the attention scores of the last position N
+to different tokens in Figure 4b. Expectedly, the
+major heads supporting the counterfactual mecha￾nism (those in red) attend to the attribute position
+because they need to copy this token for the predic￾tion, which echoes the findings in Section 6.1.
+However, it is surprising to see the other heads sup￾porting the factual mechanism (those in blue) also
+mainly attend to the counterfactual attribute token.
+We find that those heads read from the attribute
+
+position to give a lower value to the logit of tcofa,
+which might be an easier operation for it to learn
+than increasing the logit of the factual token. The
+evidence is that, in these two heads, the logit of
+tfact is smaller than the mean of the two layers, but
+the logit of tcofa (which is -1.13 for L10H7 and
+-1.05 for L11H10) are the lowest of all the heads in
+the network.
+We include supplementary analyses showing the
+consistency of Finding 2 on Pythia in Appendix A,
+and provide the full attention maps with attention
+scores between every pair of tokens for these heads
+in Appendix Appendix B.2.
+6.4 Intrinsic Intervention by Attention
+Modification
+After understanding where the two mechanisms
+take place, we use the insights to intervene on the
+model internal states. Specifically, we perform
+model editing to alter the factual mechanism, which
+concentrates on a few strongly activated attention
+heads (L10H7 and L11H10 in GPT-2, and mostly
+L17H28, L20H18, and L21H8 in Pythia, see Ap￾pendix A.3), and has most of the information flow￾ing from the attribute position (see Figure 4-right
+and Section 6.2). In the following, we show that
+enlarging the value of a few well-localized atten￾tion values can largely improve the factual recall
+of the model.
+Method. We utilize the attention modification
+method in Eq. (5) to apply a multiplier of α to
+the attention weights of the last token to the at￾tribute position in L10H7 and L11H10 for GPT-2,
+and L17H28, L20H18, and L21H8 in Pythia. To
+choose the α value, we perform a grid search over
+[2, 5, 10, 100] to maximize the factual recall rate of
+the model. We find that α = 5 is the best value for
+both GPT-2 for Pythia.
+Results. We highlight the effect of our model
+editing method on the strength of the factual recall
+mechanism in Figure 5. Originally, GPT-2 has only
+4% of the cases where the factual mechanism pre￾vails the counterfactual one, and Pythia only 30%.
+However, after modifying the attention weights of
+the entries mentioned above, the strength of the
+factual mechanism increases drastically that it wins
+over the other mechanism in 50% of the cases for
+both models. This result is remarkable since we
+modify only two entries in the attention map out of
+the 33,264 attention values of GPT-2 (117M param￾0
+10
+20
+30
+40
+50
+GPT2 Pythia−6.9b
+% factual answers
+Baseline
+After attention
+modification
+Figure 5: The factual recall mechanism increases sub￾stantially across GPT-2 and Pythia after attention modi￾fication.
+eters) and three entries out of the 270,848 attention
+values of Pythia (6.9B parameters). This highlights
+the importance of the interpretability analysis in
+Sections 6.2 and 6.3, which enables us to find the
+detailed role played by the individual units of each
+transformer layer.
+6.5 What Word Choices Intensify the
+Competition?
+After the intrinsic intervention to edit the internal
+states of the model, we explore how the similarity
+between tfact and tcofa in our dataset affects the
+mechanism described in the previous sections.
+Method. We divided the dataset into 10 equal
+bins based on the similarity between the vectors
+for tfact and tcofa, with each bin containing 1000
+items. Starting from the lowest, each group repre￾sents a 10% segment of the dataset, arranged by
+increasing similarity scores. For our word simi￾larity metric, we calculate the cosine similarity of
+the 300-dimensional word embeddings from the
+pre-trained Word2Vec model (Mikolov et al., 2013)
+implemented in the Gensim Python package (Re- ˇ
+h˚uˇrek and Sojka, 2010).
+Results. As a result of the varying similarity of
+the two tokens, we see a drastic change in the dom￾inance of the factual mechanism in Figure 6.
+Finding 1: Similar tokens confuse the model more
+easily. Consistently across all the models, the more
+similar the two tokens are, the more likely the
+model is to be confused and mistakenly let the
+factual mechanism dominate, to predict tfact as its
+output.
+Finding 2: Larger models suffer more from such
+confusion. For example, the largest one, Pythia￾6.9B, demonstrates a very strong attachment to the
+factual information, letting the factual mechanism
+
+0
+10
+20
+30
+40
+50
+0−10%
+10−20%
+20−30%
+30−40%
+40−50%
+50−60%
+60−70%
+70−80%
+80−90%
+90−100%
+Similarity Score Bins (Percentiles)
+% factual answers
+GPT2
+GPT2−large
+GPT2−medium
+GPT2−xl
+Pythia−6.9b
+Figure 6: Prediction frequency of factual token by simi￾larity level. We show the percentage of tfact predictions
+within each bin compared to the entire dataset (repre￾sented by a dotted line) across various model sizes. We
+can notice that more similar tfact and tcofa are, and the
+factual mechanism is stronger.
+win almost 45% of the cases when the token simi￾larity reaches 90%. Even when the similarity is low,
+larger models are still more likely to confuse and
+lean towards the factual mechanism. This finding
+resonates with the observations from the inverse
+scaling prize (McKenzie et al., 2023) that larger
+models have a greater capacity to store and retrieve
+factual information, thus more influenced by the
+factual mechanism.
+7 Discussion and Future Work
+Situating Our Findings in Related Work. Our
+findings about the late attention blocks are con￾sistent with Geva et al. (2023), showing that late
+attention blocks write most of the information to
+the last layer when adding a counterfactual premise.
+Surprisingly, however, we find that the largest con￾tribution to the factual prediction of the network
+mostly comes from the suppression of the counter￾factual token read from the attribute position rather
+than the promotion of the factual token from the
+subject position.
+Consistently with McDougall et al. (2023), we
+find that few highly specialized heads suppress the
+counterfactual information. Moreover, we make
+a unique contribution up-weighting only two or
+three attention entries of these heads to increase
+substantially the number of factual responses of the
+model.
+With an approach similar to ours, Yu et al. (2023)
+find that more heads can promote the factual mech￾anism, also in early layers, but found it challenging
+to improve the factual responses by scaling up the
+weights of the attention maps. This discrepancy
+can be due to the broader set of topics we include
+in our prompts, which allowed us to select fewer,
+more specialized heads, to the different ways the
+prompts are framed, or also to our more focused
+modification of the attention maps.
+Future Work For future research directions, we
+aim to analyze more in depth how our findings
+depend on the prompt structure and whether the
+promotion of factual responses by suppressing the
+counterfactuals generalizes to larger models and a
+more comprehensive variety of datasets.
+8 Conclusion
+In this work, we have proposed the formulation
+of the competition of mechanisms as a powerful
+interpretation when LLMs need to handle multi￾ple mechanisms, only one of which leads to the
+correct answer. We deployed two mechanistic in￾terpretability tools, logit inspection and attention
+modification, and identified critical positions and
+model components involved in competing for the
+mechanisms. Finally, we discovered a few local￾ized positions in the attention map, which largely
+control the strength of the factual mechanism. Our
+study sheds light on future work on interpretability
+research for LLMs.
+Limitations
+Limited models: Our study aligns with most ex￾isting work in mechanistic interpretability to use
+GPT-2 small. However, we understand that this is a
+small model with far fewer parameters than current
+state-of-the-art LLMs. Future work is welcome to
+extend to larger-sized models, which might gener￾alize our conclusion to a certain extent, and also
+reveal interesting behavior once the models get be￾yond a specific size, maybe also seeing a U-shaped
+curve (Wei et al., 2023) for the dominance of the
+counterfactual mechanism.
+Interpretability method: Furthermore, our exper￾iments and insights are heavily grounded in the
+interpretability within the embedding space of the
+model’s inner components. This approach is reli￾able and extensively employed in mechanistic in￾terpretability research (Dar et al., 2023; Geva et al.,
+2022; Halawi et al., 2023). The logit inspection
+
+method, although commonly employed in previ￾ous work, can occasionally fail to reflect the actual
+importance of some vocabulary items, especially
+in the early layers of the network (Belrose et al.,
+2023).
+Simplicity of the prompts: Our prompts have a
+relatively simple structure for the controllability
+of the counterfactual information tracing, as it is
+very challenging to follow the information flow in
+a more diversified set of prompts. We welcome
+future work to explore methodological advances to
+enable analyses over more diverse prompts.
+Ethical Considerations
+The aim of our study is to enhance comprehen￾sion of the interplay among mechanisms within lan￾guage models that may yield unforeseen and unde￾sirable outcomes. Additionally, our research serves
+as a conceptual demonstration of methods to guide
+model behavior under such conditions. We believe
+that recognizing and dissecting the mechanisms by
+which LLMs produce unpredictable responses is
+crucial for mitigating biases and unwanted results.
+Moreover, understanding the competitive dynam￾ics under investigation is critical for improving the
+safety of LLMs. Specifically, inputting a prompt
+with an inaccurate redefinition may lead the model
+to inadvertently reveal sensitive factual informa￾tion.
+Acknowledgment
+We thank Alessandro Stolfo and Yifan Hou for
+their insightful suggestions, including the pointer
+to MLP layers for knowledge recall, and many
+relevant studies. We also thank the audience at
+the BlackBoxNLP Workshop at EMNLP 2023 for
+discussions and suggestions on various aspects of
+this project as well as ethical implications.
+This material is based in part upon works sup￾ported by the German Federal Ministry of Edu￾cation and Research (BMBF): Tübingen AI Center,
+FKZ: 01IS18039B; by the Machine Learning Clus￾ter of Excellence, EXC number 2064/1 – Project
+number 390727645; by the John Templeton Foun￾dation (grant #61156); by a Responsible AI grant
+by the Haslerstiftung; and an ETH Grant (ETH-19
+21-1). Alberto Cazzaniga and Diego Doimo are
+supported by the project “Supporto alla diagnosi di
+malattie rare tramite l’intelligenza artificiale” CUP:
+F53C22001770002. Alberto Cazzaniga received
+funding by the European Union – NextGenera￾tionEU within the project PNRR ”PRP@CERIC”
+IR0000028 - Mission 4 Component 2 Investment
+3.1 Action 3.1.1. Zhijing Jin is supported by PhD
+fellowships from the Future of Life Institute and
+Open Philanthropy.
+Author Contributions
+The paper originates as the Master’s thesis work of
+Francesco Ortu hosted jointly at the Max Planck
+Institute of Intelligence Systems, Tuebingen, Ger￾many, and Area Science Park, Trieste, Italy. Zhijing
+Jin closely supervised the development of the tech￾nical idea and the design of the experiments. In the
+meantime, Francesco developed the technical skills
+in mechanistic interpretability and conducted the
+experiments with lots of resilience.
+Professors Alberto Cazzaniga and Bernhard
+Schölkopf co-supervised this work, and gave in￾sightful research guidance. Diego Doimo closely
+monitored the execution of the experiments and
+helped substantially with the design of the word
+choice experiment and the improvement of the
+factual recall experiments. Professor Mrinmaya
+Sachan provided helpful research suggestions
+throughout the project. All of Francesco, Zhijing,
+Diego, and Alberto contributed significantly to the
+writing of this paper.
+References
+Guillaume Alain and Yoshua Bengio. 2016. Understand￾ing intermediate layers using linear classifier probes.
+ArXiv, abs/1610.01644. 2
+Rohan Anil, Sebastian Borgeaud, Yonghui Wu, Jean￾Baptiste Alayrac, Jiahui Yu, Radu Soricut, Johan Schalk￾wyk, Andrew M. Dai, Anja Hauth, Katie Millican,
+David Silver, Slav Petrov, Melvin Johnson, Ioannis
+Antonoglou, Julian Schrittwieser, Amelia Glaese, Jilin
+Chen, Emily Pitler, Timothy P. Lillicrap, Angeliki
+Lazaridou, Orhan Firat, James Molloy, Michael Isard,
+Paul Ronald Barham, Tom Hennigan, Benjamin Lee,
+Fabio Viola, Malcolm Reynolds, Yuanzhong Xu, Ryan
+Doherty, Eli Collins, Clemens Meyer, Eliza Rutherford,
+Erica Moreira, Kareem Ayoub, Megha Goel, George
+Tucker, Enrique Piqueras, Maxim Krikun, Iain Barr,
+Nikolay Savinov, Ivo Danihelka, Becca Roelofs, Anaïs
+White, Anders Andreassen, Tamara von Glehn, Laksh￾man Yagati, Mehran Kazemi, Lucas Gonzalez, Misha
+Khalman, Jakub Sygnowski, and et al. 2023. Gemini:
+A family of highly capable multimodal models. CoRR,
+abs/2312.11805. 1
+Yonatan Belinkov, Nadir Durrani, Fahim Dalvi, Hassan
+Sajjad, and James Glass. 2017. What do neural machine
+
+translation models learn about morphology? In Pro￾ceedings of the 55th Annual Meeting of the Association
+for Computational Linguistics (Volume 1: Long Papers),
+pages 861–872, Vancouver, Canada. Association for
+Computational Linguistics. 2
+Nora Belrose, Zach Furman, Logan Smith, Danny Ha￾lawi, Igor Ostrovsky, Lev McKinney, Stella Biderman,
+and Jacob Steinhardt. 2023. Eliciting latent predic￾tions from transformers with the tuned lens. CoRR,
+abs/2303.08112. 4, 10
+Stella Biderman, Hailey Schoelkopf, Quentin Gregory
+Anthony, Herbie Bradley, Kyle O’Brien, Eric Hal￾lahan, Mohammad Aflah Khan, Shivanshu Purohit,
+USVSN Sai Prashanth, Edward Raff, Aviya Skowron,
+Lintang Sutawika, and Oskar van der Wal. 2023. Pythia:
+A suite for analyzing large language models across train￾ing and scaling. In International Conference on Ma￾chine Learning, ICML 2023, 23-29 July 2023, Honolulu,
+Hawaii, USA, volume 202 of Proceedings of Machine
+Learning Research, pages 2397–2430. PMLR. 4
+Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie
+Subbiah, Jared Kaplan, Prafulla Dhariwal, Arvind
+Neelakantan, Pranav Shyam, Girish Sastry, Amanda
+Askell, Sandhini Agarwal, Ariel Herbert-Voss, Gretchen
+Krueger, Tom Henighan, Rewon Child, Aditya Ramesh,
+Daniel M. Ziegler, Jeffrey Wu, Clemens Winter, Christo￾pher Hesse, Mark Chen, Eric Sigler, Mateusz Litwin,
+Scott Gray, Benjamin Chess, Jack Clark, Christopher
+Berner, Sam McCandlish, Alec Radford, Ilya Sutskever,
+and Dario Amodei. 2020. Language models are few￾shot learners. In Advances in Neural Information Pro￾cessing Systems 33: Annual Conference on Neural In￾formation Processing Systems 2020, NeurIPS 2020, De￾cember 6-12, 2020, virtual. 1
+Emily Cheng, Diego Doimo, Corentin Kervadec, Iuri
+Macocco, Jade Yu, Alessandro Laio, and Marco Ba￾roni. 2024. Emergence of a high-dimensional abstrac￾tion phase in language transformers. arXiv preprint
+arXiv:2405.15471. 2
+Arthur Conmy, Augustine N. Mavor-Parker, Aengus
+Lynch, Stefan Heimersheim, and Adrià Garriga-Alonso.
+2023. Towards automated circuit discovery for mecha￾nistic interpretability. CoRR, abs/2304.14997. 4
+Alexis Conneau, German Kruszewski, Guillaume Lam￾ple, Loïc Barrault, and Marco Baroni. 2018. What you
+can cram into a single $&!#* vector: Probing sentence
+embeddings for linguistic properties. In Proceedings
+of the 56th Annual Meeting of the Association for Com￾putational Linguistics (Volume 1: Long Papers), pages
+2126–2136, Melbourne, Australia. Association for Com￾putational Linguistics. 2
+Guy Dar, Mor Geva, Ankit Gupta, and Jonathan Berant.
+2023. Analyzing transformers in embedding space. In
+Proceedings of the 61st Annual Meeting of the Associ￾ation for Computational Linguistics (Volume 1: Long
+Papers), ACL 2023, Toronto, Canada, July 9-14, 2023,
+pages 16124–16170. Association for Computational
+Linguistics. 3, 9
+Diego Doimo, Aldo Glielmo, Alessio Ansuini, and
+Alessandro Laio. 2020. Hierarchical nucleation in deep
+neural networks. Advances in Neural Information Pro￾cessing Systems, 33:7526–7536. 2
+Yanai Elazar, Nora Kassner, Shauli Ravfogel, Abhilasha
+Ravichander, Eduard H. Hovy, Hinrich Schütze, and
+Yoav Goldberg. 2021. Measuring and improving con￾sistency in pretrained language models. Trans. Assoc.
+Comput. Linguistics, 9:1012–1031. 2
+Nelson Elhage, Neel Nanda, Catherine Olsson, Tom
+Henighan, Nicholas Joseph, Ben Mann, Amanda
+Askell, Yuntao Bai, Anna Chen, Tom Conerly,
+Nova DasSarma, Dawn Drain, Deep Ganguli, Zac
+Hatfield-Dodds, Danny Hernandez, Andy Jones, Jack￾son Kernion, Liane Lovitt, Kamal Ndousse, Dario
+Amodei, Tom Brown, Jack Clark, Jared Kaplan,
+Sam McCandlish, and Chris Olah. 2021. A
+mathematical framework for transformer circuits.
+Transformer Circuits Thread. Https://transformer￾circuits.pub/2021/framework/index.html. 1, 2, 3
+Mor Geva, Jasmijn Bastings, Katja Filippova, and Amir
+Globerson. 2023. Dissecting recall of factual asso￾ciations in auto-regressive language models. CoRR,
+abs/2304.14767. 1, 2, 3, 4, 5, 6, 7, 9
+Mor Geva, Avi Caciularu, Kevin Wang, and Yoav Gold￾berg. 2022. Transformer feed-forward layers build pre￾dictions by promoting concepts in the vocabulary space.
+In Proceedings of the 2022 Conference on Empirical
+Methods in Natural Language Processing, pages 30–
+45, Abu Dhabi, United Arab Emirates. Association for
+Computational Linguistics. 2, 3, 9
+Mor Geva, Roei Schuster, Jonathan Berant, and Omer
+Levy. 2021. Transformer feed-forward layers are key￾value memories. In Proceedings of the 2021 Conference
+on Empirical Methods in Natural Language Processing,
+pages 5484–5495, Online and Punta Cana, Dominican
+Republic. Association for Computational Linguistics. 1,
+2
+Danny Halawi, Jean-Stanislas Denain, and Jacob Stein￾hardt. 2023. Overthinking the truth: Understanding how
+language models process false demonstrations. CoRR,
+abs/2307.09476. 3, 9
+Michael Hanna, Ollie Liu, and Alexandre Variengien.
+2023. How does GPT-2 compute greater-than?: Inter￾preting mathematical abilities in a pre-trained language
+model. CoRR, abs/2305.00586. 2, 4
+John Hewitt and Percy Liang. 2019. Designing and in￾terpreting probes with control tasks. In Proceedings of
+the 2019 Conference on Empirical Methods in Natural
+Language Processing and the 9th International Joint
+Conference on Natural Language Processing (EMNLP￾IJCNLP), pages 2733–2743, Hong Kong, China. Asso￾ciation for Computational Linguistics. 2
+John Hewitt and Christopher D. Manning. 2019. A
+structural probe for finding syntax in word representa￾tions. In Proceedings of the 2019 Conference of the
+North American Chapter of the Association for Com￾putational Linguistics: Human Language Technologies,
+
+Volume 1 (Long and Short Papers), pages 4129–4138,
+Minneapolis, Minnesota. Association for Computational
+Linguistics. 2
+Dieuwke Hupkes, Sara Veldhoen, and Willem H.
+Zuidema. 2018. Visualisation and ’diagnostic classi￾fiers’ reveal how recurrent and recursive neural net￾works process hierarchical structure. J. Artif. Intell.
+Res., 61:907–926. 2
+Zhengbao Jiang, Frank F. Xu, Jun Araki, and Graham
+Neubig. 2020. How can we know what language models
+know? Transactions of the Association for Computa￾tional Linguistics, 8:423–438. 2
+Callum McDougall, Arthur Conmy, Cody Rushing,
+Thomas McGrath, and Neel Nanda. 2023. Copy sup￾pression: Comprehensively understanding an attention
+head. CoRR, abs/2310.04625. 7, 9
+Ian R. McKenzie, Alexander Lyzhov, Michael Pieler,
+Alicia Parrish, Aaron Mueller, Ameya Prabhu, Euan
+McLean, Aaron Kirtland, Alexis Ross, Alisa Liu, An￾drew Gritsevskiy, Daniel Wurgaft, Derik Kauffman,
+Gabriel Recchia, Jiacheng Liu, Joe Cavanagh, Max
+Weiss, Sicong Huang, The Floating Droid, Tom Tseng,
+Tomasz Korbak, Xudong Shen, Yuhui Zhang, Zheng￾ping Zhou, Najoung Kim, Samuel R. Bowman, and
+Ethan Perez. 2023. Inverse scaling: When bigger isn’t
+better. CoRR, abs/2306.09479. 9
+Kevin Meng, David Bau, Alex Andonian, and Yonatan
+Belinkov. 2022. Locating and editing factual associa￾tions in gpt. arXiv preprint arXiv:2202.05262. 1, 2,
+4
+Tomás Mikolov, Ilya Sutskever, Kai Chen, Gregory S.
+Corrado, and Jeffrey Dean. 2013. Distributed represen￾tations of words and phrases and their compositionality.
+In Advances in Neural Information Processing Systems
+26: 27th Annual Conference on Neural Information
+Processing Systems 2013. Proceedings of a meeting
+held December 5-8, 2013, Lake Tahoe, Nevada, United
+States, pages 3111–3119. 8
+Neel Nanda and Joseph Bloom. 2022. Transformer￾lens. https://github.com/neelnanda-io/
+TransformerLens. 4
+Neel Nanda, Lawrence Chan, Tom Lieberum, Jess
+Smith, and Jacob Steinhardt. 2023. Progress measures
+for grokking via mechanistic interpretability. In The
+Eleventh International Conference on Learning Repre￾sentations, ICLR 2023, Kigali, Rwanda, May 1-5, 2023.
+OpenReview.net. 2, 3
+Nostalgebraist. 2020. interpreting gpt: the logit lens.
+Accessed: Nov 2023. 2, 3
+Chris Olah, Nick Cammarata, Ludwig Schubert, Gabriel
+Goh, Michael Petrov, and Shan Carter. 2020. Zoom in:
+An introduction to circuits. Distill, 5(3):e00024–001. 2,
+3
+Catherine Olsson, Nelson Elhage, Neel Nanda, Nicholas
+Joseph, Nova DasSarma, Tom Henighan, Ben Mann,
+Amanda Askell, Yuntao Bai, Anna Chen, Tom Con￾erly, Dawn Drain, Deep Ganguli, Zac Hatfield-Dodds,
+Danny Hernandez, Scott Johnston, Andy Jones, Jackson
+Kernion, Liane Lovitt, Kamal Ndousse, Dario Amodei,
+Tom Brown, Jack Clark, Jared Kaplan, Sam McCan￾dlish, and Chris Olah. 2022. In-context learning and
+induction heads. CoRR, abs/2209.11895. 1, 2, 3
+OpenAI. 2023. GPT-4 technical report. CoRR,
+abs/2303.08774. 1
+Kiho Park, Yo Joong Choe, Yibo Jiang, and Victor
+Veitch. 2024. The geometry of categorical and hier￾archical concepts in large language models. 2
+Fabio Petroni, Tim Rocktäschel, Sebastian Riedel,
+Patrick Lewis, Anton Bakhtin, Yuxiang Wu, and Alexan￾der Miller. 2019. Language models as knowledge bases?
+In Proceedings of the 2019 Conference on Empirical
+Methods in Natural Language Processing and the 9th
+International Joint Conference on Natural Language
+Processing (EMNLP-IJCNLP), pages 2463–2473, Hong
+Kong, China. Association for Computational Linguis￾tics. 2
+Alec Radford, Jeffrey Wu, Rewon Child, David Luan,
+Dario Amodei, and Ilya Sutskever. 2019. Language
+models are unsupervised multitask learners. OpenAI
+Blog, 1(8). 4
+Radim Reh˚u ˇ ˇrek and Petr Sojka. 2010. Software
+Framework for Topic Modelling with Large Cor￾pora. In Proceedings of the LREC 2010 Workshop
+on New Challenges for NLP Frameworks, pages 45–
+50, Valletta, Malta. ELRA. http://is.muni.cz/
+publication/884893/en. 8
+Ian Tenney, Patrick Xia, Berlin Chen, Alex Wang,
+Adam Poliak, R. Thomas McCoy, Najoung Kim, Ben￾jamin Van Durme, Samuel R. Bowman, Dipanjan Das,
+and Ellie Pavlick. 2019. What do you learn from con￾text? probing for sentence structure in contextualized
+word representations. ArXiv, abs/1905.06316. 2
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier
+Martinet, Marie-Anne Lachaux, Timothée Lacroix,
+Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal
+Azhar, Aurélien Rodriguez, Armand Joulin, Edouard
+Grave, and Guillaume Lample. 2023. Llama: Open
+and efficient foundation language models. CoRR,
+abs/2302.13971. 1
+Lucrezia Valeriani, Diego Doimo, Francesca Cuturello,
+Alessandro Laio, Alessio Ansuini, and Alberto Caz￾zaniga. 2024. The geometry of hidden representations
+of large transformer models. Advances in Neural Infor￾mation Processing Systems, 36. 2
+Kevin Ro Wang, Alexandre Variengien, Arthur Conmy,
+Buck Shlegeris, and Jacob Steinhardt. 2023. Inter￾pretability in the wild: a circuit for indirect object iden￾tification in GPT-2 small. In The Eleventh International
+Conference on Learning Representations, ICLR 2023,
+Kigali, Rwanda, May 1-5, 2023. OpenReview.net. 2, 4
+Jason Wei, Najoung Kim, Yi Tay, and Quoc V. Le. 2023.
+Inverse scaling can become u-shaped. In Proceedings
+of the 2023 Conference on Empirical Methods in Nat￾ural Language Processing, EMNLP 2023, Singapore,
+
+December 6-10, 2023, pages 15580–15591. Association
+for Computational Linguistics. 9
+Thomas Wolf, Lysandre Debut, Victor Sanh, Julien
+Chaumond, Clement Delangue, Anthony Moi, Pierric
+Cistac, Tim Rault, Remi Louf, Morgan Funtowicz, Joe
+Davison, Sam Shleifer, Patrick von Platen, Clara Ma,
+Yacine Jernite, Julien Plu, Canwen Xu, Teven Le Scao,
+Sylvain Gugger, Mariama Drame, Quentin Lhoest, and
+Alexander Rush. 2020. Transformers: State-of-the-art
+natural language processing. In Proceedings of the 2020
+Conference on Empirical Methods in Natural Language
+Processing: System Demonstrations, pages 38–45, On￾line. Association for Computational Linguistics. 4
+Qinan Yu, Jack Merullo, and Ellie Pavlick. 2023. Char￾acterizing mechanisms for factual recall in language
+models. In Proceedings of the 2023 Conference on Em￾pirical Methods in Natural Language Processing, pages
+9924–9959, Singapore. Association for Computational
+Linguistics. 3, 4, 9
+
+A Experiments for Pythia-6.9b
+This section extends the experimental analysis con￾ducted on GPT-2 to Pythia-6.9b. The goal is to
+replicate the prior methodology and compare the
+outcomes across the two different models, thus
+contributing to a broader understanding of model
+behaviors under similar conditions.
+A.1 Macroscopic Inspection across Layers
+and Token Positions
+Figure 7 provides a comparative analysis of the
+logit values for two specific tokens, labeled as fac￾tual and counterfactual, across various positions
+and layers in Pythia-6.9b.
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+0 10 20 30
+Layer
+Logit of tfact
+0 5 10 15
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+0 10 20 30
+Layer
+Logit of t cofa 0 5 10 15
+Figure 7: Layer-wise Position Analysis of Relevant
+Tokens in GPT-2-small. The figure presents the logit
+values for two pertinent tokens across various positions
+and layers. The left panel illustrates the logit values for
+the factual token tfact, while the right panel illustrates
+the logit values for the counterfactual token tcofa.
+A.2 Intermediate Inspection of Attention and
+MLP Blocks
+This subsection exposes the contributions of At￾tention and MLP Blocks to the differences in logit
+values across layers within Pythia-6.9b. Figure 8
+explores how these components influence the com￾putation of logits for two tokens, represented as the
+difference ∆cofa = Logit(tcofa) − Logit(tfact) at
+the final position of the input. The analysis specifi￾cally highlights the distinct effects of these blocks
+at different stages of the model’s operation.
+−0.25
+0.00
+0.25
+0.50
+0 1 2 3 4 5 6 7 8 9 10111213141516171819202122232425262728293031
+Layer
+∆
+c
+o
+f
+a
+Attention Block
+−0.25
+0.00
+0.25
+0.50
+0 1 2 3 4 5 6 7 8 9 10111213141516171819202122232425262728293031
+Layer
+∆
+c
+o
+f
+a
+MLP Block
+Figure 8: Attribution of Logit Differences to Atten￾tion and MLP Blocks. delineates the differential im￾pact of Attention and MLP Blocks on logit values at
+the terminal input position. The attention mechanism
+is shown to predominantly influence early layer pro￾cessing in the left panel, while the right panel details
+the increased contribution of MLP Blocks to the factual
+token’s logits in the concluding layers, illustrating the
+dynamic interplay between these fundamental neural
+network elements.
+A.3 Microscopic Inspection of Individual
+Attention Heads
+Figure 9 quantifies the direct contributions of all
+attention heads to the difference in logit values,
+labeled as ∆cofa. It specifically identifies heads that
+preferentially enhance the logits for tfact (shown in
+blue) versus those favoring tcofa (depicted in red),
+offering insights into how attention mechanisms
+differentially prioritize token attributes.
+Figure 10 presents the attention patterns of the rel￾evant attention heads at the last token position. It
+shows the consistent pattern of the relevant heads,
+with a consistent focus on the attribute position.
+
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+0 1 2 3 4 5 6 7 8 9 10111213141516171819202122232425262728293031
+Layer
+Head
+∆cofa
+−0.2−0.1 0.0 0.1 0.2
+Figure 9: Direct Contribution of Attention Heads. The figure displays the direct contribution of all heads in
+Pythia-6.9b to the logit difference ∆cofa with heads favoring tfact highlighted in blue and those favoring tcofa in red.
+Layer 10 | Head 1
+Layer 10 | Head 27
+Layer 15 | Head 17
+Layer 17 | Head 14
+Layer 17 | Head 28
+Layer 19 | Head 20
+Layer 19 | Head 31
+Layer 20 | Head 2
+Layer 20 | Head 18
+Layer 21 | Head 8
+Layer 23 | Head 25
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Attention
+Score:
+0.2
+0.4
+0.6
+Attention
+Score:
+0.2
+0.4
+0.6
+Figure 10: Attention Pattern for Relevant Attention
+Heads. The panel illustrates the attention patterns of
+relevant heads for the last position, demonstrating con￾sistent attention to the attribute position by both red and
+blue heads.
+B Other Experiment for GPT-2
+B.1 Ranks Analysis in the Last Position
+We provide additional information in Figure 11
+mapping the logits to ranks of the tokens, and find
+that the rank of tcofa in the projected logit distribu￾tion remains very low: tcofa is among the 20 most
+likely tokens in the first five layers and between the
+20th and the 70th in the last part of the network.
+1
+10
+100
+1000
+0 3 6 9
+Layer
+Rank
+Counterfactual Token Factual Token
+Figure 11: Rank of Target Tokens for Attribute Posi￾tion Across Layers in GPT-2. This figure depicts the
+trend where the logit rank for the factual token tfact de￾creases while the rank for the counterfactual token tcofa
+increases at the attribute position. In the concluding
+layers, this pattern is evident as tfact typically secures a
+lower rank, in contrast to tcofa, which shows an upward
+trajectory in rank. However, it is important to note that
+tcofa’s rank consistently remains lower than that of tfact.
+
+B.2 Attention Pattern of Relevant Attention
+Heads
+Figure 12 shows the full attention pattern for the
+relevant attention heads, as identified in Section 6.
+It is show as the attention pattern is similar between
+all the relevant attention heads, independently if
+the heads is favoring tfact or tcofa.
+
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Attention
+score:
+0.0
+0.1
+0.2
+0.3
+0.4
+Layer 11 Head 10
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Attention
+score:
+0.0
+0.1
+0.2
+0.3
+0.4
+Layer 10 Head 0
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Attention
+score:
+0.0
+0.1
+0.2
+0.3
+0.4
+Layer 10 Head 7
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Attention
+score:
+0.0
+0.1
+0.2
+0.3
+0.4
+Layer 10 Head 10
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Attention
+score:
+0.0
+0.1
+0.2
+0.3
+0.4
+Layer 9 Head 6
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Subject
+Relation
+Relation Last
+Attribute*
+Subject repeat
+Relation repeat
+Last
+Attention
+score:
+0.0
+0.1
+0.2
+0.3
+0.4
+Layer 9 Head 9
+Figure 12: Attention Pattern of Significant Heads. This figure illustrates the comprehensive attention pattern of
+heads substantially influencing ∆tcofa . Notably, a similar pattern emerges for both heads favoring tcofa (depicted in
+red) and those favoring tfact (illustrated in blue), particularly in the attention edge between the attribute and the final
+position.

@@ -55,6 +55,9 @@ export interface ReviewResult {
   }
   failedAgents: Array<{ id: string; name: string; reason: string }>
   roleModelPapers?: string[]
+  // Prototypes the Sentence Placement Reviewer compared against: the uploaded
+  // role model papers, or a built-in example paper for the paper type.
+  placementPrototypes?: { source: 'uploaded' | 'bundled'; papers: string[] }
   metadata?: WholeProjectMetadata
 }
 

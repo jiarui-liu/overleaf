@@ -1,0 +1,1161 @@
+LM-Infinite: Zero-Shot Extreme Length Generalization
+for Large Language Models
+Chi Han1 *, Qifan Wang2
+, Hao Peng1
+, Wenhan Xiong3
+, Yu Chen4 †
+, Heng Ji1
+, Sinong Wang3
+1 University of Illinois Urbana-Champaign, 2 Meta, 3 GenAI Meta, 4 Anytime AI
+1{chihan3,haopeng,hengji}@illinois.edu,
+23{wqfcr,xwhan,sinongwang}@meta.com,
+4ychen@anytime-ai.com
+Abstract
+Today’s large language models (LLMs) typi￾cally train on short text segments (e.g., <4K
+tokens) due to the quadratic complexity of their
+Transformer architectures. As a result, their per￾formance suffers drastically on inputs longer
+than those encountered during training, sub￾stantially limiting their applications in real￾world tasks involving long contexts such as
+encoding scientific articles, code repositories,
+or long dialogues. Through both theoretical
+analysis and empirical investigation, this work
+identifies three major factors contributing to
+this length generalization failure. Our theo￾retical analysis reveals that commonly used
+techniques like using a sliding-window atten￾tion pattern or relative positional encodings
+are inadequate to address them. Answering
+these challenges, we propose LM-Infinite, a
+simple and effective method for enhancing
+LLMs’ capabilities of handling long contexts.
+LM-Infinite is highly flexible and can be used
+with most modern LLMs off-the-shelf. With￾out any parameter updates, it allows LLMs
+pre-trained with 2K or 4K-long segments to
+generalize to up to 200M length inputs while
+retaining perplexity. It also improves perfor￾mance on downstream tasks such as Passkey
+Retrieval and Qasper in the zero-shot setting.
+LM-Infinite brings substantial efficiency im￾provements: it achieves 2.7× decoding speed
+up and 7.5× memory saving over the origi￾nal model. Our codes are released at https:
+//github.com/Glaciohound/LM-Infinite.
+1 Introduction
+Large language models (LLMs) have recently ad￾vanced the state-of-the-art across various natural
+language processing tasks. They typically train
+on text segments of fewer than 4K tokens (Tou￾vron et al., 2023b; Team, 2023), primarily due to
+the computational overhead quadratic in the input
+*Work performed as an intern in Meta GenAI.
+†This work was done while the author was at Meta.
+lengths of their Transformer architectures. As a
+result, they face challenges in generalization to in￾puts that are excessively longer than what they are
+trained on and suffer substantial deterioration in
+their performance (Tworkowski et al., 2023; Chen
+et al., 2023a). This limits their applicability in tasks
+that require long-range contexts, such as encoding
+scientific articles, source code repository genera￾tion, or long-context dialogues.
+Extensive efforts have been devoted to address￾ing this length generalization challenge. Relative
+positional encodings such as RoPE (Su et al., 2021)
+and Alibi (Press et al., 2021) have been widely
+adopted by state-of-the-art LLMs, which calculate
+attention based on inter-token distance instead of
+absolute positions, hoping to avoid model failures
+due to unseen absolute position embeddings. More￾over, although applying a sliding-window attention
+pattern on the Transformer architecture can reduce
+the memory overhead (Beltagy et al., 2020; Ding
+et al., 2023; Zaheer et al., 2020), they are not di￾rectly applicable to pre-trained models for length
+generalization without further training. Through
+both theoretical analysis and empirical investiga￾tion, §3 pinpoints three primary factors underlying
+the length generalization failures: (1) the challenge
+of handling unseen distances among tokens, (2) the
+difficulty of attending to unseen numbers of tokens,
+and (3) implicitly encoded absolute positional in￾formation in initial tokens. These challenges can
+make LLMs’ computational features, such as at￾tention logits and hidden vectors, deviate from the
+training distribution, leading to failures of length
+generalization. Existing techniques fall short of
+addressing these underlying issues.
+Answering these challenges, we propose LM￾Infinite, a simple and effective method to enhance
+Transformer LLMs’ capabilities for modeling long
+contextswithout parameter updates. LM-Infinite
+consists of two major components designed to al￾leviate the three factors above. (1) a Λ-shaped
+arXiv:2308.16137v7 [cs.CL] 24 Jun 2024
+
+attention mask and (2) a ceiling on attention dis￾tances. The former forces the model to attend to
+only the beginning of the sequence and the most
+recent tokens within a pre-defined window, ignor￾ing the rest. The latter component caps the relative
+distance values to the maximum the model has seen
+during training. It can also optionally re-introduce
+top-k tokens in the middle to achieve better per￾formance in some downstream tasks. LM-Infinite
+is highly flexible and applies to any off-the-shelf
+LLMs that use relative positional encoding and
+does not require any finetuning.
+Our experiments thoroughly evaluate LM￾Infinite on a variety of tasks and LLMs. On
+ArXiv (academic papers) and OpenWebText2 (Red￾dit posts) LM-Infinite facilitates zero-shot gener￾alization for a wide range of LLMs to texts up to
+200M tokens, retaining the language modeling per￾plexity and generation quality. Without any parame￾ter updates, LM-Infinite improves scores compared
+with the original model and truncation baselines on
+downstream tasks including Passkey Retrieval (Mo￾htashami and Jaggi, 2023) and Qasper (Dasigi et al.,
+2021), which are two established benchmarks for
+long-context evaluation. We observe a 37.2% gain
+on Passkey Retrieval and a 1.2% gain on Qasper
+in the zero-shot setting. LM-Infinite also brings
+substantial efficiency improvements: it achieves
+2.7× decoding speed up and 7.5× GPU memory
+saving over the original LLMs.
+2 Background and Related Work
+2.1 Relative Positional Encodings
+The traditional absolute positional encodings pro￾vide the absolute position information, usually with
+the help of a sequence of vectors called position
+embeddings (Vaswani et al., 2017; Kenton and
+Toutanova, 2019; Ke et al., 2020). They, however,
+have trouble when the model encounters unseen
+positions in inputs longer than the training length.
+Relative positional encodings aim to address the
+limitations of previous-generation positional en￾coding methods and consider the relative distances
+between tokens instead of the absolute positions.
+Examples include a learned attention logit bias
+in T5 (Raffel et al., 2020), Transformer-XL (Dai
+et al., 2019), Skyformer (Chen et al., 2021), Sketch￾ing (Chen et al., 2022) and Sandwich (Chi et al.,
+2023), a fixed linear attention decay (Press et al.,
+2021), and rotating query and key sequences based
+on distances such as RoPE (Su et al., 2021; Li et al.,
+2023), CAPE (Likhomanenko et al., 2021) and
+XPos (Sun et al., 2022; Ding et al., 2023). Despite
+some promising empirical evidence, length gener￾alization failures are still widely observed when
+directly applied to large language models (Kaiok￾endev, 2023). In what follows, we briefly discuss
+two widely used relative positional encoding meth￾ods. They lay out the necessary context for our
+onward discussion and experiments.
+Rotary Position Embedding (RoPE; Su et al.,
+2021) It rotates the key and query vectors
+based on positions before computing the inner
+product. Specifically, each vector x (either
+key or query) is split into pairs of elements
+{(x0, x1),(x2, x3), · · · }, with each pair inter￾preted as a 2-dimensional vector. RoPE then rotates
+the vector (xa, xa+1) of token i with angle θa,i =
+iωa, where ωa is the rotating speed associated with
+dimension pair (a, a + 1). After rotation, the 2-
+D vector becomes 
+cosiωa − sin iωa
+sin iωa cosiωa
+  xi
+xi+1
+.
+They show that the inner product between rotated
+query qi and rotated key kj is solely determined by
+qi
+, kj , and their relative distance i − j. We always
+have i ≥ j due to the causal attention mask.
+AliBi (Press et al., 2021) It offsets all attention
+logits between tokens i, j by a linear term −m(i −
+j) and become q
+⊤
+i kj − m(i − j). To this end, the
+MPT-7B codes implement an offset matrix as an
+additive term in attention logits.
+2.2 Efforts Towards Length Generalization
+In light of generalization failures observed in
+LLMs, one straightforward solution is to finetune
+LLMs on longer text sequences (Chen et al., 2023a;
+Tworkowski et al., 2023; Tao et al., 2023; Kiyono
+et al., 2021; Anil et al., 2022). These approaches
+do not address the underlying causes of length gen￾eralization failures and require massive training re￾sources. Other solutions propose to grant LLMs ac￾cess to longer contexts without really reading them
+in full (Zhou et al., 2023; Bueno et al., 2022; Mo￾htashami and Jaggi, 2023; Yang et al., 2023). Aug￾menting LLMs with retrieval-based memories (Wu
+et al., 2021; Guu et al., 2020; Borgeaud et al., 2022;
+Khandelwal et al., 2019; Kaiser et al., 2016; Yo￾gatama et al., 2021) also make LLMs applicable
+to a large database. These designs, however, usu￾ally need finetuning and are not directly compatible
+with the existing LLMs. Our work, in contrast, fa￾cilitates zero-shot length generalization. Another
+
+Attention Logit Bound Attention Entropy
+Sequence Length Sequence Length
+(a) Attention Logit Explosion at Long Distances (b) Attention Entropy Explosion at Long Lengths (c) Starting Tokens Occupy Distinct Areas
+0
+0
+2
+4
+6
+8
+0 2k
+Starting few tokens
+4k 6k 8k
+0
+-5
+-15
+-20
+5
+10
+15
+2k 4k 6k 8k
+Figure 1: We identify three factors underlying the length generalization failure in LLMs in §3. (a) Factor 1: Unseen
+distances between tokens cause attention logits to explode. (b) Factor 2: An unseen number of tokens can cause
+attention entropy to increase beyond the training range as the length increases. (c) Factor 3: Starting few tokens
+occupy a distinct feature region and should not be discarded. The two blue regions at the upper center and lower
+right correspond to the initial tokens that are highly concentrated but also very far from later tokens. The lower-left
+region contains the thousands of overlapping dots corresponding to the later tokens.
+similar work (Ratner et al., 2023) increases con￾text length with attention patterns without further
+training. However, it is limited to the in-context
+learning setting.
+3 Why do Transformer LLMs Fail to
+Generalize to Long Contexts?
+Through a series of theoretical and experimental
+investigations, this section aims to identify the po￾tential causes underlying current LLMs’ failure
+in length generalization. Our discussion assumes
+Transformer-based LLMs that use relative posi￾tional encodings, as this design is widely adopted in
+today’s LLMs (Touvron et al., 2023b; Team, 2023).
+We use Llama-2 (Touvron et al., 2023b), which
+is pre-trained with 4K-length segments, for inves￾tigation. On sequences longer than the training
+length, we will show that the unseen inter-token dis￾tances, the increasing number of attended tokens,
+and the implicitly encoded position information of
+the starting tokens can all make certain computa￾tional features out of the training distribution. As
+deep models can be sensitive to input distribution
+shifts, these factors need to be handled for LLMs
+to generalize to unseen lengths.
+Factor 1: challenges in handling unseen dis￾tances among tokens With relative positional
+encoding, the impact of positions on the attention
+weight between two tokens depends solely on their
+relative distance. As the sequence length grows ex￾ceedingly long, some distance values will surpass
+those seen during training. We make the following
+informal theoretical claim:
+Theorem 1. (Informal) For an attention mecha￾nism using relative positional encoding, the atten￾tion logits must explode to infinities to differentiate
+previously unseen distances apart as the sequence
+length increases.
+The formal theorem and its proof can be found in
+Appendix C. We also empirically verify this on
+Llama-2 on the ArXiv dataset truncated down to
+8K length. We extract the attention logits of all
+attention heads and their maximum attention log￾its on different sequence lengths in Figure 1(a). It
+shows the average and variance among attention
+heads. We see that the attention logits increase
+to substantially larger values when the sequence
+length exceeds the training length of 4K. To miti￾gate this issue, we conjecture that it may help to
+cap the relative distance values to the maximum
+that the model has seen during training (i.e., a
+distance ceiling). However, as we will see from
+the proposition below, addressing logit explosion
+leads to another challenge.
+Factor 2: attending to unseen numbers of tokens
+On longer sequences, tokens at later positions must
+distribute attention weights across a larger context.
+We then make the following claim that, if attention
+logits are bounded but the number of tokens to
+attend to is not limited, it can cause the attention
+entropy to increase beyond the training range:
+Proposition 1. If the attention logits are bounded,
+as the sequence becomes longer, the attention en￾tropy grows to infinity.
+A formal statement as well as the proof can be
+
+0 1 2 3 4 5 6 7
+0
+1
+2
+3
+4
+5
+6
+7
+attended
+masked
+0
+0
+0
+0
+0
+0
+0
+0
+1
+1
+1
+1
+1
+1
+1
+2
+2
+2
+2
+2
+2
+2
+2 2
+2 2
+2 2
+2 2
+i
+(a) Proposed Solution: LM-Infinite 
+i distance
+(b) A Conceptual Model of Relative Positional Attention
+0 1 2 3 4 … … i - 2 i - 1 i
+essential for LLMs
+starting 
+tokens middle tokens rear tokens
+encode more
+absolute
+position
+encode more
+relative
+position
+less position-sensitive
+distance 
+ceiling
+-shaped 
+mask
+Λ
+Figure 2: (a) LM-Infinite is a plug-and-play solution for various LLMs, consisting of a Λ-shaped mask and a
+distance ceiling during attention. For clarity, this figure shows a toy scenario where Lpre-train and nstarting are both 2.
+(b) We also provide a conceptual model for understanding how relative position encoding works.
+found in Appendix D. This conclusion is further
+empirically verified by plotting the attention en￾tropy against context lengths in Figure 1(b). The
+curve shows an ever-increasing attention entropy.
+This trend, although increasing logarithmically, is
+still harming the LLMs’ performance, as we will
+illustrate in the ablation study in §5.2 and Figure 5.
+This suggests that we should bound the attention
+context size to ensure that the attention entropy
+stays in seen ranges during pre-training and avoid
+degenerated outputs. A simple windowed attention,
+where each token only attends to the nearest to￾kens within a distance, might handle factors 1 and
+2. This is similar to the block-diagonal attention
+mask used in XPos (Sun et al., 2022) and Long￾former (Beltagy et al., 2020). However, as we will
+show in the next paragraph, this introduces another
+factor that can also fail LLMs.
+Factor 3: starting tokens occupy a distinct fea￾ture space Perhaps counter-intuitively:
+Observation 1. Even without explicit absolute po￾sitional embeddings, attention outputs of the first
+few tokens can occupy a distinct representational
+space compared to other positions. Therefore,
+when passed to later layers, these starting tokens
+have distinct value vectors from their lower-layer
+outputs.
+This follows from Theorem 1 in Kazemnejad et al.
+(2023), which proves that the absolute positions can
+be implicitly encoded in the outputs of tokens of a
+single attention layer, even without positional en￾codings. In their construction, the starting tokens’
+signals are the strongest and easiest to distinguish
+from other tokens. As relative positional encoding
+is strictly more expressive than no positional encod￾ing setting in Kazemnejad et al. (2023) (e.g., by let￾ting all distances have the same attention function),
+the same conclusion applies to relative positional
+encoding as well.
+As an empirical verification, we take the hidden
+states output by the second layer of Llama-2 and
+plot a Principal Component Analysis (PCA) projec￾tion into a 2-d plane in Figure 1(c). More figures
+for other layers can be found in §E. The dots corre￾spond to the first 4096 tokens in 32 sequences, with
+blue ones corresponding to the initial tokens and
+red tokens being the tail ones. The two blue regions
+at the upper center and lower right correspond to
+the initial highly concentrated tokens (whose posi￾tions are around 0∼25) and are very far from later
+tokens. The lower-left region contains the remain￾ing overlapping tokens in a sequence (zoomed in
+to another box). The plot shows that the vector
+representations of the initial tokens concentrate on
+regions in the feature space that are distinct from
+the remaining tokens. This fresh finding reveals a
+fundamental flaw of the sliding-window attention
+pattern, which restricts the attention to the most
+recent tokens within a predefined window size, a
+widely adopted baseline recently (Beltagy et al.,
+2020; Ding et al., 2023; Zaheer et al., 2020). As
+attention is essentially a weighted average over the
+value vectors, sliding-window attention discards
+the initial tokens, keeping the attention output from
+reaching the regions that value vectors of the initial
+
+tokens occupy. This enforces the model to handle
+a different region during the computation, intro￾ducing additional generalization challenges. As a
+straightforward solution to this issue, the initial
+tokens need to be kept in the attention computa￾tion.
+4 Our proposal: LM-Infinite
+Inspired by the analyses and take-away messages
+in the previous section, we propose LM-Infinite to
+achieve zero-shot length generalization for LLMs.
+An overview of LM-Infinite is illustrated in Fig￾ure 2(a). This simple solution consists of two com￾ponents: a Λ-shaped attention mask and a distance
+ceiling. Besides, re-introducing the middle top-k
+tokens is optional for enhanced downstream perfor￾mance.
+Λ-shaped attention mask It contains two atten￾tion spans: the starting one allows each token to
+attend to the first nstarting tokens if they come before
+the current one; the ending one allows each token
+to attend to most recent Lpretrain tokens. Lpretrain
+is the maximum length during training. Other to￾kens are ignored. In ablation studies in §A, we find
+that choosing nstarting ∈ [5, 100] generally achieves
+equally good performance. Note that nstarting = 0
+(i.e., attending only to the most recent tokens) sub￾stantially hurts the performance. This resolves Fac￾tors 2 and 3 in §3 by both limiting the number of
+tokens under attention and ensuring the starting few
+tokens are attended.
+Distance ceiling LM-Infinite further bounds the
+“effective distance” to Lpretrain. This only affects the
+starting few tokens when attended by tokens at later
+positions. Specifically, in relative positional encod￾ing, the original attention logit is w(q, k, d), where
+d is the distance between two tokens. Now we mod￾ify it as w(q, k, d′
+)) where d
+′ = min(d, Lpretrain).
+Figure 2(a) shows an illustrative example where
+the distance ceiling is Lpretrain = 2. This addresses
+Factor 1 in §3 by bounding the distance value in
+attention calculation.
+Optionally attending to top-k tokens in the mid￾dle LM-Infinite can optionally attend to k tokens
+in the middle with the largest attention logits. This
+is particularly useful in downstream tasks where
+information in the middle tokens matters (§5.3).
+Here the k tokens are selected independently for
+each attention head in layers higher than h-th layer,
+and have an attention distance of d =
+1
+2
+Lpre-train.
+These hyperparameters are selected based on a
+held-out Passkey Retrieval validation set, where
+we set k = 5 and h = 5, with more details in Ap￾pendix A. Our selection of k and h does not depend
+on task-specific tuning, and in our experiments, we
+apply this same set of hyperparameters in all other
+downstream tasks and achieve consistent improve￾ments. These intermediate tokens do not hurt per￾formance. Rather, in the evaluation of downstream
+tasks in §5.3, intermediate tokens are more useful
+and selectively attending to top-k tokens brings
+substantial performance improvements with little
+impact on the efficiency. For LLM generation and
+inference, however, we find the intermediate tokens
+unnecessary to attend to for LM-Infinite to achieve
+good perplexity or generation quality.
+LM-Infinite’s Λ-shaped mask is conceptually
+similar to the attention patterns derived from heuris￾tics (Beltagy et al., 2020; Ding et al., 2023; Zaheer
+et al., 2020). However, we formally show in §3 Fac￾tor 3 that these previous approaches theoretically
+cannot generalize to unseen lengths but require pa￾rameter updates. This inherent limitation motivates
+the other two components in LM-Infinite to achieve
+zero-shot length generalization.
+Implementation details LM-Infinite is applica￾ble in all Transformer models with relative posi￾tional encoding. One only needs to replace the
+attention function in each Transformer layer with
+LM-Infinite without any parameter updates. The
+Λ-shaped attention mask is relatively straightfor￾ward to implement. In RoPE, attention logits in
+the ending attention span follow the original cal￾culation. In the starting attention span (excluding
+its overlap with the ending span), we keep all k
+vectors unrotated and rotate all q vectors to a fixed
+distance Lpretrain. Then the logits in two spans can
+be composed. Augmenting AliBi with LM-Infinite
+is also straightforward. We simply clip the offset
+matrix with a minimum value of −|mLpretrain| and
+apply the Λ-shaped attention mask.
+Discussion. In Figure 2(b), we show a conceptual
+model of how relative positional encoding func￾tions. This conceptual model reflects the design
+choices of LM-Infinite. In this conceptual model,
+a long context can be roughly partitioned into 3
+parts: The starting tokens encode strong absolute
+position information (Factor 3). As explained in §3,
+they are essential to attention to because their fea￾tures occupy a distinct region in the feature space.
+As attention is essentially a weighted average over
+
+LLaMA
+Llama-2
+GPT-J-6B
+MPT-7B
+MPT-7B + LM-Infinite
+GPT-J-6B + LM-Infinite
+Llama-2 + LM-Infinite
+LLaMA + LM-Infinite
+MPT-7B-Storywriter
+Negative Log-Likelihood
+Length
+Figure 3: LM-Infinite flattens the negative log-likelihood (NLL) curves of various LLMs on ArXiv dataset without
+any parameter updates. The trends are similar to MPT-7B-Storywriter, an explicitly fine-tuned LLM. Llama-2
+outputs NaN values on long sequences so the curve is relatively shorter.
+ArXiv OpenWebText2
+Model Lpretrain 2K 4K 8K 16K 32K 2K 4K 8K 16K
+Long-context Training/Finetuning
+Sandwich 512 5.0 5.2 5.3 - - 23.3 23.8 24.7 -
+XPos 1K 21.6 20.7 - - - - - - -
+LongLLaMA 8K 8.2 7.4 - 6.9 - - - - -
+MPT-7B-SW 65K 6.5 5.4 4.3 4.4 3.6 9.8 10.9 6.6 5.1
+Vanilla
+MPT-7B 4K 5.5 2.5×102 1.1×103 1.7×103 1.6×103 8.3 1.3×102 1.9×102 1.3×102
+LLaMA 2K 3.8 1.0×104 6.0×104 6.8×104 4.9×104 6.2 6.6×103 4.6×105 4.4×104
+GPT-J-6B 2K 3.9 1.3×103 1.0×103 1.6×103 2.8×102 8.8 7.5×102 1.3×103 1.8×103
+Llama-2 4K 3.4 3.8 8.5×103 NaN NaN 6.2 5.8 6.5×103 NaN
+LM-Infinite
+MPT-7B 4K 5.7 6.8 5.8 6.0 4.6 8.5 12.2 8.5 8.9
+LLaMA 2K 4.4 4.5 3.7 4.2 1.0 6.3 6.1 9.5 7.0
+GPT-J-6B 2K 3.8 3.1 3.0 3.1 2.1 8.8 8.5 6.5 7.4
+Llama-2 4K 4.3 3.6 3.3 4.2 6.5 6.1 5.3 8.3 8.2
+Table 1: Perplexity on ArXiv and OpenWebText2 test split. LLMs with LM-Infinite achieve the highest perplexity
+on 7 out of 9 columns while requiring no parameter updates. Lpretrain indicates the lengths of the text segments that
+the models are trained on.
+vi vectors, without the starting few tokens, the
+attention output can not reach regions that vi vec￾tors of the initial tokens occupy. The rear tokens
+provides primarily their relative positions to the fi￾nal tokens. Their importance probably arises from
+the “recency bias” (Peysakhovich and Lerer, 2023)
+learned by LLMs during pre-training. The middle
+tokens encode less position-sensitive information.
+As analyzed in Factor 2, including too many inter￾mediate tokens does more harm than good to length
+generalization.
+5 Evaluation
+We evaluate LM-Infinite with LLaMA-7B (Tou￾vron et al., 2023a), Llama-2-7b (Touvron et al.,
+2023b), MPT-7B (Team, 2023), and GPT-J￾6B (Wang and Komatsuzaki, 2021). LLaMA-7B
+and GPT-J-6B are pre-trained with 2K lengths and
+the other models are pre-trained with 4K lengths.
+LLaMA, Llama-2, and GPT-J use RoPE encod￾ing, and MPT-7B uses Alibi encoding. MPT-7B￾Storywriter (fine-tuned on long sequences) is used
+as one of the baselines.
+5.1 Language Modeling with Extremely Long
+Context
+We use ArXiv and OpenWebText2 corpora from
+the Pile dataset (Gao et al., 2020), which contain
+preprint papers from ArXiv and Reddit submis￾sions, respectively. We evaluate with negative log￾likelihood (NLL) and perplexity (exponential of
+NLL). Figure 3 plots the NLL curves on the ArXiv
+
+0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00
+Token Position 1e8
+0
+2
+4
+6
+8
+10
+12
+14
+Negative Log Likelihood (NLL)
+Llama-2 + LM-Infinite
+Llama-2 @ 8K
+Figure 4: LM-Infinite generalizes Llama-2 to an ex￾treme length of 200M. The dashed line is the NLL at
+8K length of the vanilla Llama-2 model.
+dataset. Here, we break down the models’ per￾plexity performance by positions so that the curve
+shows the NLL that the model achieves around that
+specific position, averaged across all evaluated se￾quences. Llama-2 outputs NaN probabilities on se￾quences that are slightly longer than 10K, thereby
+its shorter curve. All vanilla models run out of
+memory at ∼32K lengths.1 The baselines’ NLL
+quickly blows up when the tested sequences are
+longer than what they train on. With LM-Infinite,
+all models can generalize to sequences that are sub￾stantially longer than the lengths they are trained
+on, retaining the NLL performance. This validates
+our length failure factor analyses in §1. The longer
+ends of curves have larger variances because of
+fewer documents of those lengths. In Figure 4, we
+further evaluate LM-Infinite + Llama-2 on a se￾quence of 200M tokens, which is constructed by
+sampling with replacement from the ArXiv dataset
+and concatenating all data. LM-Infinite shows the
+ability to remain stably low log-perplexity level
+over extreme lengths.
+Table 1 summarizes the perplexity performance
+at a few milestone lengths (2K, 4K, 8K, 16K, and
+32K) on ArXiv and OpenWebText2, which shows
+a similar trend. OpenWebText2 has very few data
+instances over a length of 32K, so we omit the col￾umn. With LM-Infinite, all models can generalize
+to unseen lengths, and LM-Infinite achieves best
+perplexity in 7 out of 9 cases. On LLaMA + LM￾Infinite, the perplexity decreases as length increases
+and position becomes larger. Surprisingly, without
+1We run on a single A100 GPU with 80GB GPU memory.
+0 1000 2000 3000 4000 5000 6000 7000 8000
+0
+2
+4
+6
+8
+10
+12
+vanilla
+window
+ceiling
+LM-Infinite
+Figure 5: Ablation study on LLaMA in §5.2. x-axis
+is token position and y-axis is negative log-likelihood
+(NLL). The vanilla model (vanilla), using a windowed
+attention (window), using only a Λ-shaped attention
+mask (Λ), and only the ceiling the distance value (ceil￾ing) all more or less suffer from perplexity explosion.
+Only LM-Infinite can retrain the performance while gen￾eralizing to unseen lengths.
+any parameter update, LM-Infinite outperforms
+many strong baselines that are trained on substan￾tially longer text segments. As a direct comparison,
+MPT-7B+LM-Infinite achieves only slightly worse
+performance than its fine-tuned counterpart, MPT￾7B-Storywriter. This confirms that LM-Infinite is a
+promising alternative to resource-consuming fine￾tuning.
+5.2 Ablation Study
+Figure 5 provides an ablation study with the
+LLaMA model on the ArXiv dataset about why
+both components in LM-Infinite are essential for
+maintaining LLM functionality over the length of
+8K. We compare LM-Infinite with its variants to
+show the efficacy of the design and also to validate
+the factors in §3. Among all curves, only LM￾Infinite has relatively stable log-perplexity, mean￾ing that components in LM-Infinite are all essential
+for successful length generalization. The vanilla
+LLM model (the “vanilla” curve) fails immediately
+with exploding NLL. If we only apply Λ-shaped
+mask (the “Λ” curve) and do not bound inter-token
+distance (Factor 1), the NLL still explodes imme￾diately after pre-training lengths. The “ceiling”
+curve only applies the distance ceiling technique
+but not the Λ-shaped mask to limit the number of
+attended tokens. The performance still degener￾ates (evidenced by an ever-increasing NLL). This
+confirms that the existence of Factor 2, too many to-
+
+Passkey Retrieval Qasper
+Model 6K 8K 10K 12K 16K average
+Original 0.0 0.0 0.0 0.0 0.0 0.0 1.2
+Truncated 66.0 55.3 38.8 32.8 27.3 44.0 30.1
+LM-Infinite 70.3 90.8 86.5 79.3 79.1 81.2 31.3
+Table 2: Downstream evaluation on Passkey Retrieval and Qasper. LM-Infinite enables Llama-2 to consistently
+outperform both the original model and the baseline that truncates inputs to 4K. The truncation baseline drops
+excessive tokens altogether when the context is longer than the model’s pretraining length, keeping only the most
+recent ones, which happens before the forward pass starts without changing the attention mechanism.
+BLEU ROUGE
+Model Lpretrain 2K 4K 8K 16K 32K 2K 4K 8K 16K 32K
+ArXiv
+MPT-7B 4K 0.0 0.2 0.0 0.0 0.4 5.6 3.6 5.9 1.7 1.4
+MPT-7B-SW 65K 16.6 21.5 15.2 18.9 14.8 26.5 30.1 26.6 27.4 27.0
+MPT-7B + LM-Infinite 4K 16.1 20.2 12.6 13.9 19.7 23.8 24.9 24.1 29.0 26.6
+Llama-2 4K 26.6 0.0 0.0 0.0 0.0 31.4 0.2 0.0 0.0 0.0
+Llama-2 + LM-Infinite 4K 26.9 23.6 23.9 24.8 18.4 31.8 30.9 28.8 29.2 20.4
+OpenWebText2
+MPT-7B 4K 0.9 0.9 1.0 1.0 - 7.5 6.6 6.4 6.8 -
+MPT-7B-SW 65K 8.4 6.1 7.5 8.4 - 21.0 19.3 18.5 22.0 -
+MPT-7B + LM-Infinite 4K 5.0 4.1 5.1 2.8 - 16.6 15.4 16.2 16.0 -
+Llama-2 4K 8.8 0.0 0.0 0.0 - 22.4 0.2 0.0 0.0 -
+Llama-2 + LM-Infinite 4K 9.0 7.2 9.7 9.6 - 21.9 21.2 19.6 19.6 -
+Table 3: Text generation quality on ArXiv and OpenWebText2. LM-Infinite consistently generalizes the generation
+quality to extreme lengths, achieving performance that is comparable to or better than the fine-tuned LLM, MPT-7B￾Storywriter. Some 0 BLEU scores are caused by the poor generation quality from the vanilla LLMs as they generate
+mostly nonsensical texts.
+kens, is still harming the LLMs’ performance. The
+“window” curve shows a baseline with the sliding￾window attention pattern, which only attends to
+the most recent tokens in a sliding window without
+altering the input text. It produces the second worst
+NLL values, which indicates a significant perfor￾mance and fluency degradation. This confirms our
+theoretical analysis of factor 3. Due to its visibly
+much worse performance, we exclude it from other
+evaluations.
+Another similar baseline to “window” is the trun￾cation baseline, which drops excessive tokens alto￾gether when the context is longer than the model’s
+pre-training length, keeping only the most recent
+ones. This truncation process happens before the
+forward pass starts and essentially removes the
+truncated text from the input to the model without
+changing the attention mechanism. We compared
+this baseline in two places in the paper. In §5.3 and
+Table 2, LM-infinite outperforms this baseline on
+downstream tasks. In Section 5.4 and Figure 6, LM￾infinite achieves a better trade-off between compu￾tation complexity and generation quality than this
+baseline.
+5.3 Downstream Evaluation
+As LLMs are often deployed for downstream
+tasks, we evaluate how LM-Infinite performs on
+two long-input tasks under the zero-shot setting:
+Passkey Retrieval (Mohtashami and Jaggi, 2023)
+and Qapser (Dasigi et al., 2021). Passkey Retrieval
+buries a passkey at a random position in a long dis￾traction text and, in the end, asks what the passkey
+is. Qasper is a question-answering dataset on sci￾entific papers with a total of 1.5K testing question￾answer pairs. We evaluate Llama-2-7b-chat, as its
+instruction tuning enables good task-solving abil￾ity (Bai et al., 2023), with middle top-5 tokens
+enabled on higher than 5-th layer (see §4 for defini￾tion and Appendix A for hyperparameter selection).
+Results are listed in Table 2. LM-Infinite consis￾tently outperforms the baselines on both tasks, with
+
+20
+22.5
+25
+27.5
+30
+0 0.45 0.9 1.35 1.8
+LM-Infinite
+Truncation
+w = 256
+w = 512
+w = 1024
+w = 2048
+w = 3072 w = 3584
+TFLOPs/token
+BLEU
+Figure 6: LM-Infinite achieves a better trade-off be￾tween computation complexity with generation quality
+than simple truncation.
+a 37.2 percentage gain on Passkey Retrieval and a
+1.2 percentage gain on the Qasper task. Passkey
+retrieval locates useful information uniformly in
+a sequence, so the performance of the truncated
+baseline largely depends on whether the remaining
+part covers the passkey. On Qasper, the top-k atten￾tion is necessary for achieving good performance,
+which indicates that similarly important informa￾tion in the middle needs to be attended to. This
+suggests that it can improve downstream task per￾formance on long inputs without fine-tuning while
+the vanilla model immediately fails.
+5.4 Generation Quality
+We further evaluate LM-Infinite’s generation qual￾ity on ArXiv and OpenWebText2 test sets, with
+BLEU (Papineni et al., 2002) and ROUGE (Lin,
+2004) (ROUGE-L). We let the LLMs generate 100
+tokens after each milestone length and use the fol￾lowing 100 tokens in original texts as references.
+As the generation is time-consuming, we sample
+100 long sequences for evaluation for each dataset.
+The results are summarized in Table 3. The trend
+is similar to that in the last section: without pa￾rameter updates, LM-Infinite successfully allows
+LLMs to retain their generation quality while gen￾erating sequences longer than training, comparable
+to the fine-tuned baselines such as MPT-7B-SW.
+The generation results from the vanilla LLMs are
+poor and contain mostly nonsensical texts, result￾ing in many close-to-zero scores. For some BLEU
+scores, it yields zero {2,3,4}-gram overlaps with
+the reference texts. As BLEU is weighted geo￾metric mean over {1,2,3,4}-gram precisions, the
+final BLEU scores for those columns are 0. Ap￾pendix Table 8 presents some generation output
+examples that can provide a good picture of the
+generation quality. We also evaluate the efficiency
+in Appendix G: with 32K-long sequences, LM￾Infinite achieves 2.7× decoding speedup and 7.5×
+GPU memory saving.
+A few example generations are shown in Ap￾pendix H. We also compare LM-Infinite with a sim￾ple truncation-based baseline by repeatedly trun￾cating excessive contexts. However, as the gen￾eration length increases, frequent truncations and
+re-encoding of new contexts are required. The
+larger the truncation window is, the more context
+is kept, but the larger the computational overhead.
+We let the models generate 10k tokens on ArXiv. In
+Figure 6, it is clear that LM-Infinite achieves a sub￾stantially better quality-efficiency tradeoff. With
+similar computation, LM-Infinite outperforms the
+baseline by about 5 BLEU. To achieve a similar
+BLEU, LM-Infinite incurs only <25% computa￾tional overhead than the truncation baseline.
+6 Conclusions and Future Work
+This work proposes a zero-shot length generaliza￾tion method for various off-the-shelf LLMs without
+parameter updates. Through theoretical analysis
+and empirical investigation, this work identifies
+three major factors contributing to this length gen￾eralization failure. Our theoretical analysis further
+reveals why truncating the attention window and
+relative positional encodings are inadequate to ad￾dress them. Our solution, LM-Infinite, is a simple
+and effective method for enhancing LLMs’ capa￾bilities of handling long contexts. It allows LLMs
+pre-trained with 2K or 4K-long segments to gener￾alize to up to 200M length inputs while retaining
+perplexity. It also improves performance on down￾stream tasks such as Passkey Retrieval and Qasper
+in the zero-shot setting. It brings substantial ef￾ficiency improvements: a 2.7× decoding speed
+up and a 7.5× memory saving over the original
+model. LM-Infinite’s computational efficiency and
+ease of use allow researchers without enormous
+computational resources to use LLMs on long se￾quences. Future work can investigate if these tech￾niques allow for more efficient and effective LLM
+pre-training and fine-tuning. Another direction is
+to apply LM-Infinite to applications such as long
+reasoning, long-dialogue, retrieval-augmented gen￾eration, or long literature generation.
+
+Limitations
+This work evaluates a wide range of open-domain
+LLMs. However, without access to the source code
+of proprietary LLMs such as ChatGPT, the pro￾posed method could not be evaluated on them. Fur￾thermore, due to limited computational resources
+and time, the proposed method has not been evalu￾ated on texts with even larger lengths, such as 1G.
+The model is designed on relative positional encod￾ing Transformer models, which is the mainstream
+backbone for most modern LLMs. The question
+of how LM-Infinite can enable more efficient fine￾tuning or pre-training can also be explored in future
+work.
+Acknowledgement
+This research is partially supported by U.S. DARPA
+KAIROS Program No. FA8750-19-2-1004, and
+DARPA INCAS Program No. HR001121C0165.
+The views and conclusions contained herein are
+those of the authors and should not be interpreted
+as necessarily representing the official policies, ei￾ther expressed or implied, of DARPA, or the U.S.
+Government. The U.S. Government is authorized
+to reproduce and distribute reprints for governmen￾tal purposes, notwithstanding any copyright anno￾tation therein.
+References
+Cem Anil, Yuhuai Wu, Anders Andreassen, Aitor
+Lewkowycz, Vedant Misra, Vinay Ramasesh, Am￾brose Slone, Guy Gur-Ari, Ethan Dyer, and Behnam
+Neyshabur. 2022. Exploring length generalization in
+large language models. Advances in Neural Informa￾tion Processing Systems, 35:38546–38556.
+Yushi Bai, Xin Lv, Jiajie Zhang, Yuze He, Ji Qi, Lei Hou,
+Jie Tang, Yuxiao Dong, and Juanzi Li. 2024. Lon￾galign: A recipe for long context alignment of large
+language models. arXiv preprint arXiv:2401.18058.
+Yushi Bai, Xin Lv, Jiajie Zhang, Hongchang Lyu,
+Jiankai Tang, Zhidian Huang, Zhengxiao Du, Xiao
+Liu, Aohan Zeng, Lei Hou, Yuxiao Dong, Jie Tang,
+and Juanzi Li. 2023. Longbench: A bilingual, multi￾task benchmark for long context understanding.
+Iz Beltagy, Matthew E Peters, and Arman Cohan. 2020.
+Longformer: The long-document transformer. arXiv
+preprint arXiv:2004.05150.
+Sebastian Borgeaud, Arthur Mensch, Jordan Hoff￾mann, Trevor Cai, Eliza Rutherford, Katie Milli￾can, George Bm Van Den Driessche, Jean-Baptiste
+Lespiau, Bogdan Damoc, Aidan Clark, et al. 2022.
+Improving language models by retrieving from tril￾lions of tokens. In International conference on ma￾chine learning, pages 2206–2240. PMLR.
+Mirelle Candida Bueno, Carlos Gemmell, Jeff Dalton,
+Roberto Lotufo, and Rodrigo Nogueira. 2022. In￾duced natural language rationales and interleaved
+markup tokens enable extrapolation in large language
+models. In Proceedings of the 1st Workshop on Math￾ematical Natural Language Processing (MathNLP),
+pages 17–24.
+Shouyuan Chen, Sherman Wong, Liangjian Chen, and
+Yuandong Tian. 2023a. Extending context window
+of large language models via positional interpolation.
+arXiv preprint arXiv:2306.15595.
+Yifan Chen, Qi Zeng, Heng Ji, and Yun Yang. 2021.
+Skyformer: Remodel self-attention with gaussian
+kernel and nyström method. In Proc. Thirty-fifth An￾nual Conference on Neural Information Processing
+Systems (NeurIPS2021).
+Yifan Chen, Qi Zeng, Heng Ji, and Yun Yang. 2022.
+Sketching as a tool for understanding and accelerat￾ing self-attention for long sequences. In Proc. The
+2022 Conference of the North American Chapter of
+the Association for Computational Linguistics - Hu￾man Language Technologies (NAACL-HLT2022).
+Yukang Chen, Shengju Qian, Haotian Tang, Xin Lai,
+Zhijian Liu, Song Han, and Jiaya Jia. 2023b. Lon￾glora: Efficient fine-tuning of long-context large lan￾guage models. In The Twelfth International Confer￾ence on Learning Representations.
+Ta-Chung Chi, Ting-Han Fan, Alexander Rudnicky, and
+Peter Ramadge. 2023. Dissecting transformer length
+extrapolation via the lens of receptive field analysis.
+In Proceedings of the 61st Annual Meeting of the
+Association for Computational Linguistics (Volume
+1: Long Papers), pages 13522–13537.
+Zihang Dai, Zhilin Yang, Yiming Yang, Jaime G Car￾bonell, Quoc Le, and Ruslan Salakhutdinov. 2019.
+Transformer-xl: Attentive language models beyond
+a fixed-length context. In Proceedings of the 57th
+Annual Meeting of the Association for Computational
+Linguistics, pages 2978–2988.
+Pradeep Dasigi, Kyle Lo, Iz Beltagy, Arman Cohan,
+Noah A Smith, and Matt Gardner. 2021. A dataset
+of information-seeking questions and answers an￾chored in research papers. In Proceedings of the
+2021 Conference of the North American Chapter of
+the Association for Computational Linguistics: Hu￾man Language Technologies, pages 4599–4610.
+Jiayu Ding, Shuming Ma, Li Dong, Xingxing Zhang,
+Shaohan Huang, Wenhui Wang, and Furu Wei. 2023.
+Longnet: Scaling transformers to 1,000,000,000 to￾kens. arXiv preprint arXiv:2307.02486.
+Yiran Ding, Li Lyna Zhang, Chengruidong Zhang,
+Yuanyuan Xu, Ning Shang, Jiahang Xu, Fan Yang,
+
+and Mao Yang. 2024. Longrope: Extending llm con￾text window beyond 2 million tokens. arXiv preprint
+arXiv:2402.13753.
+Harry Dong, Xinyu Yang, Zhenyu Zhang, Zhangyang
+Wang, Yuejie Chi, and Beidi Chen. 2024. Get
+more with less: Synthesizing recurrence with kv
+cache compression for efficient llm inference. arXiv
+preprint arXiv:2402.09398.
+Leo Gao, Stella Biderman, Sid Black, Laurence Gold￾ing, Travis Hoppe, Charles Foster, Jason Phang,
+Horace He, Anish Thite, Noa Nabeshima, Shawn
+Presser, and Connor Leahy. 2020. The Pile: An
+800gb dataset of diverse text for language modeling.
+arXiv preprint arXiv:2101.00027.
+Kelvin Guu, Kenton Lee, Zora Tung, Panupong Pasu￾pat, and Mingwei Chang. 2020. Retrieval augmented
+language model pre-training. In International confer￾ence on machine learning, pages 3929–3938. PMLR.
+David Haussler. 2018. Decision theoretic generaliza￾tions of the pac model for neural net and other learn￾ing applications. In The Mathematics of Generaliza￾tion, pages 37–116. CRC Press.
+Xijie Huang, Li Lyna Zhang, Kwang-Ting Cheng, and
+Mao Yang. 2023. Boosting llm reasoning: Push the
+limits of few-shot learning with reinforced in-context
+pruning. arXiv preprint arXiv:2312.08901.
+Huiqiang Jiang, Qianhui Wu, Xufang Luo, Dongsheng
+Li, Chin-Yew Lin, Yuqing Yang, and Lili Qiu. 2023.
+Longllmlingua: Accelerating and enhancing llms
+in long context scenarios via prompt compression.
+arXiv preprint arXiv:2310.06839.
+Kaiokendev. 2023. Things im learning while training ´
+superhot. https://kaiokendev.github.io/til#
+extending-context-to-8k.
+Lukasz Kaiser, Ofir Nachum, Aurko Roy, and Samy
+Bengio. 2016. Learning to remember rare events. In
+International Conference on Learning Representa￾tions.
+Amirhossein Kazemnejad, Inkit Padhi,
+Karthikeyan Natesan Ramamurthy, Payel Das,
+and Siva Reddy. 2023. The impact of positional
+encoding on length generalization in transformers.
+arXiv preprint arXiv:2305.19466.
+Guolin Ke, Di He, and Tie-Yan Liu. 2020. Rethinking
+positional encoding in language pre-training. In In￾ternational Conference on Learning Representations.
+Jacob Devlin Ming-Wei Chang Kenton and Lee Kristina
+Toutanova. 2019. Bert: Pre-training of deep bidirec￾tional transformers for language understanding. In
+Proceedings of NAACL-HLT, pages 4171–4186.
+Urvashi Khandelwal, Omer Levy, Dan Jurafsky, Luke
+Zettlemoyer, and Mike Lewis. 2019. Generalization
+through memorization: Nearest neighbor language
+models. In International Conference on Learning
+Representations.
+Shun Kiyono, Sosuke Kobayashi, Jun Suzuki, and Ken￾taro Inui. 2021. Shape: Shifted absolute position
+embedding for transformers. In Proceedings of the
+2021 Conference on Empirical Methods in Natural
+Language Processing, pages 3309–3321.
+Kuang-Huei Lee, Xinyun Chen, Hiroki Furuta, John
+Canny, and Ian Fischer. 2024. A human-inspired
+reading agent with gist memory of very long contexts.
+arXiv preprint arXiv:2402.09727.
+Dacheng Li, Rulin Shao, Anze Xie, Ying Sheng, Lian￾min Zheng, Joseph E. Gonzalez, Ion Stoica, Xuezhe
+Ma, and Hao Zhang. 2023. How long can open￾source llms truly promise on context length?
+Tatiana Likhomanenko, Qiantong Xu, Gabriel Syn￾naeve, Ronan Collobert, and Alex Rogozhnikov.
+2021. Cape: Encoding relative positions with contin￾uous augmented positional embeddings. Advances in
+Neural Information Processing Systems, 34:16079–
+16092.
+Chin-Yew Lin. 2004. Rouge: A package for automatic
+evaluation of summaries. In Text summarization
+branches out, pages 74–81.
+Xiaoran Liu, Hang Yan, Chenxin An, Xipeng Qiu, and
+Dahua Lin. 2023. Scaling laws of rope-based extrap￾olation. In The Twelfth International Conference on
+Learning Representations.
+Kun Luo, Zheng Liu, Shitao Xiao, and Kang Liu.
+2024. Bge landmark embedding: A chunking-free
+embedding method for retrieval augmented long￾context large language models. arXiv preprint
+arXiv:2402.11573.
+Kai Lv, Xiaoran Liu, Qipeng Guo, Hang Yan, Conghui
+He, Xipeng Qiu, and Dahua Lin. 2024. Longwan￾juan: Towards systematic measurement for long text
+quality. arXiv preprint arXiv:2402.13583.
+Amirkeivan Mohtashami and Martin Jaggi. 2023.
+Landmark attention: Random-access infinite con￾text length for transformers. arXiv preprint
+arXiv:2305.16300.
+Matanel Oren, Michael Hassid, Yossi Adi, and Roy
+Schwartz. 2024. Transformers are multi-state rnns.
+arXiv preprint arXiv:2401.06104.
+Kishore Papineni, Salim Roukos, Todd Ward, and Wei￾Jing Zhu. 2002. Bleu: a method for automatic evalu￾ation of machine translation. In Proceedings of the
+40th annual meeting of the Association for Computa￾tional Linguistics, pages 311–318.
+Bowen Peng, Jeffrey Quesnelle, Honglu Fan, and En￾rico Shippole. 2023. Yarn: Efficient context window
+extension of large language models. In The Twelfth
+International Conference on Learning Representa￾tions.
+Alexander Peysakhovich and Adam Lerer. 2023. At￾tention sorting combats recency bias in long context
+language models. arXiv preprint arXiv:2310.01427.
+
+David Pollard. 1990. Empirical processes: Theory and
+applications. In NSF-CBMS Regional Conference Se￾ries in Probability and Statistics, pages i–86. JSTOR.
+Ofir Press, Noah Smith, and Mike Lewis. 2021. Train
+short, test long: Attention with linear biases enables
+input length extrapolation. In International Confer￾ence on Learning Representations.
+Zexuan Qiu, Jingjing Li, Shijue Huang, Wanjun Zhong,
+and Irwin King. 2024. Clongeval: A chinese bench￾mark for evaluating long-context large language mod￾els. arXiv preprint arXiv:2403.03514.
+Zhijie Qu. 2023. Gpt rotational position embedding for
+length extrapolation. In Proceedings of the 2023 6th
+International Conference on Machine Learning and
+Natural Language Processing, pages 166–170.
+Colin Raffel, Noam Shazeer, Adam Roberts, Katherine
+Lee, Sharan Narang, Michael Matena, Yanqi Zhou,
+Wei Li, and Peter J Liu. 2020. Exploring the limits
+of transfer learning with a unified text-to-text trans￾former. The Journal of Machine Learning Research,
+21(1):5485–5551.
+Jeff Rasley, Samyam Rajbhandari, Olatunji Ruwase, and
+Yuxiong He. 2020. Deepspeed: System optimiza￾tions enable training deep learning models with over
+100 billion parameters. In Proceedings of the 26th
+ACM SIGKDD International Conference on Knowl￾edge Discovery & Data Mining, pages 3505–3506.
+Nir Ratner, Yoav Levine, Yonatan Belinkov, Ori Ram,
+Inbal Magar, Omri Abend, Ehud Karpas, Amnon
+Shashua, Kevin Leyton-Brown, and Yoav Shoham.
+2023. Parallel context windows for large language
+models. In Proceedings of the 61st Annual Meet￾ing of the Association for Computational Linguistics
+(Volume 1: Long Papers), pages 6383–6402.
+Siyu Ren and Kenny Q Zhu. 2024. On the efficacy
+of eviction policy for key-value constrained gen￾erative language model inference. arXiv preprint
+arXiv:2402.06262.
+Ninglu Shao, Shitao Xiao, Zheng Liu, and Peitian
+Zhang. 2024. Flexibly scaling large language mod￾els contexts through extensible tokenization. arXiv
+preprint arXiv:2401.07793.
+Kaiqiang Song, Xiaoyang Wang, Sangwoo Cho, Xiao￾man Pan, and Dong Yu. 2023. Zebra: Extending
+context window with layerwise grouped local-global
+attention. arXiv preprint arXiv:2312.08618.
+Jianlin Su, Yu Lu, Shengfeng Pan, Ahmed Murtadha,
+Bo Wen, and Yunfeng Liu. 2021. Roformer: En￾hanced transformer with rotary position embedding.
+arXiv preprint arXiv:2104.09864.
+Yutao Sun, Li Dong, Barun Patra, Shuming Ma, Shao￾han Huang, Alon Benhaim, Vishrav Chaudhary, Xia
+Song, and Furu Wei. 2022. A length-extrapolatable
+transformer. arXiv preprint arXiv:2212.10554.
+Mingxu Tao, Yansong Feng, and Dongyan Zhao. 2023.
+A frustratingly easy improvement for position em￾beddings via random padding. arXiv preprint
+arXiv:2305.04859.
+MosaicML NLP Team. 2023. Introducing mpt-7b: A
+new standard for open-source, commercially usable
+llms. Accessed: 2023-05-05.
+Hugo Touvron, Thibaut Lavril, Gautier Izacard, Xavier
+Martinet, Marie-Anne Lachaux, Timothée Lacroix,
+Baptiste Rozière, Naman Goyal, Eric Hambro, Faisal
+Azhar, et al. 2023a. Llama: Open and effi￾cient foundation language models. arXiv preprint
+arXiv:2302.13971.
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Al￾bert, Amjad Almahairi, Yasmine Babaei, Nikolay
+Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti
+Bhosale, et al. 2023b. Llama 2: Open founda￾tion and fine-tuned chat models. arXiv preprint
+arXiv:2307.09288.
+Szymon Tworkowski, Konrad Staniszewski, Mikołaj
+Pacek, Yuhuai Wu, Henryk Michalewski, and Pi￾otr Miłos. 2023. Focused transformer: Con- ´
+trastive training for context scaling. arXiv preprint
+arXiv:2307.03170.
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob
+Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz
+Kaiser, and Illia Polosukhin. 2017. Attention is all
+you need. Advances in neural information processing
+systems, 30.
+Ben Wang and Aran Komatsuzaki. 2021. GPT-J￾6B: A 6 Billion Parameter Autoregressive Lan￾guage Model. https://github.com/kingoflolz/
+mesh-transformer-jax.
+Cunxiang Wang, Ruoxi Ning, Boqi Pan, Tonghui Wu,
+Qipeng Guo, Cheng Deng, Guangsheng Bao, Qian
+Wang, and Yue Zhang. 2024. Novelqa: A bench￾mark for long-range novel question answering. arXiv
+preprint arXiv:2403.12766.
+Yuhuai Wu, Markus Norman Rabe, DeLesley Hutchins,
+and Christian Szegedy. 2021. Memorizing transform￾ers. In International Conference on Learning Repre￾sentations.
+Guangxuan Xiao, Yuandong Tian, Beidi Chen, Song
+Han, and Mike Lewis. 2024. Efficient streaming lan￾guage models with attention sinks. In The Twelfth
+International Conference on Learning Representa￾tions.
+Kevin Yang, Dan Klein, Nanyun Peng, and Yuandong
+Tian. 2023. DOC: Improving long story coherence
+with detailed outline control. In Proceedings of the
+61st Annual Meeting of the Association for Compu￾tational Linguistics (Volume 1: Long Papers), pages
+3378–3465, Toronto, Canada. Association for Com￾putational Linguistics.
+
+Zi Yang and Nan Hua. 2024. Attendre: Wait to attend by
+retrieval with evicted queries in memory-based trans￾formers for long context processing. arXiv preprint
+arXiv:2401.04881.
+Dani Yogatama, Cyprien de Masson d’Autume, and
+Lingpeng Kong. 2021. Adaptive semiparametric lan￾guage models. Transactions of the Association for
+Computational Linguistics, 9:362–373.
+Tao Yuan, Xuefei Ning, Dong Zhou, Zhijie Yang,
+Shiyao Li, Minghui Zhuang, Zheyue Tan, Zhuyu Yao,
+Dahua Lin, Boxun Li, et al. 2024. Lv-eval: A bal￾anced long-context benchmark with 5 length levels
+up to 256k. arXiv preprint arXiv:2402.05136.
+Manzil Zaheer, Guru Guruganesh, Kumar Avinava
+Dubey, Joshua Ainslie, Chris Alberti, Santiago On￾tanon, Philip Pham, Anirudh Ravula, Qifan Wang,
+Li Yang, et al. 2020. Big bird: Transformers for
+longer sequences. Advances in neural information
+processing systems, 33:17283–17297.
+Peitian Zhang, Zheng Liu, Shitao Xiao, Ninglu Shao,
+Qiwei Ye, and Zhicheng Dou. 2024a. Soaring from
+4k to 400k: Extending llm’s context with activation
+beacon. arXiv preprint arXiv:2401.03462.
+Xinrong Zhang, Yingfa Chen, Shengding Hu, Zi￾hang Xu, Junhao Chen, Moo Khai Hao, Xu Han,
+Zhen Leng Thai, Shuo Wang, Zhiyuan Liu, et al.
+2024b. ∞ bench: Extending long context eval￾uation beyond 100k tokens. arXiv preprint
+arXiv:2402.13718.
+Zhenyu Zhang, Runjin Chen, Shiwei Liu, Zhewei Yao,
+Olatunji Ruwase, Beidi Chen, Xiaoxia Wu, and
+Zhangyang Wang. 2024c. Found in the middle:
+How language models use long contexts better via
+plug-and-play positional encoding. arXiv preprint
+arXiv:2403.04797.
+Zhenyu Zhang, Ying Sheng, Tianyi Zhou, Tianlong
+Chen, Lianmin Zheng, Ruisi Cai, Zhao Song, Yuan￾dong Tian, Christopher Ré, Clark Barrett, et al. 2024d.
+H2o: Heavy-hitter oracle for efficient generative in￾ference of large language models. Advances in Neu￾ral Information Processing Systems, 36.
+Wangchunshu Zhou, Yuchen Eleanor Jiang, Peng Cui,
+Tiannan Wang, Zhenxin Xiao, Yifan Hou, Ryan Cot￾terell, and Mrinmaya Sachan. 2023. Recurrentgpt:
+Interactive generation of (arbitrarily) long text. arXiv
+preprint arXiv:2305.13304.
+Dawei Zhu, Nan Yang, Liang Wang, Yifan Song, Wen￾hao Wu, Furu Wei, and Sujian Li. 2023. Pose: Effi￾cient context window extension of llms via positional
+skip-wise training. In The Twelfth International Con￾ference on Learning Representations.
+
+A Implementation Details
+In this section, we introduce some implementa￾tion details of LM-Infinite as well as the hyper￾parameter selection.
+A.1 Computational resources
+All experiments are run on single A100 GPUs with
+80GB GPU memory each. The 200M length gen￾eralization runs for 20 hours. The downstream
+tasks take 3∼7 hours to evaluate each. Our work
+does not involve any training or fine-tuning. All
+models are loaded with Huggingface2
+code repos￾itory. Rouge and BLEU scores are loaded from
+evaluate3 package. Datasets and models are used
+with permission from their licenses.
+A.2 The size of starting attention span
+We vary the value of nstarting and find LM-Infinite
+to be tolerant with it taking a wide range of val￾ues without sacrificing the NLL values. Speicifi￾cally, we evaluate it on sequences of 16k length in
+the ArXiv validation set and calculate the average
+NLL.
+nstarting
+0 1 2 10 100 1000 2000
+6.43 1.03 1.03 1.02 1.02 1.81 4.96
+Table 4: Effect on LM-Infinite’s NLL by varying
+nstarting.
+A.3 Reintroducing Top-k Middle Tokens
+This optional technique involves optionally attend￾ing to k tokens in the middle with the largest at￾tention logits. Here, the k tokens are selected inde￾pendently for each attention head and only apply
+to layers higher than h-th layer. These tokens have
+an attention distance of d =
+1
+2
+Lpre-train. We select
+these hyper-parameters based on a held-out vali￾dation set of Passkey Retrieval. On Llama-2, we
+use k = 5 and h = 5. As an ablation study, we
+vary each hyper-parameter and observe its effects
+on Passkey Retrieval accuracy.
+On the Qasper dataset, for both vanilla models
+and LM-Infinite, we use 6K sub-sequence of inputs
+as prompts and use a systematic prompt format de￾scribed in Llama-2 paper (Touvron et al., 2023b).
+2
+https://huggingface.cohttps://huggingface.co
+3
+https://huggingface.co/docs/evaluate/index
+k
+1 3 5 10 20 50 200
+0.69 0.81 0.81 0.79 0.8 0.79 0.73
+Table 5: Effect of varying k.
+attention distance
+512 1024 2048 3072 4096
+0.78 0.79 0.81 0.68 0.63
+Table 6: Effect of attention distance of the middle to￾kens.
+B Additional Related Work
+After our preprint, there have been papers that
+cite our work and investigate zero-shot or few-shot
+length generalization of LLMs. As many absolute
+or relative position encoding methods are based on
+periodic functions, (Qu, 2023; Ding et al., 2024;
+Liu et al., 2023; Jiang et al., 2023) propose to ap￾ply LLMs (fine-tuned or not) on decreased period
+frequencies (which is equivalent to interpolating po￾sition indices) to adapt LLMs to longer sequences.
+Some other papers finetune LLMs with designed
+attention patterns (Oren et al., 2024; Zhang et al.,
+2024a) on long contexts, using neural tangent ker￾nel (Peng et al., 2023), or with low-rank adapta￾tion(LoRA) (Chen et al., 2023b). (Yang and Hua,
+2024) instead proposes a wait-to-attend mechanism
+to extend length limits for memory-based Trans￾formers. Other ways of key-value cache selec￾tion/eviction methods are investigated in (Ren and
+Zhu, 2024; Dong et al., 2024; Zhang et al., 2024d).
+Similarly, (Huang et al., 2023; Lee et al., 2024)
+tackles long context by learning to dynamically
+prune, select, or summarize contexts. Alternatively,
+context compression methods (Shao et al., 2024)
+propose to learn to compress long contexts into
+shorter embedding sequences. Some work pro￾poses alternative position encodings (Song et al.,
+2023; Zhang et al., 2024c; Zhu et al., 2023) or land￾mark token embeddings (Luo et al., 2024) that en￾able extendable context limits. (Xiao et al., 2024)
+is a later concurrent work to ours with a similar ap￾proach to LLM length generalization. Unlike our
+work, they feed a sequence to an LLM token-by￾token which limits their extreme length generaliza￾tion (4M v.s. 200M of ours), and more importantly,
+they do not show improvements on downstream
+tasks without pre-training an LLM from scratch.
+
+h
+0 4 5 6 8 16 24
+0.81 0.94 0.94 0.91 0.46 0.45 0.46
+Table 7: Effect of varying h.
+Finally, there is a lot of new benchmarks (Qiu et al.,
+2024; Zhang et al., 2024b; Yuan et al., 2024; Wang
+et al., 2024; Lv et al., 2024; Bai et al., 2024) pro￾posed to evaluate the long-context performance of
+LLMs.
+C Formal Statement of Theorem 1
+Let us denote the logit function with relative posi￾tion encoding as w(q, k, d) ∈ R. It maps the query
+q, key k, and their distance d, to an attention logit.
+The final attention weights are usually calculated
+by a softmax operation. For example, given n to￾kens with indices (1, · · · , n), the attention by the
+last token on a preceding token at position i is:
+Attn(tokenn, tokeni) = e
+w(qn,ki,n−i)
+Pn
+j=1 e
+w(qn,kj ,n−j)
+(1)
+Then the formal theorem of Theorem 1 is as
+follows:
+Theorem 2. (Formal) Let q and k be random vec￾tors sampled from training distributions Dq and
+Dk, respectively, where Dq and Dk are the trained
+distributions for q and k, respectively. We use
+the pseudo-dimension dimP (·) defined in (Pollard,
+1990), which measures the representation capacity
+of a function family. Assume that the set of distance￾based logit functions H = {w(·, ·, d)|d ∈ N} has
+bounded pseudo-dimension dimP (H) = r
+4
+. Let us
+also define the distinguish-ability of two distances
+d and d
+′ under w as their expected squared dif￾ference: µw(d, d′
+) = Eq∼Dq,k∼Dk
+(w(q, k, d) −
+w(q, k, d′
+))2
+. We assume that w is not limited to
+recognizing only a finite group of distances, oth￾erwise, all distances longer than a threshold will
+become almost the same as shorter distances. For￾mally, for any n, there is a partition of [0..n] into
+α(n) groups so that, µw(d, d′
+) ≤ ϵ for any d, d′
+from the same group. α(n) ∈ N is non-decreasing
+and unbounded function. Then we have:
+sup
+q,k,d≤n
+|w(q, k, d)| ≥ 
+α(n)
+2
+ 1
+2r ϵ
+4e
+.
+4This is true for most current techniques. See discussions
+in Appendix F
+We first borrow a lemma from (Haussler, 2018),
+which we paste below. Note that a cover size
+N (ϵ, H, µ) is defined as the minimum cardinal of a
+cover-set H′
+so that any element of h ∈ H will be
+within ϵ distance to at least one element h
+′ ∈ H′
+.
+Lemma 3. Let H be a function family mapping
+from space X to range [0, B], and its pseudo￾dimension dimP (H) = r. Then for any proba￾bilistic measure P on X, and ϵ ∈ [0, B], we have
+that the ϵ cover of H under metric µ(h1, h2) =
+Ex∼P (h1(x) − h2(x))2
+is bounded by:
+NP (ϵ, H, µ) ≤ 2
+
+2eB
+ϵ
+ln 2eB
+ϵ
+r
+With this lemma, we can go on to prove Theo￾rem 2 as follows.
+Proof. We prove by contradiction. Assume that
+supq,k,d≤n
+|w(q, k, d)| < a =
+
+α(n)
+2
+ 1
+2r ϵ
+4e
+.
+Without loss of generality, we can shift all the
+values to range [0, 2a]. Then the function fam￾ily H = {w(·, ·, d)|d ∈ N} will have cover size
+NP (ϵ, H, µ) ≤ 2
+
+4ea
+ϵ
+ln 4ea
+ϵ
+r < α(n).
+However, this is smaller than the number of dif￾ferent distances and relative weight attentions H,
+which means that at least 2 functions will be close
+to each other (w(·, ·, d), w(·, ·, d′
+))2 < ϵ. This con￾stitutes a contrad
+
+[... text truncated at 60,000 characters ...]
