@@ -2,9 +2,27 @@
 
 [TEXT — no multimodal needed for structure; MULTIMODAL for reviewing actual figures/tables]
 
+## Rule: Setup and Results Are Separate Sections
+
+**The experimental setup lives in its own section (or the first subsection of Experiments), before any results. The Experiments / Results section then goes straight to the summary of findings and the results.**
+
+| Belongs in **Experimental Setup** | Belongs in **Experiments / Results** |
+|-----------------------------------|--------------------------------------|
+| Goals / research questions the experiments address | ¶1: summary of the key findings, stated up front |
+| Datasets, splits, preprocessing | Results per RQ, each opening with its finding |
+| Models, baselines, and why they were chosen | Figure/table interpretation |
+| Metrics and evaluation protocol | Ablations, analysis, error analysis |
+| Hyperparameters, prompts, implementation and compute details | Takeaways |
+
+Flag these as **[warning]**:
+- The paper has results but no Experimental Setup section or subsection.
+- The setup section comes after the results.
+- A results paragraph describes which dataset, model, baseline, metric or hyperparameter is used. It should move to the setup section. The only setup allowed in a results paragraph is a clause saying what a figure or table reports ("Table 2 reports accuracy on the test split").
+- The Experiments / Results section opens with setup, a method recap, or a roadmap instead of the summary of findings.
+
 ## Experimental Setup
 
-Before presenting results, explicitly lay out:
+In the setup section, explicitly lay out:
 - An overview of the **Goals** or **Questions** that the experimental setup is tackling.
 - Any instantiation or implementation details that are common to all experiments (e.g., learning rates, batch sizes, dataset details, etc.).
 
@@ -26,7 +44,7 @@ Let the reader know what to expect before they dive into subsections and all the
 
 ### If There Is Only One Result Section
 
-- Summarize the key findings upfront.
+- Summarize the key findings upfront, in the first paragraph. No setup before it; that is in the Experimental Setup section.
 - Form Research Questions (RQs) to organize subsections.
 - Have a bold phrase at the start of each paragraph, if there are multiple paragraphs in a subsection.
 
@@ -42,7 +60,7 @@ Let the reader know what to expect before they dive into subsections and all the
 
 ### Structure 1 for Each RQ
 - **Sentence 1:** Function of this RQ, i.e., why do we investigate it?
-- **Sentence 2:** What are we reporting? Describe the setup to generate the figure or statistics.
+- **Sentence 2:** What are we reporting? Name the figure or statistic in one clause; the full setup behind it is in the Experimental Setup section.
 - **Sentence 3:** Overall findings, with references to figures and tables.
 - **Sentence 4:** Special notes (if applicable).
 
