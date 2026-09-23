@@ -143,7 +143,7 @@ services:
       - dev.env
       - ../.env_credentials
     environment:
-      - APP_NAME=Overleaf Community Edition
+      - APP_NAME=Paper Mentor
       - ENABLED_LINKED_FILE_TYPES=project_file,project_output_file
       - EMAIL_CONFIRMATION_DISABLED=true
       - NODE_ENV=development
