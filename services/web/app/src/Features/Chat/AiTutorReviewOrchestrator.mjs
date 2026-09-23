@@ -16,6 +16,11 @@ import { z } from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  AGENT_ID as SENTENCE_PLACEMENT_ID,
+  AGENT_NAME as SENTENCE_PLACEMENT_NAME,
+  runSentencePlacementAgent,
+} from './AiTutorSentencePlacement.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SKILLS_DIR = path.join(__dirname, 'ai-tutor-skills')
@@ -35,7 +40,7 @@ const SHOW_PREFIX = process.env.AI_TUTOR_SHOW_PREFIX !== 'false'
 // Set AI_TUTOR_DISABLED_AGENTS in .env to disable specific reviewers.
 // Available agent IDs: abstract, introduction, related_work, methods, results,
 //   conclusion, appendix, writing_style, latex_formatting, figures_tables,
-//   paper_type (dynamic), venue (dynamic)
+//   paper_type (dynamic), venue (dynamic), sentence_placement (dynamic)
 // Example: AI_TUTOR_DISABLED_AGENTS=latex_formatting,venue
 const DISABLED_AGENTS = new Set(
   (process.env.AI_TUTOR_DISABLED_AGENTS || '')
@@ -207,7 +212,7 @@ export function parseSections(mergedTex)
  * \t as tab (0x09), \f as form feed (0x0C), \r as CR (0x0D).
  * This reverses that transformation so we can match against real LaTeX source.
  */
-function repairJsonEscapedLatex(text)
+export function repairJsonEscapedLatex(text)
 {
   return text
     .replace(/\x08/g, '\\b')   // backspace → \b  (e.g. \begin, \bar, \bfseries)
@@ -314,7 +319,7 @@ function diceCoefficient(a, b)
  * Returns { index, length, matchedText, similarity } in ORIGINAL
  * haystack coordinates, or null if no match meets the threshold.
  */
-function fuzzyFindInText(needle, haystack, threshold = FUZZY_THRESHOLD)
+export function fuzzyFindInText(needle, haystack, threshold = FUZZY_THRESHOLD)
 {
   if (!needle || needle.length < 5 || !haystack || haystack.length < needle.length * 0.5)
   {
@@ -2369,6 +2374,40 @@ export async function runFullReview({
     }
   }
 
+  // Add the sentence placement reviewer: suggests where misplaced sentences
+  // should move, grounded in the role model papers (or the bundled prototype
+  // for this paper type when none were uploaded). It has its own runner and
+  // gets a longer timeout since it reads the whole paper plus prototypes.
+  if (DISABLED_AGENTS.has(SENTENCE_PLACEMENT_ID))
+  {
+    console.log(`[AI Tutor] Agent "${SENTENCE_PLACEMENT_NAME}" (${SENTENCE_PLACEMENT_ID}) disabled via AI_TUTOR_DISABLED_AGENTS`)
+  } else
+  {
+    agentDefs.push({
+      id: SENTENCE_PLACEMENT_ID,
+      name: SENTENCE_PLACEMENT_NAME,
+      timeoutMs: 180_000,
+      run: () =>
+        runSentencePlacementAgent(
+          {
+            openai,
+            model,
+            sections,
+            mergedTex,
+            roleModelTexts,
+            paperType: classification.paperType,
+          },
+          {
+            generateObjectWithRetry,
+            fuzzyFindInText,
+            repairJsonEscapedLatex,
+            loadSkill,
+            strictMode: STRICT_MODE,
+          }
+        ),
+    })
+  }
+
   // Phase 3: Run subagents in parallel
   console.log('-'.repeat(60))
   console.log(
@@ -2379,23 +2418,26 @@ export async function runFullReview({
   const AGENT_TIMEOUT = 120_000 // 2 minutes per agent
   const subagentPromises = agentDefs.map(def =>
   {
-    const promise = runSubagent(
-      openai,
-      model,
-      def,
-      sections,
-      classification.sectionMapping,
-      classification.typeSpecificGuidance,
-      mergedTex,
-      roleModelTexts
-    )
+    const promise = def.run
+      ? def.run()
+      : runSubagent(
+        openai,
+        model,
+        def,
+        sections,
+        classification.sectionMapping,
+        classification.typeSpecificGuidance,
+        mergedTex,
+        roleModelTexts
+      )
+    const timeoutMs = def.timeoutMs || AGENT_TIMEOUT
     // Wrap with timeout
     return Promise.race([
       promise,
       new Promise((_, reject) =>
         setTimeout(
-          () => reject(new Error(`Timeout after ${AGENT_TIMEOUT}ms`)),
-          AGENT_TIMEOUT
+          () => reject(new Error(`Timeout after ${timeoutMs}ms`)),
+          timeoutMs
         )
       ),
     ]).catch(err => ({
@@ -2412,6 +2454,7 @@ export async function runFullReview({
   // Collect results
   const allComments = []
   const failedAgents = []
+  let placementPrototypes
 
   console.log(`[AI Tutor] Phase 3: All agents returned after ${phase3Elapsed}s. Collecting results:`)
 
@@ -2420,6 +2463,11 @@ export async function runFullReview({
     const result =
       results[i].status === 'fulfilled' ? results[i].value : null
     const def = agentDefs[i]
+
+    if (result?.meta?.placementPrototypes)
+    {
+      placementPrototypes = result.meta.placementPrototypes
+    }
 
     if (!result || results[i].status === 'rejected')
     {
@@ -2549,6 +2597,7 @@ export async function runFullReview({
     },
     failedAgents,
     roleModelPapers: roleModelTexts.length > 0 ? roleModelTexts.map(rm => rm.name) : undefined,
+    placementPrototypes,
   }
 
   // Cache results
