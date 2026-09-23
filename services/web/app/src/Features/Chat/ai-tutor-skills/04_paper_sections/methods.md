@@ -15,6 +15,10 @@ Methods is typically the section where you describe your contributions. Together
 - Are there practical considerations in real-world settings?
 - Are there simple abstractions that help understand the solution strategy?
 
+## Experimental Setup Is Not Part of the Method Description
+
+Keep what the method *is* separate from how it was *evaluated*. Datasets, baselines, metrics, hyperparameters and compute go in a dedicated Experimental Setup section (or the first subsection of Experiments), before the results. That section must give enough detail to reproduce the experiments, and must not report results.
+
 ## Background vs. Methods
 
 If the paper requires explaining prerequisite concepts before presenting the method, consider a **Background** section covering "academic ancestors" — all concepts and prior work required for understanding the method. This typically includes the **Problem Setting** with formal notation. If the paper introduces a novel problem setting as a contribution, it deserves its own separate section rather than being embedded in Background.

@@ -19,8 +19,14 @@ import { fileURLToPath } from 'node:url'
 import {
   AGENT_ID as SENTENCE_PLACEMENT_ID,
   AGENT_NAME as SENTENCE_PLACEMENT_NAME,
+  buildParagraphMap,
   runSentencePlacementAgent,
 } from './AiTutorSentencePlacement.mjs'
+import {
+  AGENT_ID as SECTION_STRUCTURE_ID,
+  AGENT_NAME as SECTION_STRUCTURE_NAME,
+  checkExperimentStructure,
+} from './AiTutorSectionStructure.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SKILLS_DIR = path.join(__dirname, 'ai-tutor-skills')
@@ -40,7 +46,8 @@ const SHOW_PREFIX = process.env.AI_TUTOR_SHOW_PREFIX !== 'false'
 // Set AI_TUTOR_DISABLED_AGENTS in .env to disable specific reviewers.
 // Available agent IDs: abstract, introduction, related_work, methods, results,
 //   conclusion, appendix, writing_style, latex_formatting, figures_tables,
-//   paper_type (dynamic), venue (dynamic), sentence_placement (dynamic)
+//   paper_type (dynamic), venue (dynamic), sentence_placement (dynamic),
+//   section_structure (dynamic, rule-based)
 // Example: AI_TUTOR_DISABLED_AGENTS=latex_formatting,venue
 const DISABLED_AGENTS = new Set(
   (process.env.AI_TUTOR_DISABLED_AGENTS || '')
@@ -599,8 +606,9 @@ const SectionAssignmentSchema = z.object({
       'Never assign more than 2 categories. When in doubt, pick the single best fit. ' +
       'abstract = abstract, introduction = introduction, ' +
       'related_work = related work / background / prior work, ' +
-      'methods = methods / approach / methodology / dataset construction / task formulation / preliminaries, ' +
-      'results = results / experiments / analysis / discussion / RQ sections / evaluation, ' +
+      'methods = methods / approach / methodology / dataset construction / task formulation / preliminaries / ' +
+      'experimental setup / implementation details / evaluation protocol / datasets and baselines, ' +
+      'results = results / experiments / analysis / discussion / RQ sections / evaluation (the findings themselves, NOT the setup), ' +
       'conclusion = conclusion / limitations / ethical considerations / acknowledgments, ' +
       'appendix = all the appendix sections'
     ),
@@ -834,7 +842,7 @@ ${introContent}
 
 Based on the above:
 1. Classify the paper type.
-2. In sectionAssignments, assign EVERY section from the numbered list above to a review category. Use the EXACT section titles. Do not skip any. Almost all sections should get exactly ONE category. Only assign TWO categories when a section truly spans two concerns (e.g., it presents both methodology AND experimental results in the same section). Never assign more than two. When in doubt, pick the single best fit.
+2. In sectionAssignments, assign EVERY section from the numbered list above to a review category. Use the EXACT section titles. Do not skip any. Almost all sections should get exactly ONE category. Only assign TWO categories when a section truly spans two concerns (e.g., it presents both methodology AND experimental results in the same section). Never assign more than two. When in doubt, pick the single best fit. An experimental setup section or subsection (setup, implementation details, datasets and baselines, evaluation protocol) goes to "methods", even when it sits inside an Experiments section; "results" is only for sections that report findings.
 3. Generate type-specific guidance for each reviewer.`
 
   // Build log-friendly versions: full template but embedded content previewed
@@ -1014,7 +1022,9 @@ export const SUBAGENT_DEFS = [
     guidanceKey: 'methodsFocus',
     textOnly: true,
     systemPreamble:
-      'Review methods for clarity, design justification, intuition-before-formalism, notation consistency, and pseudo-code readability.',
+      'Review methods for clarity, design justification, intuition-before-formalism, notation consistency, and pseudo-code readability. ' +
+      'You also review the Experimental Setup section (if present): it must give the datasets, models, baselines, metrics, ' +
+      'hyperparameters and implementation details needed to reproduce the experiments, and it must not report results.',
   },
   {
     id: 'results',
@@ -1024,7 +1034,10 @@ export const SUBAGENT_DEFS = [
     guidanceKey: 'resultsFocus',
     textOnly: true,
     systemPreamble:
-      'Review results for RQ structure, bold findings at paragraph starts, figure/table interpretation, and whether claims are supported by evidence.',
+      'Review results for RQ structure, bold findings at paragraph starts, figure/table interpretation, and whether claims are supported by evidence. ' +
+      'RULE: the Experiments / Results section must open directly with a summary of the key findings, then the results. ' +
+      'Setup details (datasets, models, baselines, metrics, hyperparameters, prompts, implementation or compute details) do not belong here; ' +
+      'flag every such passage as a [warning] and say to move it to the Experimental Setup section. A clause saying what a figure or table reports is fine.',
   },
   {
     id: 'conclusion',
@@ -2405,6 +2418,29 @@ export async function runFullReview({
             strictMode: STRICT_MODE,
           }
         ),
+    })
+  }
+
+  // Add the rule-based section structure check (no LLM): flags a missing
+  // Experimental Setup section, or one placed after the results. Position
+  // papers usually have no experiments, so they are skipped.
+  if (DISABLED_AGENTS.has(SECTION_STRUCTURE_ID))
+  {
+    console.log(`[AI Tutor] Agent "${SECTION_STRUCTURE_NAME}" (${SECTION_STRUCTURE_ID}) disabled via AI_TUTOR_DISABLED_AGENTS`)
+  } else if (classification.paperType !== 'position')
+  {
+    agentDefs.push({
+      id: SECTION_STRUCTURE_ID,
+      name: SECTION_STRUCTURE_NAME,
+      run: async () =>
+      {
+        const { layout, comments } = checkExperimentStructure(buildParagraphMap(sections, mergedTex), mergedTex)
+        console.log(
+          `[AI Tutor] [${SECTION_STRUCTURE_NAME}] setup: [${layout.setup.map(s => s.label).join(', ')}], ` +
+          `results: [${layout.results.map(s => s.label).join(', ')}] — ${comments.length} finding(s)`
+        )
+        return { id: SECTION_STRUCTURE_ID, comments, skipped: false }
+      },
     })
   }
 

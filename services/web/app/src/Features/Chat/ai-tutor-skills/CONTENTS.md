@@ -70,12 +70,12 @@ Each file is assigned to one or more **static reviewer subagents** that review t
 | `task_formulation.md` | `methods` | TEXT | When to include, what it covers (problem setting, notation, assumptions) |
 | `related_work.md` | `related_work` | TEXT | "History book" paragraph structure, compare and contrast, academic siblings |
 | `methods.md` | `methods` | TEXT | Page budget, background vs methods, pseudo-code, design choice justification, intuition before formalism |
-| `results_and_analysis.md` | `results` | TEXT+MULTIMODAL | Experimental setup, RQ structures, Finding 1/2/3 pattern, subsection styles |
+| `results_and_analysis.md` | `results` | TEXT+MULTIMODAL | Rule: setup and results are separate sections, results open with the findings summary; RQ structures, Finding 1/2/3 pattern, subsection styles |
 | `conclusion.md` | `conclusion` | TEXT | Structure (what solved + next steps), don't repeat abstract/intro |
 | `limitations.md` | `conclusion` | TEXT | *Placeholder* |
 | `ethical_considerations.md` | `conclusion` | TEXT | ACL Ethics FAQ guidelines, ethics review process |
 | `faq_appendix.md` | `appendix` | TEXT | Why include a FAQ, anticipate reviewer questions |
-| `sentence_placement.md` | `sentence_placement` | TEXT | What each section and paragraph slot is for; how to use prototype papers to decide where a sentence belongs |
+| `sentence_placement.md` | `sentence_placement` | TEXT | What each section and paragraph slot is for; hard rules (setup in its own section, results open with findings); how to use prototype papers to decide where a sentence belongs |
 
 `prototype_papers/` holds plain-text extractions of selected `example_papers/` PDFs, one per paper type. The `sentence_placement` agent compares against them when the user uploads no role model papers (mapping in `BUNDLED_PROTOTYPES`, `AiTutorSentencePlacement.mjs`).
 

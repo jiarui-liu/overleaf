@@ -17,6 +17,7 @@ import {
 } from './AiTutorReviewOrchestrator.mjs'
 import {
   BUNDLED_PROTOTYPES,
+  NEW_SETUP_TARGET,
   buildParagraphMap,
   buildPlacementSchema,
   locateOffset,
@@ -53,7 +54,7 @@ We represent each paragraph by its rhetorical role and compare it against protot
 
 \section{Results}
 \subsection{Main Results}
-Table 1 reports accuracy for all systems across the three benchmarks we consider here.
+Table 1 reports accuracy for all systems across the three benchmarks we consider here. We fine-tune every model with a learning rate of 1e-5 on four A100 GPUs.
 
 Our approach is the most accurate system on all three benchmarks by a wide margin overall.
 
@@ -146,6 +147,8 @@ const goodMove = {
   targetSection: 'Results > Main Results',
   targetParagraph: 1,
   placement: 'start_of_paragraph',
+  basis: 'prototype',
+  sectionRule: 'none',
   prototypePaper: PROTOTYPE.name,
   prototypeLocation: 'Results, first paragraph',
   prototypeQuote: 'We find that our approach outperforms all baselines by a large margin on every task we evaluate.',
@@ -203,14 +206,69 @@ test('drops the second move for the same sentence', () =>
   assert.equal(dropped[0].reason, 'duplicate sentence')
 })
 
+const setupMove = {
+  sentence: 'We fine-tune every model with a learning rate of 1e-5 on four A100 GPUs.',
+  sentenceRole: 'training hyperparameters',
+  targetSection: 'Method',
+  targetParagraph: 1,
+  placement: 'end_of_paragraph',
+  basis: 'section_rule',
+  sectionRule: 'setup_in_setup_section',
+  prototypePaper: 'none',
+  prototypeLocation: '',
+  prototypeQuote: '',
+  rationale: 'Hyperparameters interrupt the results.',
+  severity: 'warning',
+}
+
+test('keeps a rule-based move without a prototype', () =>
+{
+  const { kept } = validate([setupMove])
+  assert.equal(kept.length, 1)
+  assert.equal(kept[0].hasPrototype, false)
+  assert.deepEqual(kept[0].from, { label: 'Results > Main Results', paragraphIndex: 1 })
+})
+
+test('a rule-based move keeps its prototype citation only if the quote checks out', () =>
+{
+  const cited = { ...setupMove, prototypePaper: PROTOTYPE.name, prototypeLocation: 'Results', prototypeQuote: goodMove.prototypeQuote }
+  assert.equal(validate([cited]).kept[0].hasPrototype, true)
+  const invented = { ...cited, prototypeQuote: 'Transformers are all you need for sequence transduction tasks.' }
+  assert.equal(validate([invented]).kept[0].hasPrototype, false)
+})
+
+test('drops a rule-based move that names no rule', () =>
+{
+  const { dropped } = validate([{ ...setupMove, sectionRule: 'none' }])
+  assert.equal(dropped[0].reason, 'unknown section rule')
+})
+
+test('a move to the new setup section is kept only when the paper lacks one', () =>
+{
+  const toNew = { ...setupMove, targetSection: NEW_SETUP_TARGET, targetParagraph: 0 }
+  const withNew = validateMoves([toNew], {
+    mergedTex: TEX, paragraphMap: map, prototypes: [PROTOTYPE], ...deps, newSetupBefore: 'Results > Main Results',
+  })
+  assert.equal(withNew.kept.length, 1)
+  assert.equal(withNew.kept[0].newSectionBefore, 'Results > Main Results')
+  assert.equal(validate([toNew]).dropped[0].reason, 'paper already has a setup section')
+})
+
 console.log('rendering + schema')
 
 test('renders the target paragraph and prototype evidence', () =>
 {
-  const text = renderPlacementComment(goodMove, 2)
+  const text = renderPlacementComment({ ...goodMove, hasPrototype: true }, 2)
   assert.match(text, /^Move to the start of the first paragraph of "Results > Main Results"\./)
   assert.match(text, /Prototype: "A Prototype Paper" puts this kind of sentence \(headline quantitative finding\) in Results, first paragraph: "We find/)
   assert.match(renderPlacementComment({ ...goodMove, targetParagraph: 2, placement: 'new_paragraph_after' }, 2), /a new paragraph after the last paragraph of/)
+})
+
+test('renders the section rule, and the new setup section target', () =>
+{
+  const text = renderPlacementComment({ ...setupMove, newSectionBefore: 'Results > Main Results' }, 0)
+  assert.match(text, /^Move to a new "Experimental Setup" section placed before "Results > Main Results"\. Hyperparameters interrupt the results\. Rule: Experimental setup \(datasets/)
+  assert.doesNotMatch(text, /Prototype:/)
 })
 
 test('schema only accepts sections and prototypes from this run', () =>
@@ -220,6 +278,10 @@ test('schema only accepts sections and prototypes from this run', () =>
   assert.equal(schema.safeParse({ moves: [goodMove] }).success, true)
   assert.equal(schema.safeParse({ moves: [{ ...goodMove, targetSection: 'Results' }] }).success, false)
   assert.equal(schema.safeParse({ moves: [{ ...goodMove, prototypePaper: 'Other' }] }).success, false)
+  assert.equal(schema.safeParse({ moves: [setupMove] }).success, true)
+  assert.equal(schema.safeParse({ moves: [{ ...setupMove, targetSection: NEW_SETUP_TARGET }] }).success, false)
+  const withNew = buildPlacementSchema([...labels, NEW_SETUP_TARGET], [PROTOTYPE.name])
+  assert.equal(withNew.safeParse({ moves: [{ ...setupMove, targetSection: NEW_SETUP_TARGET }] }).success, true)
 })
 
 console.log('selectPrototypes')
