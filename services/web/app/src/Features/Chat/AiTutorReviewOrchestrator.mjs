@@ -8,6 +8,9 @@
  *   Phase 4 — Comment deduplication
  *   Phase 5 — Strict-mode comment pruning (LLM-based top-N selection)
  *   Phase 6 — Comment position mapping back to original docs
+ * plus, concurrently with Phase 3, direct edits (Acknowledgments section,
+ * author affiliations), and a regex check for a code/data footnote at the end
+ * of the abstract.
  */
 
 import { createOpenAI } from '@ai-sdk/openai'
@@ -35,7 +38,7 @@ const SHOW_PREFIX = process.env.AI_TUTOR_SHOW_PREFIX !== 'false'
 // Set AI_TUTOR_DISABLED_AGENTS in .env to disable specific reviewers.
 // Available agent IDs: abstract, introduction, related_work, methods, results,
 //   conclusion, appendix, writing_style, latex_formatting, figures_tables,
-//   paper_type (dynamic), venue (dynamic)
+//   paper_type (dynamic), venue (dynamic), abstract_footnote (regex check)
 // Example: AI_TUTOR_DISABLED_AGENTS=latex_formatting,venue
 const DISABLED_AGENTS = new Set(
   (process.env.AI_TUTOR_DISABLED_AGENTS || '')
@@ -1058,15 +1061,15 @@ export const SUBAGENT_DEFS = [
       '06_writing_style/capitalization_and_acronyms.md',
       '06_writing_style/general_writing_habits.md',
       '06_writing_style/citations_and_references.md',
-      '06_writing_style/affiliations.md',
     ],
     sectionCategories: null, // receives full document
     guidanceKey: null,
     textOnly: true,
+    // Affiliations are fixed directly by the Affiliations Editor (see buildAffiliationEdits)
     systemPreamble:
       'Review the writing style: grammar, tense consistency, pronoun clarity, vague language, formality, active voice, filler words, capitalization, ' +
       'and overall structure — one key idea, storytelling flow, whether first sentences of paragraphs tell the whole story, heading frequency (~every 10-15 lines), and consistency in presentation. ' +
-      'IMPORTANT: Also review the LaTeX preamble (the author/affiliation block before the document body) for affiliation metadata — check that all affiliation strings match the official lab policy described in the affiliations skill.',
+      'Do NOT comment on author affiliations — those are corrected automatically.',
   },
   {
     id: 'latex_formatting',
@@ -2124,6 +2127,629 @@ export function mapCommentsToDocuments(
 }
 
 // ---------------------------------------------------------------------------
+// Direct edits — Acknowledgments section
+// ---------------------------------------------------------------------------
+//
+// Unlike the reviewer subagents (which only leave comments), this step produces
+// direct text edits: it rewrites (or creates) the Acknowledgments section from
+// the lab template, and appends any missing BibTeX entries it cites. An LLM only
+// decides WHICH conditional funding clauses apply and which of the author's own
+// thanks to keep; the final text is assembled verbatim from the template below.
+
+// Conditional funding clauses, in template order. `condition` is shown to the LLM.
+const ACK_FUNDING_CLAUSES = [
+  {
+    id: 'tuebingen',
+    condition: 'Zhijing Jin is an author AND is listed with a Max Planck Institute (MPI) or Tübingen affiliation',
+    text: 'by the German Federal Ministry of Education and Research (BMBF): T\\"{u}bingen AI Center, FKZ: 01IS18039B; by the Machine Learning Cluster of Excellence, EXC number 2064/1 -- Project number 390727645',
+  },
+  {
+    id: 'nserc',
+    condition: 'the paper is causality research',
+    text: 'by NSERC Discovery Grant RGPIN-2025-06491',
+  },
+  {
+    id: 'acceleration_consortium',
+    condition: 'the paper is causality research, or AI for science work',
+    text: "by the University of Toronto's Acceleration Consortium, which receives funding from the Canada First Research Excellence Fund (CFREF)",
+  },
+  {
+    id: 'frontier_model_forum',
+    condition: 'the paper is multi-agent research or sanctioning research',
+    text: 'by the Frontier Model Forum and AI Safety Fund',
+  },
+  {
+    id: 'coefficient_giving',
+    condition: 'the paper is general AI safety-related work',
+    text: 'by Coefficient Giving',
+  },
+  {
+    id: 'schmidt_sciences',
+    condition: 'the paper is on mechanistic interpretability or test data contamination',
+    text: 'by Schmidt Sciences',
+  },
+  {
+    id: 'caisi_catalyst',
+    condition: 'the paper is on multicultural awareness for LLMs',
+    text: 'by the Canadian AI Safety Institute Research Program at CIFAR through a Catalyst Award',
+  },
+  {
+    id: 'sff',
+    condition: 'the paper is on democracy or power concentration',
+    text: 'by the Survival and Flourishing Fund',
+  },
+  {
+    id: 'cooperative_ai',
+    condition: 'the paper is multi-agent research',
+    text: 'by the Cooperative AI Foundation; by the Canadian AI Safety Institute Research Program at CIFAR',
+  },
+]
+
+const ACK_RESOURCES_SENTENCE =
+  'Resources used in preparing this research project were provided, in part, by the Digital Research Alliance of Canada; the Province of Ontario; the Swiss AI Compute grants; the Government of Canada through CIFAR; and companies sponsoring the Vector Institute.'
+
+const ACK_TOOLS_SENTENCE =
+  'We thank Jiarui Liu, Andrew Kim, and the other key developers of PaperMentor (\\cite{liu-etal-2026-papermentor}; \\cite{papermentor-2}), who developed the tool that provided mentorship and valuable suggestions to polish this paper after the first draft by the authors. ' +
+  'We further acknowledge the crucial work of AdminBot \\cite{adminbot} for administrative support that streamlined our research workflow.'
+
+// BibTeX entries cited by the template; appended to the paper's .bib when missing.
+const ACK_BIB_ENTRIES = {
+  'liu-etal-2026-papermentor': `@inproceedings{liu-etal-2026-papermentor,
+  title={{PaperMentor}: {A} Human-Centered Multi-Agent Writing Tutor for {AI} Research Papers in {O}verleaf},
+  author={Jiarui Liu and Terry Jingchen Zhang and Ryan Faulkner and Xuanqiang Angelo Huang and Vil{\\'e}m Zouhar and Dominik Glandorf and Isabel Dahlgren and Rishit Dagli and Yuen Chen and Felix Leeb and Van Q. Truong and Punya Syon Pandey and Yves Bicker and Suvajit Majumder and Wenyuan Jiang and Zeju Qiu and Sankalan Pal Chowdhury and Mrinmaya Sachan and Bernhard Sch{\\"o}lkopf and Mona T. Diab and Zhijing Jin},
+  booktitle={ACL 2026 System Demonstration Track},
+  year={2026},
+  url={https://drive.google.com/file/d/1W9w2cE5TrsDEzgGdSEVBu4BGSCe3NBtB/}
+}`,
+  'papermentor-2': `@unpublished{papermentor-2,
+  author = {Andrew Kim and Jiarui Liu and Zhijing Jin},
+  title  = {{PaperMentor}: {A} Human-Centered Multi-Agent Writing Tutor for {AI} Research Papers in {O}verleaf},
+  note   = {Manuscript in preparation},
+  year   = {2026}
+}`,
+  adminbot: `@article{adminbot,
+  author = {Andrew Kim and Angelo Huang and Arth Singh and Aryan Amit Barsainyan and Ayush Nangia and Bernhard Sch{\\"o}lkopf and Damiano Amatruda and Emilia Wi{\\'s}nios and Felix Hu and Gopal Dev and Joeun Yook and Luke Zhang and Yang Yang Zhang and Yara Allam and Zaryab Muhammad Akram and Zhijing Jin},
+  title  = {{AdminBot}: Multi-Agent LLM Pipeline for Intelligent Academic Laboratory Workflow Management},
+  note   = {Manuscript in preparation},
+  year   = {2026}
+}`,
+}
+
+const ACK_AGENT_NAME = 'Acknowledgments Editor'
+
+const AckDecisionSchema = z.object({
+  applicableClauseIds: z
+    .array(z.enum(ACK_FUNDING_CLAUSES.map(c => c.id)))
+    .describe('IDs of every funding clause whose condition holds for this paper'),
+  preservedExcerpts: z
+    .array(z.string())
+    .describe(
+      'VERBATIM excerpts from the existing acknowledgments that the authors wrote themselves ' +
+      '(e.g. thanks to colleagues or reviewers) and that are NOT already covered by the template ' +
+      '(funding, compute resources, PaperMentor, AdminBot). Exclude LaTeX comment lines. Empty if none.'
+    ),
+  rationale: z.string().describe('One or two sentences explaining the clause choices'),
+})
+
+// Heading-style acknowledgments: \section*{Acknowledgments}, \paragraph{Acknowledgements}, ...
+const ACK_HEADING_RE =
+  /\\(chapter|section|subsection|subsubsection|paragraph)\*?\s*\{\s*Acknowledge?ments?\s*\}/gi
+// Environment-style acknowledgments: \begin{ack} ... \end{ack} (NeurIPS etc.)
+const ACK_ENV_RE = /\\begin\{(acks?|acknowledge?ments?)\}/gi
+
+/** True if the match at `pos` sits after an unescaped % on its line. */
+function isInLatexComment(text, pos)
+{
+  const lineStart = text.lastIndexOf('\n', pos - 1) + 1
+  return /(^|[^\\])%/.test(text.slice(lineStart, pos))
+}
+
+/** First uncommented match of `re` in `text` at or after `from`. */
+function findUncommented(re, text, from = 0)
+{
+  const globalRe = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g')
+  globalRe.lastIndex = from
+  let m
+  while ((m = globalRe.exec(text)) !== null)
+  {
+    if (!isInLatexComment(text, m.index)) return m
+  }
+  return null
+}
+
+/** TeX docs in merge order: root first, then every inlined file. */
+function texDocsInMergeOrder(mergedTex, docContentMap, rootDocPath)
+{
+  const ordered = []
+  const add = p =>
+  {
+    const resolved = docContentMap[p] !== undefined ? p : docContentMap[p + '.tex'] !== undefined ? p + '.tex' : null
+    if (resolved && !ordered.includes(resolved)) ordered.push(resolved)
+  }
+  add(rootDocPath)
+  for (const region of buildInlineMap(mergedTex)) add(region.file)
+  return ordered
+}
+
+/**
+ * Locate an existing acknowledgments section in the original docs.
+ * Returns { docPath, headerEnd, bodyStart, bodyEnd, body, envName } or null.
+ */
+function findAcknowledgmentsSection(texDocs, docContentMap)
+{
+  for (const docPath of texDocs)
+  {
+    const content = docContentMap[docPath]
+
+    const env = findUncommented(ACK_ENV_RE, content)
+    if (env)
+    {
+      const envName = env[1]
+      const endTag = `\\end{${envName}}`
+      const bodyStart = env.index + env[0].length
+      const bodyEnd = content.indexOf(endTag, bodyStart)
+      if (bodyEnd !== -1)
+      {
+        return { docPath, bodyStart, bodyEnd, body: content.slice(bodyStart, bodyEnd), envName }
+      }
+    }
+
+    const heading = findUncommented(ACK_HEADING_RE, content)
+    if (heading)
+    {
+      const level = heading[1].toLowerCase()
+      const levels = ['chapter', 'section', 'subsection', 'subsubsection', 'paragraph']
+      // A paragraph-level heading ends at any heading; otherwise at one of same or higher level
+      const stopHeadings = level === 'paragraph' ? levels : levels.slice(0, levels.indexOf(level) + 1)
+      const boundaryRe = new RegExp(
+        `\\\\(?:(?:${stopHeadings.join('|')})\\b|appendix\\b|bibliography(?:style)?\\s*\\{|printbibliography\\b|` +
+        'begin\\{thebibliography\\}|end\\{document\\}|input\\s*\\{|include\\s*\\{|clearpage\\b|newpage\\b|cleardoublepage\\b)',
+        'g'
+      )
+      const bodyStart = heading.index + heading[0].length
+      const boundary = findUncommented(boundaryRe, content, bodyStart)
+      let bodyEnd = boundary ? boundary.index : content.length
+      // Keep the whitespace before the next block untouched
+      while (bodyEnd > bodyStart && /\s/.test(content[bodyEnd - 1])) bodyEnd--
+      return { docPath, bodyStart, bodyEnd, body: content.slice(bodyStart, bodyEnd), envName: null }
+    }
+  }
+  return null
+}
+
+/**
+ * Pick where to create a new acknowledgments section: before the bibliography
+ * (and its \bibliographystyle), else before \appendix, else before \end{document}.
+ * Returns { docPath, offset } or null.
+ */
+function findAcknowledgmentsInsertPoint(texDocs, docContentMap, rootDocPath)
+{
+  const bibRe = /\\(?:bibliography\s*\{|printbibliography\b|begin\{thebibliography\})/
+  for (const re of [bibRe, /\\appendix\b/, /\\end\{document\}/])
+  {
+    for (const docPath of texDocs)
+    {
+      const content = docContentMap[docPath]
+      // In the root doc, skip anything in the preamble
+      const docStart = docPath === rootDocPath ? Math.max(0, content.indexOf('\\begin{document}')) : 0
+      const m = findUncommented(re, content, docStart)
+      if (!m) continue
+      let offset = content.lastIndexOf('\n', m.index - 1) + 1
+      if (re === bibRe)
+      {
+        // Move above a \bibliographystyle that directly precedes the bibliography
+        const before = content.slice(docStart, offset)
+        const styleMatch = before.match(/(^|\n)([ \t]*\\bibliographystyle\s*\{[^}]*\}[^\n]*\n(?:[ \t]*(?:%[^\n]*)?\n)*)$/)
+        if (styleMatch) offset -= styleMatch[2].length
+      }
+      return { docPath, offset }
+    }
+  }
+  return null
+}
+
+/** Where the front matter ends in merged.tex: the abstract, else the first section. */
+function frontMatterEnd(mergedTex, sections)
+{
+  return sections.find(s => s.level === 0)?.charStart ??
+    sections.find(s => s.level === 1)?.charStart ??
+    mergedTex.length
+}
+
+/** Extract the title/author/affiliation block, which may sit before or after \begin{document}. */
+function extractFrontMatter(mergedTex, sections, maxChars = 6000)
+{
+  const end = frontMatterEnd(mergedTex, sections)
+  const m = findUncommented(/\\(?:title|author|affil|affiliation|institute)\b/, mergedTex)
+  if (!m || m.index > end) return '(not found)'
+  return truncateText(mergedTex.slice(m.index, end), maxChars)
+}
+
+/**
+ * Build the direct edits for the acknowledgments section and its citations.
+ * Never throws — failures are logged and yield no edits.
+ *
+ * @returns {Promise<Array<{docPath, offset, oldText, anchorText, newText, description, agentName}>>}
+ *   oldText is the exact text being replaced ('' for a pure insertion); anchorText
+ *   is the text right after an insertion point, used by the client to relocate it.
+ */
+export async function buildAcknowledgmentsEdits(openai, model, sections, mergedTex, docContentMap, rootDocPath)
+{
+  try
+  {
+    const texDocs = texDocsInMergeOrder(mergedTex, docContentMap, rootDocPath)
+    const existing = findAcknowledgmentsSection(texDocs, docContentMap)
+    console.log(
+      `[AI Tutor] Ack editor: ${existing ? `found existing acknowledgments in "${existing.docPath}"` : 'no acknowledgments section found'}`
+    )
+
+    const abstractContent = sections.find(s => s.level === 0)?.content || '(not found)'
+    const introContent = sections.find(s => s.title.toLowerCase().startsWith('introduction'))?.content || '(not found)'
+    const clauseList = ACK_FUNDING_CLAUSES.map(c => `- ${c.id}: include if ${c.condition}`).join('\n')
+
+    const system = `You fill in a lab's acknowledgments template for a research paper.
+Decide which conditional funding clauses apply, based on the paper's authors, affiliations, and topic.
+Several clauses may apply at once; include a clause only when its condition clearly holds.
+
+## Conditional funding clauses
+${clauseList}`
+
+    const prompt = `## Title / authors / affiliations
+${extractFrontMatter(mergedTex, sections)}
+
+## Abstract
+${truncateText(abstractContent, 4000)}
+
+## Introduction
+${truncateText(introContent, 8000)}
+
+## Existing acknowledgments
+${existing ? existing.body.trim() || '(empty)' : '(none)'}`
+
+    const result = await generateObjectWithRetry({
+      model: openai(model),
+      schema: AckDecisionSchema,
+      system,
+      prompt,
+      temperature: 0,
+    }, 'Ack-Editor')
+    const decision = result.object
+    console.log(
+      `[AI Tutor] Ack editor: clauses=[${decision.applicableClauseIds.join(', ')}], ` +
+      `preserved=${decision.preservedExcerpts.length} — ${decision.rationale}`
+    )
+
+    // Assemble the section body verbatim from the template
+    const chosen = new Set(decision.applicableClauseIds)
+    const clauses = ACK_FUNDING_CLAUSES.filter(c => chosen.has(c.id)).map(c => c.text)
+    // The Catalyst Award clause already names the CAISI program; avoid repeating it
+    if (chosen.has('caisi_catalyst') && chosen.has('cooperative_ai'))
+    {
+      clauses[clauses.length - 1] = 'by the Cooperative AI Foundation'
+    }
+
+    // Keep only excerpts that really exist in the author's section (recovering near-verbatim ones)
+    const preserved = []
+    for (const excerpt of decision.preservedExcerpts)
+    {
+      if (!existing || !excerpt.trim()) continue
+      if (existing.body.includes(excerpt)) preserved.push(excerpt.trim())
+      else
+      {
+        const fuzzy = fuzzyFindInText(excerpt, existing.body)
+        if (fuzzy) preserved.push(fuzzy.matchedText.trim())
+        else console.warn(`[AI Tutor] Ack editor: dropping non-verbatim excerpt "${excerpt.slice(0, 60)}..."`)
+      }
+    }
+
+    const paragraphs = []
+    if (preserved.length > 0) paragraphs.push(preserved.join(' '))
+    const funding = clauses.length > 0
+      ? `This material is based in part upon work supported ${clauses.join('; ')}. `
+      : ''
+    paragraphs.push(funding + ACK_RESOURCES_SENTENCE + '\n' + ACK_TOOLS_SENTENCE)
+    const body = paragraphs.join('\n\n')
+
+    const edits = []
+    if (existing)
+    {
+      const content = docContentMap[existing.docPath]
+      const newBody = existing.envName ? `\n${body}\n` : `\n${body}`
+      if (normalizeWhitespace(existing.body) !== normalizeWhitespace(newBody))
+      {
+        edits.push({
+          docPath: existing.docPath,
+          offset: existing.bodyStart,
+          oldText: content.slice(existing.bodyStart, existing.bodyEnd),
+          anchorText: '',
+          newText: newBody,
+          description: 'Updated the Acknowledgments section from the lab template',
+          agentName: ACK_AGENT_NAME,
+        })
+      }
+    } else
+    {
+      const insertPoint = findAcknowledgmentsInsertPoint(texDocs, docContentMap, rootDocPath)
+      if (!insertPoint)
+      {
+        console.warn('[AI Tutor] Ack editor: no bibliography, \\appendix, or \\end{document} found; skipping')
+        return []
+      }
+      const content = docContentMap[insertPoint.docPath]
+      edits.push({
+        docPath: insertPoint.docPath,
+        offset: insertPoint.offset,
+        oldText: '',
+        anchorText: content.slice(insertPoint.offset, insertPoint.offset + 80),
+        newText: `\\section*{Acknowledgments}\n${body}\n\n`,
+        description: 'Added an Acknowledgments section from the lab template',
+        agentName: ACK_AGENT_NAME,
+      })
+    }
+
+    edits.push(...buildAckBibEdits(mergedTex, docContentMap))
+    console.log(`[AI Tutor] Ack editor: ${edits.length} edit(s): ${edits.map(e => `${e.docPath} (${e.description})`).join('; ')}`)
+    return edits
+  } catch (err)
+  {
+    console.error(`[AI Tutor] Ack editor FAILED, skipping direct edits: ${err.message}`)
+    return []
+  }
+}
+
+/** Append any BibTeX entries cited by the template that the project's .bib files lack. */
+function buildAckBibEdits(mergedTex, docContentMap)
+{
+  const bibDocs = []
+  const bibRe = /\\(?:bibliography|addbibresource)(?:\[[^\]]*\])?\s*\{([^}]+)\}/g
+  let m
+  while ((m = bibRe.exec(mergedTex)) !== null)
+  {
+    if (isInLatexComment(mergedTex, m.index)) continue
+    for (const ref of m[1].split(','))
+    {
+      const name = ref.trim().replace(/\.bib$/, '')
+      const docPath = Object.keys(docContentMap).find(
+        p => p === `${name}.bib` || p.endsWith(`/${name}.bib`)
+      )
+      if (docPath && !bibDocs.includes(docPath)) bibDocs.push(docPath)
+    }
+  }
+  if (bibDocs.length === 0)
+  {
+    console.warn('[AI Tutor] Ack editor: no editable .bib file referenced; citations left unresolved')
+    return []
+  }
+
+  const missing = Object.entries(ACK_BIB_ENTRIES).filter(([key]) =>
+  {
+    const keyRe = new RegExp(`@\\w+\\s*\\{\\s*${key.replace(/[-]/g, '\\-')}\\s*,`)
+    return !bibDocs.some(p => keyRe.test(docContentMap[p]))
+  })
+  if (missing.length === 0) return []
+
+  const target = bibDocs[0]
+  const content = docContentMap[target]
+  const separator = content.length === 0 || content.endsWith('\n\n') ? '' : content.endsWith('\n') ? '\n' : '\n\n'
+  return [{
+    docPath: target,
+    offset: content.length,
+    oldText: '',
+    anchorText: '',
+    newText: separator + missing.map(([, entry]) => entry).join('\n\n') + '\n',
+    description: `Added BibTeX entries cited in the acknowledgments: ${missing.map(([key]) => key).join(', ')}`,
+    agentName: ACK_AGENT_NAME,
+  }]
+}
+
+// ---------------------------------------------------------------------------
+// Direct edits — Author affiliations
+// ---------------------------------------------------------------------------
+//
+// Corrects lab affiliation strings in the author block according to the
+// affiliations skill. Author blocks differ too much across templates to rewrite
+// deterministically, so the LLM proposes minimal verbatim replacements; every
+// replacement is then verified against the front matter of the original docs.
+
+const AFFIL_AGENT_NAME = 'Affiliations Editor'
+
+// Skip the LLM call entirely unless the author block mentions the lab or its partners
+const AFFIL_TRIGGER_RE = /Jinesis|JAIL|Max[ -]Planck|\bMPI\b|Vector Institute|EuroSafe|Zhijing/i
+
+const AffiliationFixSchema = z.object({
+  fixes: z.array(
+    z.object({
+      oldText: z
+        .string()
+        .describe('EXACT verbatim substring of the author block to replace — as short as possible, never spanning author names or emails'),
+      newText: z.string().describe('Corrected replacement text, keeping the surrounding LaTeX formatting'),
+      rule: z.string().describe('Which affiliation rule this fixes'),
+    })
+  ),
+})
+
+/**
+ * Front-matter range of each original doc: the root doc (and any file inlined
+ * before the abstract) up to its first \begin{abstract} / \section.
+ */
+function frontMatterRanges(mergedTex, sections, texDocs, docContentMap, rootDocPath)
+{
+  const end = frontMatterEnd(mergedTex, sections)
+  const inlineMap = buildInlineMap(mergedTex)
+  const ranges = []
+  for (const docPath of texDocs)
+  {
+    if (docPath !== rootDocPath)
+    {
+      const region = inlineMap.find(r => r.file === docPath || `${r.file}.tex` === docPath)
+      if (!region || region.start >= end) continue
+    }
+    const content = docContentMap[docPath]
+    const stop = findUncommented(/\\(?:begin\{abstract\}|section\b|chapter\b)/, content)
+    ranges.push({ docPath, end: stop ? stop.index : content.length })
+  }
+  return ranges
+}
+
+/**
+ * Build direct edits that correct lab affiliation strings. Never throws.
+ * @returns {Promise<Array>} edits in the same shape as buildAcknowledgmentsEdits
+ */
+export async function buildAffiliationEdits(openai, model, sections, mergedTex, docContentMap, rootDocPath)
+{
+  try
+  {
+    const frontMatter = extractFrontMatter(mergedTex, sections, 12000)
+    if (!AFFIL_TRIGGER_RE.test(frontMatter))
+    {
+      console.log('[AI Tutor] Affiliations editor: no lab affiliations in the author block; skipping')
+      return []
+    }
+
+    const system = `You correct author affiliation strings in a LaTeX paper so they follow a lab's official affiliation policy.
+
+${loadSkill('06_writing_style/affiliations.md')}
+
+## How to respond
+- Return one fix per distinct incorrect string; it is applied to every occurrence in the author block.
+- oldText must be copied EXACTLY from the author block (same LaTeX, spacing, and accents) and be as short as possible.
+- Only fix the lab's own affiliation strings (Jinesis Lab, University of Toronto & Vector Institute, Max Planck Institute for Intelligent Systems, EuroSafeAI). Never change author names, emails, or other institutions, and never add or remove authors or affiliations.
+- Keep the document's LaTeX conventions (e.g. if it writes T\\"ubingen, keep that style; if unsure, use T\\"{u}bingen).
+- Prefer the full MPI form unless the author block abbreviates all affiliations to save space.
+- If everything already complies, return an empty list.`
+
+    const result = await generateObjectWithRetry({
+      model: openai(model),
+      schema: AffiliationFixSchema,
+      system,
+      prompt: `## Author block\n${frontMatter}`,
+      temperature: 0,
+    }, 'Affiliations-Editor')
+
+    const texDocs = texDocsInMergeOrder(mergedTex, docContentMap, rootDocPath)
+    const ranges = frontMatterRanges(mergedTex, sections, texDocs, docContentMap, rootDocPath)
+
+    const candidates = []
+    for (const raw of result.object.fixes)
+    {
+      const oldText = repairJsonEscapedLatex(raw.oldText)
+      const newText = repairJsonEscapedLatex(raw.newText)
+      if (!oldText.trim() || oldText === newText) continue
+
+      let found = false
+      for (const { docPath, end } of ranges)
+      {
+        const content = docContentMap[docPath]
+        for (let i = content.indexOf(oldText); i !== -1 && i + oldText.length <= end; i = content.indexOf(oldText, i + 1))
+        {
+          if (isInLatexComment(content, i)) continue
+          found = true
+          // Already correct here (e.g. "& Vector Institute" already follows)
+          if (content.startsWith(newText, i)) continue
+          candidates.push({
+            docPath,
+            offset: i,
+            oldText,
+            anchorText: '',
+            newText,
+            description: `Corrected affiliation "${oldText}" → "${newText}" (${raw.rule})`,
+            agentName: AFFIL_AGENT_NAME,
+          })
+        }
+      }
+      if (!found)
+      {
+        console.warn(`[AI Tutor] Affiliations editor: dropping fix, "${oldText.slice(0, 60)}" not found in author block`)
+      }
+    }
+
+    // Drop overlapping fixes, preferring the longer replacement
+    const edits = []
+    for (const c of candidates.sort((a, b) => b.oldText.length - a.oldText.length))
+    {
+      const overlaps = edits.some(e =>
+        e.docPath === c.docPath && c.offset < e.offset + e.oldText.length && e.offset < c.offset + c.oldText.length
+      )
+      if (!overlaps) edits.push(c)
+    }
+    console.log(`[AI Tutor] Affiliations editor: ${edits.length} edit(s)${edits.map(e => `\n[AI Tutor]   ${e.docPath}@${e.offset}: ${e.description}`).join('')}`)
+    return edits
+  } catch (err)
+  {
+    console.error(`[AI Tutor] Affiliations editor FAILED, skipping direct edits: ${err.message}`)
+    return []
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Structural check — code/data footnote at the end of the abstract
+// ---------------------------------------------------------------------------
+
+const ABSTRACT_FOOTNOTE_AGENT_NAME = 'Abstract Footnote Check'
+
+/**
+ * Returns a comment (pre-mapping shape) if the abstract does not end with a
+ * footnote pointing to the code/data, else null. Pure regex, no LLM.
+ */
+export function checkAbstractCodeFootnote(sections)
+{
+  const abstract = sections.find(s => s.level === 0)
+  if (!abstract) return null
+
+  // Drop trailing blank lines and full-line LaTeX comments
+  const lines = abstract.content.split('\n')
+  while (lines.length > 0 && /^\s*(?:%.*)?$/.test(lines[lines.length - 1])) lines.pop()
+  const body = lines.join('\n').trimEnd()
+  if (!body) return null
+
+  // Accept a footnote (or \footnotemark + \footnotetext elsewhere) in the final
+  // sentence: nothing after it may start a new sentence
+  const sentenceBreakRe = /[.!?]\s+(?=[A-Z\\])/
+  const notes = [...body.matchAll(/\\(?:footnote|footnotemark|thanks)\b(?:\[[^\]]*\])?/g)]
+    .filter(n => !isInLatexComment(body, n.index))
+  const lastNote = notes[notes.length - 1]
+  if (lastNote)
+  {
+    let after = lastNote.index + lastNote[0].length
+    if (body[after] === '{')
+    {
+      // Skip the footnote text, matching nested braces
+      let depth = 0
+      for (; after < body.length; after++)
+      {
+        if (body[after] === '\\') { after++; continue }
+        if (body[after] === '{') depth++
+        else if (body[after] === '}' && --depth === 0) { after++; break }
+      }
+    }
+    if (!sentenceBreakRe.test(body.slice(after))) return null
+  }
+
+  // Highlight the final sentence (verbatim, at most 200 chars)
+  const breaks = [...body.matchAll(new RegExp(sentenceBreakRe.source, 'g'))]
+  const lastBreak = breaks[breaks.length - 1]
+  let highlightText = body.slice(lastBreak ? lastBreak.index + lastBreak[0].length : 0)
+    .replace(/(^|[^\\])%[\s\S]*$/, '$1') // drop a trailing inline comment
+    .trim()
+  if (highlightText.length > 200)
+  {
+    highlightText = highlightText.slice(-200)
+    highlightText = highlightText.slice(highlightText.indexOf(' ') + 1)
+  }
+
+  return {
+    highlightText,
+    comment:
+      'The abstract should end with a footnote pointing to the code and data, so readers can find the artifacts from the first page, ' +
+      'e.g. "...\\footnote{Our code and data are available at \\url{https://github.com/...}.}". ' +
+      'For anonymous submissions, use an anonymized link (e.g. anonymous.4open.science).',
+    severity: 'warning',
+    category: 'abstract',
+    agentName: ABSTRACT_FOOTNOTE_AGENT_NAME,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
 
@@ -2376,6 +3002,12 @@ export async function runFullReview({
   )
   const phase3Start = Date.now()
 
+  // Direct edits (acknowledgments, affiliations) run concurrently with the reviewer subagents
+  const directEditsPromise = Promise.all([
+    buildAcknowledgmentsEdits(openai, model, sections, mergedTex, docContentMap, rootDocPath),
+    buildAffiliationEdits(openai, model, sections, mergedTex, docContentMap, rootDocPath),
+  ])
+
   const AGENT_TIMEOUT = 120_000 // 2 minutes per agent
   const subagentPromises = agentDefs.map(def =>
   {
@@ -2486,12 +3118,24 @@ export async function runFullReview({
     )
   }
 
+  // Structural checks: deterministic comments, added after pruning so they are never dropped
+  const structuralComments = []
+  if (DISABLED_AGENTS.has('abstract_footnote'))
+  {
+    console.log('[AI Tutor] Abstract footnote check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else
+  {
+    const footnoteComment = checkAbstractCodeFootnote(sections)
+    console.log(`[AI Tutor] Abstract footnote check: ${footnoteComment ? 'no code/data footnote at the end of the abstract' : 'OK'}`)
+    if (footnoteComment) structuralComments.push(footnoteComment)
+  }
+
   // Phase 6: Map comments to original documents
   console.log('-'.repeat(60))
   console.log('[AI Tutor] Phase 6: Mapping comments to original documents...')
   const phase6Start = Date.now()
   const mappedComments = mapCommentsToDocuments(
-    prunedComments,
+    [...prunedComments, ...structuralComments],
     mergedTex,
     docContentMap,
     rootDocPath
@@ -2524,6 +3168,15 @@ export async function runFullReview({
     commentsByDoc[c.docPath].push(c)
   }
 
+  // Group direct edits by document
+  const edits = (await directEditsPromise).flat()
+  const editsByDoc = {}
+  for (const e of edits)
+  {
+    if (!editsByDoc[e.docPath]) editsByDoc[e.docPath] = []
+    editsByDoc[e.docPath].push(e)
+  }
+
   // Build summary
   const byCat = {}
   const bySev = {}
@@ -2542,8 +3195,10 @@ export async function runFullReview({
       paperTypeSummary: classification.paperTypeSummary,
     },
     commentsByDoc,
+    editsByDoc,
     summary: {
       total: mappedComments.length,
+      edits: edits.length,
       byCategory: byCat,
       bySeverity: bySev,
     },
@@ -2562,6 +3217,7 @@ export async function runFullReview({
   console.log(`[AI Tutor]   Model: ${model}`)
   console.log(`[AI Tutor]   Paper type: ${reviewResult.classification.paperType}`)
   console.log(`[AI Tutor]   Total comments: ${reviewResult.summary.total}`)
+  console.log(`[AI Tutor]   Direct edits: ${edits.length}`)
   console.log(`[AI Tutor]   By category: ${JSON.stringify(reviewResult.summary.byCategory)}`)
   console.log(`[AI Tutor]   By severity: ${JSON.stringify(reviewResult.summary.bySeverity)}`)
   console.log(`[AI Tutor]   By document: ${Object.entries(commentsByDoc).map(([d, c]) => `${d}(${c.length})`).join(', ')}`)

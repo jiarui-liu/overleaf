@@ -38,6 +38,18 @@ export interface ReviewComment {
   endOffset: number
 }
 
+// A direct text edit (e.g. the Acknowledgments section), applied as a normal
+// editor change rather than a comment.
+export interface ReviewEdit {
+  docPath: string
+  offset: number // server-side position, used as a hint when relocating
+  oldText: string // exact text being replaced ('' for a pure insertion)
+  anchorText: string // text right after an insertion point ('' = end of doc)
+  newText: string
+  description: string
+  agentName: string
+}
+
 export interface ReviewResult {
   projectId: string
   model: string
@@ -47,9 +59,11 @@ export interface ReviewResult {
     paperTypeSummary: string
   }
   commentsByDoc: Record<string, ReviewComment[]>
+  editsByDoc?: Record<string, ReviewEdit[]>
   docPathToId: Record<string, string>
   summary: {
     total: number
+    edits?: number
     byCategory: Record<string, number>
     bySeverity: Record<string, number>
   }
