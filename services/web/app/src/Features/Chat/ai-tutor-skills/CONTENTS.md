@@ -75,6 +75,9 @@ Each file is assigned to one or more **static reviewer subagents** that review t
 | `limitations.md` | `conclusion` | TEXT | *Placeholder* |
 | `ethical_considerations.md` | `conclusion` | TEXT | ACL Ethics FAQ guidelines, ethics review process |
 | `faq_appendix.md` | `appendix` | TEXT | Why include a FAQ, anticipate reviewer questions |
+| `sentence_placement.md` | `sentence_placement` | TEXT | What each section and paragraph slot is for; how to use prototype papers to decide where a sentence belongs |
+
+`prototype_papers/` holds plain-text extractions of selected `example_papers/` PDFs, one per paper type. The `sentence_placement` agent compares against them when the user uploads no role model papers (mapping in `BUNDLED_PROTOTYPES`, `AiTutorSentencePlacement.mjs`).
 
 ---
 

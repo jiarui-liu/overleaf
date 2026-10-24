@@ -524,7 +524,9 @@ export default function AiTutorPanel() {
               style={{ fontSize: '11px', color: 'var(--content-secondary-themed)', margin: '6px 0 0 0' }}
             >
               Upload exemplary papers to compare structure and writing style (not
-              content).
+              content). They also guide suggestions on which section each
+              sentence belongs in; without uploads, a built-in example paper
+              for your paper type is used.
             </p>
           </div>
           {isExtracting && (
@@ -747,6 +749,15 @@ export default function AiTutorPanel() {
                       <p style={{ margin: '0 0 4px 0' }}>
                         <strong>Role models:</strong>{' '}
                         {reviewResult.roleModelPapers.join(', ')}
+                      </p>
+                    )}
+                  {reviewResult.placementPrototypes &&
+                    reviewResult.placementPrototypes.papers.length > 0 && (
+                      <p style={{ margin: '0 0 4px 0' }}>
+                        <strong>Sentence placement compared against:</strong>{' '}
+                        {reviewResult.placementPrototypes.papers.join(', ')}
+                        {reviewResult.placementPrototypes.source === 'bundled' &&
+                          ' (built-in example)'}
                       </p>
                     )}
                   <p style={{ margin: '0 0 4px 0' }}>

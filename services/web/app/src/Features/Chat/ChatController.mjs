@@ -780,6 +780,7 @@ async function reviewWholeProject(req, res) {
         model,
         venue,
         roleModelPapers: roleModelTexts.length > 0 ? roleModelTexts.map(rm => rm.name) : undefined,
+        placementPrototypes: result.placementPrototypes,
         paperType: result.classification.paperType,
         paperTypeSummary: result.classification.paperTypeSummary,
         summary: result.summary,
@@ -791,6 +792,7 @@ async function reviewWholeProject(req, res) {
           category: c.category,
           agentName: c.agentName,
           docPath: c.docPath,
+          placement: c.placement,
         })),
       }
       fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n')

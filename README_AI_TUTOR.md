@@ -93,9 +93,10 @@ The core review engine with 4 phases:
 **Phase 2 — Parallel Reviewer Subagents**
 - 11 static agents defined in `SUBAGENT_DEFS`:
   - Abstract Reviewer, Introduction Reviewer, Related Work Reviewer, Methods Reviewer, Results Reviewer, Conclusion & Supplements Reviewer, Appendix Reviewer, Writing Style Reviewer, LaTeX & Formatting Reviewer, Figures & Captions Reviewer, Structure & Narrative Reviewer
-- Up to 2 dynamic agents added at runtime:
+- Up to 3 dynamic agents added at runtime:
   - Paper Type Reviewer — loaded if a matching `03_paper_types/{type}_paper.md` skill file exists
   - Venue Reviewer — loaded if venue is not `arxiv` and a matching `02_venues/{venue}.md` file exists
+  - Sentence Placement Reviewer — always added (disable with `AI_TUTOR_DISABLED_AGENTS=sentence_placement`); see below
 - Each agent receives:
   - A system prompt with its skill file content, type-specific guidance, and role model paper injection (if provided)
   - Review text: either specific sections (for section-focused agents), full document (for style/formatting/venue agents), figure/table environments (for figures agent), or a structural skeleton (for structure agent)
@@ -111,6 +112,19 @@ The core review engine with 4 phases:
   2. Fuzzy match (Dice coefficient >= 0.85) in the expected file
   3. Fuzzy fallback across all project documents
 - Prefixes all comments with `[AI Tutor] [severity] [agent name]`
+
+### Sentence Placement Reviewer (`AiTutorSentencePlacement.mjs`)
+
+Suggests moving individual sentences to the section and paragraph where a prototype paper puts a sentence with the same rhetorical role. A comment on the sentence reads like:
+
+> Move to the start of the first paragraph of "Results > Main Results". The number means little before the setup is explained. Prototype: "A-Mem: Agentic Memory for LLM Agents" puts this kind of sentence (headline quantitative finding) in Results, first paragraph: "…"
+
+- **Prototypes**: the uploaded role model papers. With no uploads, the bundled prototype for the classified paper type is used (`ai-tutor-skills/prototype_papers/*.txt`, text pre-extracted from `example_papers/`; mapping in `BUNDLED_PROTOTYPES`).
+- **Input**: the manuscript as sections (subsections labelled `Parent > Child`) and numbered paragraphs, with figures, tables, equations, headers and `%` comments masked out. Skill file: `04_paper_sections/sentence_placement.md`.
+- **Output schema**: target section and prototype are enums built per run, so the model can only name sections that exist and prototypes it was given.
+- **Validation** drops a move when the sentence isn't in the manuscript, the target paragraph doesn't exist, the move stays in the same paragraph, or the prototype quote can't be found in the prototype text (Dice ≥ 0.8, to tolerate PDF extraction noise).
+- Up to 8 moves, 180s timeout. Each comment also carries a structured `placement` field (`from`, `to`, `prototype`) that is saved in the JSONL log. The response's `placementPrototypes` says which prototypes were used.
+- Unit tests (no API calls): `node app/src/Features/Chat/test_sentence_placement.mjs`.
 
 ### Key Helper Functions
 
