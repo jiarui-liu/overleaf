@@ -794,6 +794,11 @@ async function reviewWholeProject(req, res) {
           docPath: c.docPath,
           placement: c.placement,
         })),
+        edits: Object.values(result.editsByDoc || {}).flat().map(e => ({
+          docPath: e.docPath,
+          description: e.description,
+          newText: e.newText,
+        })),
       }
       fs.appendFileSync(logFile, JSON.stringify(logEntry) + '\n')
     } catch (logErr) {

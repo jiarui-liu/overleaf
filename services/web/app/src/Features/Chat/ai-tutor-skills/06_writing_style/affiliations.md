@@ -6,9 +6,9 @@ This skill provides the official affiliation rules for Jinesis Lab papers. Use i
 
 Author affiliations appear in the LaTeX **preamble** (before `\begin{document}`), typically inside `\author{}`, `\affil{}`, `\institute{}`, or `\affiliations{}` commands. **You MUST inspect this part of the document** when reviewing for affiliation compliance.
 
-## Common Violations to Flag
+## Common Violations to Correct
 
-Flag any of the following as a **[warning]** comment, highlighting the offending `\affil` or `\author` line:
+Correct any of the following directly in the offending `\affil` or `\author` line:
 
 1. **"Jinesis AI Lab"** or any variant containing "AI" (e.g., "JAIL", "Jinesis AI", "Jinesis Artificial Intelligence Lab") — the correct name is **"Jinesis Lab"** without "AI".
 2. **"MPI for Intelligent Systems"** used when space is not constrained — the full form "Max Planck Institute for Intelligent Systems, Tübingen, Germany" should be preferred.

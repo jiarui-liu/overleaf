@@ -12,6 +12,7 @@ import {
   WholeProjectMetadata,
   ReviewResult,
   ReviewComment,
+  ReviewEdit,
 } from '@/features/editor-left-menu/utils/ai-tutor-service'
 import { ThreadId } from '../../../../../../types/review-panel/review-panel'
 import { CommentOperation } from '../../../../../../types/change'
@@ -46,10 +47,31 @@ const VENUE_OPTIONS = [
 ]
 
 interface CommentQueue {
-  entries: Array<{ docPath: string; docId: string; comments: ReviewComment[] }>
+  entries: Array<{
+    docPath: string
+    docId: string
+    comments: ReviewComment[]
+    edits: ReviewEdit[]
+  }>
   currentIndex: number
   totalApplied: number
   totalSkipped: number
+  totalEditsApplied: number
+  totalEditsSkipped: number
+}
+
+// Find where an edit applies in the current text: the occurrence of its
+// oldText (or, for insertions, its anchorText) nearest the server-side offset.
+function locateEdit(text: string, edit: ReviewEdit): number {
+  const needle = edit.oldText || edit.anchorText
+  if (!needle) return text.length // insertion at end of document
+  let best = -1
+  for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + 1)) {
+    if (best === -1 || Math.abs(i - edit.offset) < Math.abs(best - edit.offset)) {
+      best = i
+    }
+  }
+  return best
 }
 
 export default function AiTutorPanel() {
@@ -115,6 +137,48 @@ export default function AiTutorPanel() {
     const applyBatch = async () => {
       let applied = 0
       let skipped = 0
+      let editsApplied = 0
+      let editsSkipped = 0
+
+      // Direct edits go through the CodeMirror view so they sync over OT like
+      // any typed change. The editor may attach slightly after the doc loads.
+      if (entry.edits.length > 0) {
+        for (let waited = 0; !currentDocument.cm6 && waited < 5000; waited += 100) {
+          await new Promise(resolve => window.setTimeout(resolve, 100))
+        }
+        const cm6 = currentDocument.cm6
+        // Apply bottom-up so earlier offsets stay valid
+        const sortedEdits = [...entry.edits].sort((a, b) => b.offset - a.offset)
+        for (const edit of sortedEdits) {
+          const text = cm6?.getValue()
+          if (!cm6 || text === undefined) {
+            editsSkipped++
+            continue
+          }
+          // Skip insertions that are already present (e.g. Apply clicked twice)
+          if (!edit.oldText && text.includes(edit.newText.trim())) {
+            editsSkipped++
+            continue
+          }
+          const pos = locateEdit(text, edit)
+          // Also skip replacements already in place, e.g. when newText extends oldText
+          if (pos === -1 || (edit.oldText && text.startsWith(edit.newText, pos))) {
+            editsSkipped++
+            continue
+          }
+          try {
+            cm6.cmChange({
+              from: pos,
+              to: pos + edit.oldText.length,
+              insert: edit.newText,
+            })
+            editsApplied++
+          } catch (err) {
+            console.warn('[AI Tutor] Failed to apply edit:', err)
+            editsSkipped++
+          }
+        }
+      }
 
       for (const comment of entry.comments) {
         // Re-fetch snapshot for each comment to account for position shifts
@@ -160,6 +224,8 @@ export default function AiTutorPanel() {
 
       queue.totalApplied += applied
       queue.totalSkipped += skipped
+      queue.totalEditsApplied += editsApplied
+      queue.totalEditsSkipped += editsSkipped
       queue.currentIndex++
 
       // Process next document or finish
@@ -177,9 +243,16 @@ export default function AiTutorPanel() {
         setAppliedCount(queue.totalApplied)
         setApplyProgress(null)
         setSuccessMessage(
-          `Applied ${queue.totalApplied} comment(s) across ${filesProcessed} file(s).` +
+          `Applied ${queue.totalApplied} comment(s)` +
+          (queue.totalEditsApplied > 0
+            ? ` and ${queue.totalEditsApplied} edit(s)`
+            : '') +
+          ` across ${filesProcessed} file(s).` +
           (queue.totalSkipped > 0
             ? ` ${queue.totalSkipped} comment(s) could not be matched.`
+            : '') +
+          (queue.totalEditsSkipped > 0
+            ? ` ${queue.totalEditsSkipped} edit(s) were skipped (text changed or already applied).`
             : '')
         )
         commentQueueRef.current = null
@@ -361,12 +434,19 @@ export default function AiTutorPanel() {
 
     const docPathToId = reviewResult.docPathToId || {}
 
-    // Build a queue of (docPath, docId, comments) entries
+    // Build a queue of (docPath, docId, comments, edits) entries
+    const editsByDoc = reviewResult.editsByDoc || {}
+    const docPaths = new Set([
+      ...Object.keys(reviewResult.commentsByDoc),
+      ...Object.keys(editsByDoc),
+    ])
     const entries: CommentQueue['entries'] = []
-    for (const [docPath, comments] of Object.entries(reviewResult.commentsByDoc)) {
+    for (const docPath of docPaths) {
       const docId = docPathToId[docPath]
-      if (docId && (comments as ReviewComment[]).length > 0) {
-        entries.push({ docPath, docId, comments: comments as ReviewComment[] })
+      const comments = reviewResult.commentsByDoc[docPath] || []
+      const edits = editsByDoc[docPath] || []
+      if (docId && (comments.length > 0 || edits.length > 0)) {
+        entries.push({ docPath, docId, comments, edits })
       }
     }
 
@@ -381,6 +461,8 @@ export default function AiTutorPanel() {
       currentIndex: 0,
       totalApplied: 0,
       totalSkipped: 0,
+      totalEditsApplied: 0,
+      totalEditsSkipped: 0,
     }
 
     setIsApplying(true)
@@ -701,7 +783,11 @@ export default function AiTutorPanel() {
               >
                 {isApplying
                   ? 'Applying comments...'
-                  : `Apply ${reviewResult.summary.total} Comments to All Files`}
+                  : `Apply ${reviewResult.summary.total} Comments` +
+                    (reviewResult.summary.edits
+                      ? ` and ${reviewResult.summary.edits} Edits`
+                      : '') +
+                    ' to All Files'}
               </OLButton>
               {applyProgress && (
                 <div
@@ -811,6 +897,28 @@ export default function AiTutorPanel() {
                       )
                     )}
                   </ul>
+                  {reviewResult.editsByDoc &&
+                    Object.keys(reviewResult.editsByDoc).length > 0 && (
+                      <>
+                        <p style={{ margin: '0 0 4px 0' }}>
+                          <strong>Direct edits:</strong>
+                        </p>
+                        <ul
+                          style={{
+                            margin: '2px 0 6px 0',
+                            paddingLeft: '18px',
+                          }}
+                        >
+                          {Object.values(reviewResult.editsByDoc)
+                            .flat()
+                            .map((edit, i) => (
+                              <li key={`${edit.docPath}-${i}`}>
+                                {edit.docPath}: {edit.description}
+                              </li>
+                            ))}
+                        </ul>
+                      </>
+                    )}
                   {reviewResult.failedAgents.length > 0 && (
                     <>
                       <p
