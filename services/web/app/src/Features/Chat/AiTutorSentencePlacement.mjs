@@ -7,7 +7,9 @@
  * as in <prototype>").
  *
  * Prototypes are the role model papers the user uploaded. Without uploads, the
- * bundled example paper for the classified paper type is used.
+ * bundled example paper for the classified paper type is used. A move can also
+ * rest on one of the fixed SECTION_RULES (e.g. setup details belong in the
+ * Experimental Setup section), which apply whatever the prototype does.
  *
  * Runs as one of the Phase 3 agents and returns the same result shape as
  * runSubagent(), so dedup, pruning and position mapping apply unchanged.
@@ -18,6 +20,7 @@ import { z } from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { describeExperimentLayout, SETUP_SECTION_NAME } from './AiTutorSectionStructure.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PROTOTYPE_DIR = path.join(__dirname, 'ai-tutor-skills', 'prototype_papers')
@@ -57,6 +60,24 @@ export const BUNDLED_PROTOTYPES = {
     { file: '2310.13544_clearly_structured.txt', name: 'A Diachronic Perspective on User Trust in AI under Uncertainty' },
   ],
 }
+
+// Section rules enforced regardless of the prototypes. A move based on a rule
+// needs no prototype excerpt.
+export const SECTION_RULES = {
+  setup_in_setup_section:
+    `Experimental setup (datasets, models, baselines, metrics, hyperparameters, prompts, ` +
+    `implementation and compute details) belongs in the ${SETUP_SECTION_NAME} section, ` +
+    'not in the Experiments / Results section.',
+  results_open_with_findings:
+    'The Experiments / Results section opens directly with a summary of the key findings, ' +
+    'followed by the results; no setup or method recap comes before them.',
+}
+const NO_RULE = 'none'
+const NO_PROTOTYPE = 'none'
+
+// Target label offered when the paper has results but no setup section, so
+// setup sentences have somewhere to go.
+export const NEW_SETUP_TARGET = `NEW SECTION: ${SETUP_SECTION_NAME}`
 
 const bundledTextCache = new Map()
 
@@ -136,7 +157,7 @@ function maskNonProse(text)
  * \subsection, as in parseSections(). Subsections are labelled
  * "Parent > Child" so the model can tell "Results > RQ1" from "Methods > RQ1".
  *
- * Returns [{ label, isAppendix, start, end, paragraphs: [{ index, start, end, text }] }]
+ * Returns [{ label, title, level, isAppendix, start, end, paragraphs: [{ index, start, end, text }] }]
  * with offsets into mergedTex. Sections with no prose of their own (a
  * \section that only introduces subsections) keep an empty paragraphs list.
  */
@@ -186,6 +207,8 @@ export function buildParagraphMap(sections, mergedTex)
 
     map.push({
       label,
+      title: s.title,
+      level: s.level,
       isAppendix: !!s.isAppendix,
       start: s.charStart,
       end: s.charEnd,
@@ -249,6 +272,7 @@ const PLACEMENTS = [
  */
 export function buildPlacementSchema(targetLabels, prototypeNames)
 {
+  const ruleIds = [...Object.keys(SECTION_RULES), NO_RULE]
   return z.object({
     moves: z.array(
       z.object({
@@ -265,13 +289,21 @@ export function buildPlacementSchema(targetLabels, prototypeNames)
           .number()
           .describe('1-based paragraph number within targetSection, as in the [Section ¶n] markers.'),
         placement: z.enum(PLACEMENTS).describe('Where relative to targetParagraph the sentence should go.'),
-        prototypePaper: z.enum(prototypeNames).describe('Prototype paper that places a sentence with this role there.'),
+        basis: z
+          .enum(['prototype', 'section_rule'])
+          .describe('Whether the move rests on a prototype paper or on one of the section rules.'),
+        sectionRule: z
+          .enum(ruleIds)
+          .describe(`The section rule the move enforces, or "${NO_RULE}" when basis is "prototype".`),
+        prototypePaper: z
+          .enum([...prototypeNames, NO_PROTOTYPE])
+          .describe(`Prototype paper that places a sentence with this role there, or "${NO_PROTOTYPE}".`),
         prototypeLocation: z
           .string()
-          .describe('Where the prototype places it, e.g. "Results, first paragraph".'),
+          .describe('Where the prototype places it, e.g. "Results, first paragraph". Empty if no prototype.'),
         prototypeQuote: z
           .string()
-          .describe('A VERBATIM excerpt (under 200 chars) from the prototype showing a sentence with the same role at that location.'),
+          .describe('A VERBATIM excerpt (under 200 chars) from the prototype showing a sentence with the same role at that location. Empty if no prototype.'),
         rationale: z
           .string()
           .describe('One or two sentences on why the move helps the reader.'),
@@ -302,15 +334,30 @@ export function describeTarget(targetSection, targetParagraph, placement, paragr
   }
 }
 
+/**
+ * `move.newSectionBefore` is set (by validateMoves) when the target is
+ * NEW_SETUP_TARGET; it names the section the new one should precede.
+ * `move.hasPrototype` says whether the prototype evidence checked out.
+ */
 export function renderPlacementComment(move, paragraphCount)
 {
-  const target = describeTarget(move.targetSection, move.targetParagraph, move.placement, paragraphCount)
-  const quote = move.prototypeQuote.replace(/\s+/g, ' ').trim()
-  return (
-    `Move to ${target}. ${move.rationale.trim()} ` +
-    `Prototype: "${move.prototypePaper}" puts this kind of sentence (${move.sentenceRole.trim()}) in ` +
-    `${move.prototypeLocation.trim()}: "${quote}"`
-  )
+  const target = move.newSectionBefore
+    ? `a new "${SETUP_SECTION_NAME}" section placed before "${move.newSectionBefore}"`
+    : describeTarget(move.targetSection, move.targetParagraph, move.placement, paragraphCount)
+  const parts = [`Move to ${target}.`, move.rationale.trim()]
+  if (move.sectionRule && move.sectionRule !== NO_RULE)
+  {
+    parts.push(`Rule: ${SECTION_RULES[move.sectionRule]}`)
+  }
+  if (move.hasPrototype)
+  {
+    const quote = move.prototypeQuote.replace(/\s+/g, ' ').trim()
+    parts.push(
+      `Prototype: "${move.prototypePaper}" puts this kind of sentence (${move.sentenceRole.trim()}) in ` +
+      `${move.prototypeLocation.trim()}: "${quote}"`
+    )
+  }
+  return parts.join(' ')
 }
 
 // ---------------------------------------------------------------------------
@@ -323,10 +370,14 @@ export function renderPlacementComment(move, paragraphCount)
  *     and sits in a prose paragraph
  *   - the target paragraph exists
  *   - the move actually changes where the sentence is
- *   - the prototype quote is found in the named prototype's text
- * Returns { kept: [{ ...move, sentence, from }], dropped: [{ move, reason }] }.
+ *   - it rests on a real section rule, or on a prototype whose quote is found
+ *     in that prototype's text (a rule-based move keeps a prototype citation
+ *     only if its quote checks out)
+ * `newSetupBefore` is the section label a NEW_SETUP_TARGET move goes before,
+ * or null when the paper already has a setup section.
+ * Returns { kept: [{ ...move, sentence, from, hasPrototype, newSectionBefore }], dropped: [{ move, reason }] }.
  */
-export function validateMoves(moves, { mergedTex, paragraphMap, prototypes, fuzzyFindInText, repairJsonEscapedLatex })
+export function validateMoves(moves, { mergedTex, paragraphMap, prototypes, fuzzyFindInText, repairJsonEscapedLatex, newSetupBefore = null })
 {
   const byLabel = new Map(paragraphMap.map(s => [s.label, s]))
   const byPrototype = new Map(prototypes.map(p => [p.name, p.text]))
@@ -370,8 +421,21 @@ export function validateMoves(moves, { mergedTex, paragraphMap, prototypes, fuzz
       continue
     }
 
+    let newSectionBefore = null
+    if (move.targetSection === NEW_SETUP_TARGET)
+    {
+      if (!newSetupBefore)
+      {
+        dropped.push({ move, reason: 'paper already has a setup section' })
+        continue
+      }
+      newSectionBefore = newSetupBefore
+    }
     const target = byLabel.get(move.targetSection)
-    if (
+    if (newSectionBefore)
+    {
+      // Paragraph and placement don't apply to a section that doesn't exist yet.
+    } else if (
       !target ||
       !Number.isInteger(move.targetParagraph) ||
       move.targetParagraph < 1 ||
@@ -390,14 +454,27 @@ export function validateMoves(moves, { mergedTex, paragraphMap, prototypes, fuzz
     }
 
     const prototypeText = byPrototype.get(move.prototypePaper)
-    if (!prototypeText || !fuzzyFindInText(move.prototypeQuote, prototypeText, PROTOTYPE_QUOTE_THRESHOLD))
+    const hasPrototype =
+      !!prototypeText && !!fuzzyFindInText(move.prototypeQuote, prototypeText, PROTOTYPE_QUOTE_THRESHOLD)
+    const hasRule = Object.hasOwn(SECTION_RULES, move.sectionRule)
+    if (move.basis === 'section_rule' ? !hasRule : !hasPrototype)
     {
-      dropped.push({ move, reason: 'prototype quote not found in prototype text' })
+      dropped.push({
+        move,
+        reason: move.basis === 'section_rule' ? 'unknown section rule' : 'prototype quote not found in prototype text',
+      })
       continue
     }
 
     seenSentences.add(pos)
-    kept.push({ ...move, sentence, from, paragraphCount: target.paragraphs.length })
+    kept.push({
+      ...move,
+      sentence,
+      from,
+      hasPrototype,
+      newSectionBefore,
+      paragraphCount: target ? target.paragraphs.length : 0,
+    })
   }
   return { kept, dropped }
 }
@@ -429,6 +506,9 @@ export async function runSentencePlacementAgent(
 
   const paragraphMap = buildParagraphMap(sections, mergedTex)
   const targetLabels = paragraphMap.filter(s => s.paragraphs.length > 0).map(s => s.label)
+  const layout = describeExperimentLayout(paragraphMap)
+  const newSetupBefore =
+    !layout.hasSetup && layout.firstResultsWithProse ? layout.firstResultsWithProse.label : null
   const paragraphCount = paragraphMap.reduce((n, s) => n + s.paragraphs.length, 0)
   if (targetLabels.length < 2)
   {
@@ -446,9 +526,17 @@ export async function runSentencePlacementAgent(
   )
 
   const schema = buildPlacementSchema(
-    targetLabels,
+    newSetupBefore ? [...targetLabels, NEW_SETUP_TARGET] : targetLabels,
     prototypes.papers.map(p => p.name)
   )
+  const layoutFacts = [
+    `- Experimental setup section(s): ${layout.hasSetup ? layout.setup.map(s => `"${s.label}"`).join(', ') : 'NONE'}`,
+    `- Experiments / results section(s): ${layout.results.length ? layout.results.map(s => `"${s.label}"`).join(', ') : 'none detected'}`,
+    newSetupBefore
+      ? `- The paper has no setup section. To move setup sentences out of the results, use targetSection "${NEW_SETUP_TARGET}" (it will be placed before "${newSetupBefore}").`
+      : null,
+    layout.setupAfterResults ? '- The setup section currently comes AFTER the first results.' : null,
+  ].filter(Boolean).join('\n')
 
   const prototypeBlock = prototypes.papers
     .map((p, i) => `### Prototype ${i + 1}: "${p.name}"\n${p.text}`)
@@ -466,13 +554,23 @@ For each suggested move:
 1. Copy the sentence VERBATIM from the manuscript (one complete sentence; never include the [Section ¶n] markers).
 2. Name its rhetorical role.
 3. Pick the target: a section of the manuscript (targetSection) and a paragraph number within it (targetParagraph, as shown in the [Section ¶n] markers), plus where relative to that paragraph it should go.
-4. Cite the prototype: which prototype, where it places a sentence with the same role (section + which paragraph), and a VERBATIM excerpt under 200 characters from the prototype text showing it. The excerpt is checked against the prototype text; a move with an invented excerpt is discarded.
+4. Give the basis:
+   - basis "section_rule": the move enforces one of the SECTION RULES below; name it in sectionRule.
+   - basis "prototype": cite which prototype, where it places a sentence with the same role (section + which paragraph), and a VERBATIM excerpt under 200 characters from the prototype text. The excerpt is checked against the prototype text; a prototype-based move with an invented excerpt is discarded.
+   A rule-based move may also cite a prototype that does the same; set prototypePaper to "${NO_PROTOTYPE}" and leave the location and excerpt empty otherwise.
 5. Explain in one or two sentences why the move helps the reader.
+
+SECTION RULES (mandatory, apply whatever the prototypes do):
+${Object.entries(SECTION_RULES).map(([id, text]) => `- ${id}: ${text}`).join('\n')}
+Check every paragraph of the Experiments / Results sections against these rules first. A description of which dataset, model, baseline, metric or hyperparameter is used is setup and must move to the setup section. The only setup allowed in a results paragraph is a clause saying what a figure or table reports. The first paragraph of the results should be the summary of findings: if a findings summary sits later, move it to the start.
+
+Experiments layout of this manuscript (detected from section titles):
+${layoutFacts}
 
 Rules:
 - Compare STRUCTURE, not content. The prototypes are on different topics; never suggest adding their content.
 - Only suggest a move when the sentence clearly belongs to a different slot and the prototype supports it. Most sentences are fine where they are. Return fewer moves, or none, rather than weak ones.
-- Suggest at most ${MAX_MOVES} moves. Prefer moves across sections; within-section moves only when the paragraph slot clearly matters (e.g. the headline finding should open the Results).
+- Suggest at most ${MAX_MOVES} moves. Section-rule violations come first. Prefer moves across sections; within-section moves only when the paragraph slot clearly matters (e.g. the headline finding should open the Results).
 - Do not move section headers, captions, equations, or citations-only fragments.
 - ${severityRule}
 
@@ -505,6 +603,7 @@ ${renderParagraphMap(paragraphMap)}`
   const { kept, dropped } = validateMoves(rawMoves, {
     mergedTex,
     paragraphMap,
+    newSetupBefore,
     prototypes: prototypes.papers,
     fuzzyFindInText: deps.fuzzyFindInText,
     repairJsonEscapedLatex: deps.repairJsonEscapedLatex,
@@ -528,8 +627,13 @@ ${renderParagraphMap(paragraphMap)}`
       agentName: AGENT_NAME,
       placement: {
         from: { section: m.from.label, paragraph: m.from.paragraphIndex },
-        to: { section: m.targetSection, paragraph: m.targetParagraph, placement: m.placement },
-        prototype: { name: m.prototypePaper, location: m.prototypeLocation, quote: m.prototypeQuote },
+        to: m.newSectionBefore
+          ? { section: NEW_SETUP_TARGET, before: m.newSectionBefore }
+          : { section: m.targetSection, paragraph: m.targetParagraph, placement: m.placement },
+        rule: m.sectionRule !== NO_RULE ? m.sectionRule : undefined,
+        prototype: m.hasPrototype
+          ? { name: m.prototypePaper, location: m.prototypeLocation, quote: m.prototypeQuote }
+          : undefined,
       },
     })),
     skipped: false,
