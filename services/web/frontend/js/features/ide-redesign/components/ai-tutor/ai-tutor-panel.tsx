@@ -9,6 +9,10 @@ import {
   runFullReview,
   runCitationCheck,
   deleteAiTutorComments,
+  recordAppliedThreads,
+  shouldApply,
+  formatRevisionLine,
+  AppliedThread,
   WholeProjectMetadata,
   ReviewResult,
   ReviewComment,
@@ -56,6 +60,7 @@ interface CommentQueue {
   currentIndex: number
   totalApplied: number
   totalSkipped: number
+  recordThreads: boolean
   totalEditsApplied: number
   totalEditsSkipped: number
 }
@@ -137,6 +142,7 @@ export default function AiTutorPanel() {
     const applyBatch = async () => {
       let applied = 0
       let skipped = 0
+      const created: AppliedThread[] = []
       let editsApplied = 0
       let editsSkipped = 0
 
@@ -215,11 +221,25 @@ export default function AiTutorPanel() {
             t: threadId,
           }
           currentDocument.submitOp(op)
+          created.push({
+            threadId,
+            comment: comment.comment,
+            highlightText: comment.highlightText,
+            docPath: entry.docPath,
+            agentName: comment.agentName,
+            severity: comment.severity,
+          })
           applied++
         } catch (err) {
           console.warn('[AI Tutor] Failed to apply comment:', err)
           skipped++
         }
+      }
+
+      if (queue.recordThreads && created.length > 0) {
+        await recordAppliedThreads(projectId, created).catch(err =>
+          console.warn('[AI Tutor] Failed to record applied threads:', err)
+        )
       }
 
       queue.totalApplied += applied
@@ -357,7 +377,10 @@ export default function AiTutorPanel() {
           : ''
       setSuccessMessage(
         `Review complete! ${r.summary.total} comments from ${Object.keys(r.summary.byCategory).length} reviewers.` +
-        ` Paper type: ${r.classification.paperType}.${failedNote}`
+        ` Paper type: ${r.classification.paperType}.${failedNote}` +
+        (r.summary.revision
+          ? ` ${formatRevisionLine(r.summary.revision)}.`
+          : '')
       )
     } catch (err) {
       console.error('[AI Tutor] Full review error:', err)
@@ -443,7 +466,10 @@ export default function AiTutorPanel() {
     const entries: CommentQueue['entries'] = []
     for (const docPath of docPaths) {
       const docId = docPathToId[docPath]
-      const comments = reviewResult.commentsByDoc[docPath] || []
+      // Only comments not already posted as open/resolved threads
+      const comments = (reviewResult.commentsByDoc[docPath] || []).filter(
+        shouldApply
+      )
       const edits = editsByDoc[docPath] || []
       if (docId && (comments.length > 0 || edits.length > 0)) {
         entries.push({ docPath, docId, comments, edits })
@@ -461,6 +487,7 @@ export default function AiTutorPanel() {
       currentIndex: 0,
       totalApplied: 0,
       totalSkipped: 0,
+      recordThreads: Boolean(reviewResult.summary.revision),
       totalEditsApplied: 0,
       totalEditsSkipped: 0,
     }
@@ -514,6 +541,16 @@ export default function AiTutorPanel() {
   // Helper to extract metadata from review result
   const projectMetadata: WholeProjectMetadata | undefined =
     reviewResult?.metadata
+
+  const applicableCount = reviewResult
+    ? Object.entries(reviewResult.commentsByDoc).reduce(
+        (n, [docPath, comments]) =>
+          reviewResult.docPathToId?.[docPath]
+            ? n + comments.filter(shouldApply).length
+            : n,
+        0
+      )
+    : 0
 
   return (
     <div className="ai-tutor-panel" style={{ color: 'var(--content-primary-themed)' }}>
@@ -783,12 +820,17 @@ export default function AiTutorPanel() {
               >
                 {isApplying
                   ? 'Applying comments...'
-                  : `Apply ${reviewResult.summary.total} Comments` +
+                  : `Apply ${applicableCount} Comments` +
                     (reviewResult.summary.edits
                       ? ` and ${reviewResult.summary.edits} Edits`
                       : '') +
                     ' to All Files'}
               </OLButton>
+              {reviewResult.summary.revision && (
+                <p style={{ fontSize: '12px', margin: '0 0 6px 0' }}>
+                  {formatRevisionLine(reviewResult.summary.revision)}
+                </p>
+              )}
               {applyProgress && (
                 <div
                   style={{

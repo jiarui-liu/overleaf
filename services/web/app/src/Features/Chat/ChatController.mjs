@@ -12,6 +12,14 @@ import DocumentHelper from '../Documents/DocumentHelper.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
 import { runFullReview } from './AiTutorReviewOrchestrator.mjs'
+import {
+  AI_TUTOR_THREAD_RE,
+  buildPriorThreads,
+  readAppliedThreads,
+  mergeAppliedThreads,
+  clearAppliedThreads,
+  validateAppliedThreads,
+} from './AiTutorRevisionMatcher.mjs'
 import { verifyCitations } from './CitationVerifier.mjs'
 
 async function sendMessage(req, res) {
@@ -742,7 +750,14 @@ async function reviewWholeProject(req, res) {
   }
 
   // Step 2: Run multi-agent review
+    // A getThreads failure fails the review: a silent [] would repost duplicates.
+    const existingThreads = await ChatApiHandler.promises.getThreads(projectId)
+    const priorThreads = buildPriorThreads(existingThreads, readAppliedThreads(cacheDir))
+    const priorCounts = {}
+    for (const t of priorThreads) priorCounts[t.status] = (priorCounts[t.status] || 0) + 1
+    console.log(`[AI Tutor] Prior threads for project ${projectId}: ${JSON.stringify(priorCounts)}`)
     const result = await runFullReview({
+      priorThreads,
       projectId,
       model,
       venue,
@@ -793,6 +808,7 @@ async function reviewWholeProject(req, res) {
           agentName: c.agentName,
           docPath: c.docPath,
           placement: c.placement,
+          revisionLabel: c.revisionLabel,
         })),
         edits: Object.values(result.editsByDoc || {}).flat().map(e => ({
           docPath: e.docPath,
@@ -922,18 +938,19 @@ async function deleteAiTutorComments(req, res) {
     const threads = await ChatApiHandler.promises.getThreads(projectId)
 
     // 2. Find threads whose first message starts with [AI Tutor] or [critical]/[warning]/[suggestion]
-    const aiTutorRe = /^\[(AI Tutor|critical|warning|suggestion)\]/
     const aiTutorThreadIds = []
     for (const [threadId, thread] of Object.entries(threads)) {
       if (thread.messages && thread.messages.length > 0) {
         const firstMsg = thread.messages[0].content || ''
-        if (aiTutorRe.test(firstMsg)) {
+        if (AI_TUTOR_THREAD_RE.test(firstMsg)) {
           aiTutorThreadIds.push(threadId)
         }
       }
     }
 
+    const appliedCacheDir = path.join('/var/lib/overleaf/ai-tutor-cache', projectId)
     if (aiTutorThreadIds.length === 0) {
+      clearAppliedThreads(appliedCacheDir)
       return res.json({ deleted: 0 })
     }
 
@@ -943,12 +960,28 @@ async function deleteAiTutorComments(req, res) {
       EditorRealTimeController.emitToRoom(projectId, 'delete-thread', threadId)
     }
 
+    clearAppliedThreads(appliedCacheDir)
     console.log(
       `[AI Tutor] Deleted ${aiTutorThreadIds.length} AI Tutor comment threads from project ${projectId}`
     )
     res.json({ deleted: aiTutorThreadIds.length })
   } catch (err) {
     console.error('[AI Tutor] Failed to delete comments:', err)
+    res.status(500).json({ error: err.message })
+  }
+}
+
+async function recordAiTutorAppliedThreads(req, res) {
+  const { project_id: projectId } = req.params
+  const threads = validateAppliedThreads(req.body)
+  if (!threads) {
+    return res.status(400).json({ error: 'Invalid threads payload' })
+  }
+  try {
+    mergeAppliedThreads(path.join('/var/lib/overleaf/ai-tutor-cache', projectId), threads)
+    res.sendStatus(204)
+  } catch (err) {
+    console.error('[AI Tutor] Failed to record applied threads:', err)
     res.status(500).json({ error: err.message })
   }
 }
@@ -970,4 +1003,5 @@ export default {
   reviewWholeProject: expressify(reviewWholeProject),
   citationCheckProject: expressify(citationCheckProject),
   deleteAiTutorComments: expressify(deleteAiTutorComments),
+  recordAiTutorAppliedThreads: expressify(recordAiTutorAppliedThreads),
 }

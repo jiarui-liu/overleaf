@@ -66,6 +66,17 @@ describe('ChatController', function () {
       default: ctx.Modules,
     }))
 
+    ctx.RevisionMatcher = {
+      ...(await vi.importActual(
+        '../../../../app/src/Features/Chat/AiTutorRevisionMatcher.mjs'
+      )),
+      mergeAppliedThreads: sinon.stub(),
+    }
+    vi.doMock(
+      '../../../../app/src/Features/Chat/AiTutorRevisionMatcher.mjs',
+      () => ctx.RevisionMatcher
+    )
+
     ctx.ChatController = (await import(MODULE_PATH)).default
     ctx.req = {
       params: {
@@ -76,6 +87,7 @@ describe('ChatController', function () {
       json: sinon.stub(),
       send: sinon.stub(),
       sendStatus: sinon.stub(),
+      status: sinon.stub().returnsThis(),
     }
   })
 
@@ -147,6 +159,44 @@ describe('ChatController', function () {
 
     it('should return the messages', function (ctx) {
       ctx.res.json.calledWith(ctx.messages).should.equal(true)
+    })
+  })
+
+  describe('recordAiTutorAppliedThreads', function () {
+    const entry = {
+      threadId: 'abc',
+      comment: '[Clarity] c',
+      highlightText: 'h',
+      docPath: 'main.tex',
+      agentName: 'Clarity',
+      severity: 'warning',
+    }
+    beforeEach(function (ctx) {
+      ctx.req.params.project_id = 'p1'
+    })
+
+    it('rejects a non-array payload', async function (ctx) {
+      ctx.req.body = { threads: 'nope' }
+      await ctx.ChatController.recordAiTutorAppliedThreads(ctx.req, ctx.res)
+      ctx.res.status.calledWith(400).should.equal(true)
+      ctx.RevisionMatcher.mergeAppliedThreads.called.should.equal(false)
+    })
+
+    it('rejects an entry with the wrong shape', async function (ctx) {
+      ctx.req.body = { threads: [{ ...entry, severity: 1 }] }
+      await ctx.ChatController.recordAiTutorAppliedThreads(ctx.req, ctx.res)
+      ctx.res.status.calledWith(400).should.equal(true)
+      ctx.RevisionMatcher.mergeAppliedThreads.called.should.equal(false)
+    })
+
+    it('merges a valid payload and responds 204', async function (ctx) {
+      ctx.req.body = { threads: [entry] }
+      await ctx.ChatController.recordAiTutorAppliedThreads(ctx.req, ctx.res)
+      ctx.RevisionMatcher.mergeAppliedThreads.calledOnce.should.equal(true)
+      ctx.RevisionMatcher.mergeAppliedThreads.firstCall.args[0].should.equal(
+        '/var/lib/overleaf/ai-tutor-cache/p1'
+      )
+      ctx.res.sendStatus.calledWith(204).should.equal(true)
     })
   })
 })

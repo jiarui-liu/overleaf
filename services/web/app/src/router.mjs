@@ -1114,6 +1114,14 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
       ChatController.deleteAiTutorComments
     )
 
+    // AI Tutor record threads the user applied (for re-review labels)
+    webRouter.post(
+      '/project/:project_id/ai-tutor-applied-threads',
+      AuthorizationMiddleware.blockRestrictedUserFromProject,
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      ChatController.recordAiTutorAppliedThreads
+    )
+
   }
 
   webRouter.post(
