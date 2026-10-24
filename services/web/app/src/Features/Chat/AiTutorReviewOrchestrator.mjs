@@ -2257,6 +2257,44 @@ function findUncommented(re, text, from = 0)
   return null
 }
 
+/**
+ * Within [from, to), find the first \fi, \else or \end{...} that closes a
+ * conditional or environment opened BEFORE `from` — e.g. the \fi of the lab
+ * template's \ifarxiv ... \fi around the acknowledgments. Conditionals and
+ * environments opened inside the range are tracked so their own closers are
+ * skipped. Returns that position, or `to` if there is none.
+ */
+function findEnclosingCloser(text, from, to)
+{
+  const tokenRe = /\\(begin|end)\s*\{([^}]+)\}|\\(fi|else)\b|\\(if[a-zA-Z@]*)/g
+  tokenRe.lastIndex = from
+  const envStack = []
+  let ifDepth = 0
+  let m
+  while ((m = tokenRe.exec(text)) !== null && m.index < to)
+  {
+    if (isInLatexComment(text, m.index)) continue
+    if (m[1] === 'begin') envStack.push(m[2])
+    else if (m[1] === 'end')
+    {
+      if (envStack[envStack.length - 1] !== m[2]) return m.index
+      envStack.pop()
+    }
+    else if (m[3] === 'fi')
+    {
+      if (ifDepth === 0) return m.index
+      ifDepth--
+    }
+    else if (m[3] === 'else')
+    {
+      if (ifDepth === 0) return m.index
+    }
+    // \iff (math) and \ifthenelse (ifthen package) are not TeX conditionals
+    else if (m[4] !== 'iff' && m[4] !== 'ifthenelse') ifDepth++
+  }
+  return to
+}
+
 /** TeX docs in merge order: root first, then every inlined file. */
 function texDocsInMergeOrder(mergedTex, docContentMap, rootDocPath)
 {
@@ -2308,7 +2346,7 @@ function findAcknowledgmentsSection(texDocs, docContentMap)
       )
       const bodyStart = heading.index + heading[0].length
       const boundary = findUncommented(boundaryRe, content, bodyStart)
-      let bodyEnd = boundary ? boundary.index : content.length
+      let bodyEnd = findEnclosingCloser(content, bodyStart, boundary ? boundary.index : content.length)
       // Keep the whitespace before the next block untouched
       while (bodyEnd > bodyStart && /\s/.test(content[bodyEnd - 1])) bodyEnd--
       return { docPath, bodyStart, bodyEnd, body: content.slice(bodyStart, bodyEnd), envName: null }
