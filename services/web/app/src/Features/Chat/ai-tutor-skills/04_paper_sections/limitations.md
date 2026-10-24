@@ -6,6 +6,28 @@
 
 A strong Limitations section builds trust. It shows that you have a deep understanding of your method, including where it breaks. Reviewers often appreciate honesty over overselling. If you don't state the limitations, reviewers will find them for you—and they will be less forgiving.
 
+## Scope Rule: Keep Main-Paper Content Out of Limitations
+
+ARR does not count the Limitations section toward the page limit, and papers that use it for content that belongs in the main paper can be desk-rejected ([ARR CFP](https://aclrollingreview.org/cfp)). The rule is ARR's, but the page-limit logic applies to every venue: reviewers read a Limitations section stuffed with results as dodging the limit.
+
+Put the content where it belongs: results go to Results, setup or method details go to Method, extra analysis goes to the Appendix.
+
+### Acceptable
+- Scope boundaries (English only, benchmark coverage)
+- Failure modes
+- Untested assumptions
+- Compute or scale limits
+- Pointers to future work
+- A brief mention of a result already in the main paper
+
+### Unacceptable
+- A results table
+- New accuracy or F1 numbers
+- An ablation
+- Hyperparameter or training details
+- A new analysis paragraph
+- A claim like "we additionally show"
+
 ## Types of Limitations
 
 ### 1. Scope Limitations (What we didn't do)
@@ -46,7 +68,8 @@ Your task is to critique and improve the following Limitations section:
 
 Here is the guidance for a good Limitations section:
 - **Honesty**: Does it clearly state where the method fails or is less effective?
-- **Scope**: Does it define the boundaries of the work (e.g., specific languages, datasets)?
+- **Boundaries**: Does it define the boundaries of the work (e.g., specific languages, datasets)?
+- **Scope**: Does the section hold only limitations? Flag results, tables, new numbers, setup details, extra analysis, or contribution claims that belong in Results, Method, or the Appendix.
 - **Constructiveness**: Does it frame limitations as opportunities for future work rather than just flaws?
 - **Specificity**: Are the limitations specific to this method, or generic (e.g., "more compute is better")?
 

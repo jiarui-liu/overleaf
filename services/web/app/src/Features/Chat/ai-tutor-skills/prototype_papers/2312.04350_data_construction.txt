@@ -1,0 +1,840 @@
+CLADDER: Assessing Causal Reasoning in
+Language Models
+Zhijing Jin1,2,∗
+, Yuen Chen1,∗
+, Felix Leeb1,∗
+, Luigi Gresele1,∗
+,
+Ojasv Kamal3
+, Zhiheng Lyu4
+, Kevin Blin2
+, Fernando Gonzalez2
+, Max Kleiman-Weiner5
+,
+Mrinmaya Sachan2
+, Bernhard Schölkopf1
+1MPI for Intelligent Systems, Tübingen 2ETH Zürich 3
+IIT Kharagpur
+4University of Hong Kong 5University of Washington
+jinzhi@ethz.ch chenyuen0103@berkeley.edu
+fleeb@tue.mpg.de luigi.gresele@tue.mpg.de
+Abstract
+The ability to perform causal reasoning is widely considered a core feature of in￾telligence. In this work, we investigate whether large language models (LLMs) can
+coherently reason about causality. Much of the existing work in natural language
+processing (NLP) focuses on evaluating commonsense causal reasoning in LLMs,
+thus failing to assess whether a model can perform causal inference in accordance
+with a set of well-defined formal rules. To address this, we propose a new NLP
+task, causal inference in natural language, inspired by the “causal inference engine”
+postulated by Judea Pearl et al. We compose a large dataset, CLADDER, with
+10K samples: based on a collection of causal graphs and queries (associational,
+interventional, and counterfactual), we obtain symbolic questions and ground-truth
+answers, through an oracle causal inference engine. These are then translated into
+natural language. We evaluate multiple LLMs on our dataset, and we introduce
+and evaluate a bespoke chain-of-thought prompting strategy, CAUSALCOT. We
+show that our task is highly challenging for LLMs, and we conduct an in-depth
+analysis to gain deeper insights into the causal reasoning abilities of LLMs.1
+1 Introduction
+Once we really understand the logic behind causal thinking, we could emulate it
+on modern computers and create an “artificial scientist”.
+— Pearl and Mackenzie [2018]
+Causal reasoning is believed to be one of the hallmarks of human intelligence [29, 68]. The ability to
+draw causal inferences from available information is crucial for scientific understanding and rational
+decision-making: for example, knowing whether smoking causes cancer might enable consumers
+to make a more informed decision [17, 18]; assessing the causal effect of a vaccine is essential for
+effective policy-making during a pandemic [14, 44, 72, 97]; and understanding the interplay behind
+family background, education and income helps devise effective education policies [10, 11, 30, 73].
+Our opening quote therefore mirrors the aspirations of many scientists in artificial intelligence
+and causal inference: to construct a machine capable of performing sound causal reasoning, and
+able to answer causal questions at scale and with ease. Recent advances in large language models
+(LLMs) have brought about a paradigm shift in natural language processing (NLP) and artificial
+intelligence [7, 15, 39, 56, 76, 103, inter alia]. These transformative developments raise the question
+of whether these machines are already capable of causal reasoning: Do LLMs understand causality?
+∗Main contributors.
+1Our data is open-sourced at https://huggingface.co/datasets/causalNLP/cladder, and our code
+can be found at https://github.com/causalNLP/cladder.
+37th Conference on Neural Information Processing Systems (NeurIPS 2023).
+arXiv:2312.04350v3 [cs.CL] 17 Jan 2024
+
+Correct steps to lead to the ground-truth answer:
+Question: Imagine a self-contained, hypothetical world with only the following conditions, and without any unmentioned factors or
+causal relationships:
+Physical vulnerability has a direct effect on the likelihood of fatality and vaccination decision. Vaccination has a direct effect on
+the fatality rate.
+In the entire population, 50% of the people are vulnerable to a certain disease.
+For vulnerable and vaccinated people, the fatality rate is 4%. For vulnerable and unvaccinated people, the fatality rate is 7%.
+For strong and vaccinated people, the fatality rate is 1%. For strong and unvaccinated people, the fatality rate is 5.8%.
+Overall, the fatality rate for vaccinated people is 5%, while the fatality rate for unvaccinated people is 4.5%.
+Does getting vaccinated increase the likelihood of death?
+Ground-Truth Answer: No
+1) Parse the causal graph: Confounding
+2) Classify the query type: Average Treatment Effect
+3) Formulate the query to its symbolic form:
+E[Y | do(X=1)] - E[Y|do(X = 0)]
+4) Collect the available data:
+P(Z=1)=0.5
+P(Y=1|Z=1,X=1)=0.04, P(Y=1|Z=1,X=0)=0.07
+P(Y=1|Z=0,X=1)=0.01, P(Y=1|Z=0,X=0)=0.058
+P(Y=1|X=1)=0.05, P(Y=1|X=0)=0.045
+Y
+Z
+X
+5) Derive the estimand using causal inference:
+E[Y | do(X=1)] - E[Y|do(X = 0)]
+= \sum_{Z=v} P(Z=z)*[P(Y=1|Z=z,X=1) - P(Y=1|Z=z, X=0)] # remove "do" using
+do-calculus
+= P(Z=0)*[P(Y=1|Z=0,X=1) - P(Y=1|Z=0,X=0)]
++ P(Z=1)*[P(Y=1|Z=1,X=1) - P(Y=1|Z=1,X=0)] # turn the expression into terms in
+the available data
+6) Solve for the estimand by plugging in the relevant data in Step 4:
+= 0.5*(0.01 - 0.058)+0.5*(0.04-0.07) # plug in the numbers in the available data
+= -0.039
+< 0 # the effect size is negative, so the final answer is "No"
+Subskill: Causal Relation Extraction
+Subskill: Causal Question Classification
+Subskill: Formalization
+Subskill: Semantic Parsing
+Subskill: Formal Causal Inference
+CLadder
+Subskill: Arithmetics
+Figure 1: Example question in our CLADDER dataset featuring an instance of Simpson’s paradox [63]. We
+generate the following (symbolic) triple: (i) the causal query; (ii) the ground-truth answer, derived through a
+causal inference engine [66]; and (iii) a step-by-step explanation. We then verbalize these questions by turning
+them into stories, inspired by examples from the causality literature, which can be expressed in natural language.
+Many previous works addressed the above question by focusing on commonsense causality [34, 100,
+101], inspired by the literature that explores LLMs as knowledge bases [40, 70, 83] (we refer to this
+line of work as causality as knowledge). This involves assessing the alignment between commonsense
+knowledge about causal relationships in humans and LLMs. This line of work generally does not focus
+on evaluating how well models are capable of causal reasoning. For example, it may be difficult
+to rule out the possibility that LLMs perform potentially unreliable amortized causal inference,
+answering causal questions by a simple repetition of verbal patterns present in the texts composing
+their training data:2,3
+in other words, LLMs may just be “causal parrots” [100].
+In this work, we introduce a way to test the formal causal reasoning in LLMs. To this end, we
+introduce the CLADDER dataset. The specificity of CLADDER is that causal questions posed in
+natural language are grounded in symbolic questions and ground truth answers: the latter are derived
+through an oracle causal inference engine (CI engine) [66], which abides by the rules of the causal
+inference approach described by Pearl [61], based on graphical models and structural causal models
+(SCMs) [23, 59, 61, 69, 88]. We compose more than 10,000 causal questions that cover a variety of
+causal queries across the three rungs of the Ladder of Causation [3, 66]—i.e., associational (Rung 1),
+interventional (Rung 2), and counterfactual (Rung 3). We consider several causal graphs, giving rise
+to scenarios which require different causal inference abilities. Additionally, we generate ground-truth
+explanations with step-by-step reasoning for more in-depth analysis of LLM behavior. Our symbolic
+questions and answers are then verbalized, by turning them into stories which can be expressed in
+natural language. To probe whether LLMs employ amortized causal inference, we construct stories
+with commonsensical, as well as anti-commonsensical and with nonsensical causal relations: in these
+latter cases, amortized causal inference is expected to fail, whereas formal causal reasoning would
+still yield the correct answer. An example question from CLADDER is shown in Figure 1.
+Exploiting CLADDER, we also introduce a method to elicit sound causal reasoning in LLMs
+and help them solve challenging causality questions. Specifically, we develop CAUSALCOT, a
+chain-of-thought prompting strategy [96] inspired by the CI engine, which prompts the LLM to
+extract the causal graph, causal query, and available “data” (e.g., conditional or interventional do￾probabilities [24]) from the question, formalize them precisely, and perform correct causal inferences.
+2which may itself contain instances of fallacious causal reasoning.
+3The extent to which this would imply an inaptitude of LLMs for causal reasoning has been questioned [38].
+2
+
+Our experiments indicate that CAUSALCOT achieves an accuracy of 70.40%, which substantially
+improves the performance of vanilla GPT-4 by 8.37 points on CLADDER.
+We summarize the main contributions of our work:
+1. In contrast to most other works on causality in LLMs, focusing on commonsense causal
+knowledge, our goal is to assess the LLMs’ ability to perform formal causal reasoning
+(briefly reviewed in Section 2).
+2. We introduce CLADDER (Section 3), a dataset containing more than 10K causal questions,
+spanning all three rungs of the ladder of causation, several causal graphs, and various stories
+for verbalization.
+3. We develop CAUSALCOT (Section 4), a chain-of-thought prompting strategy to elicit
+formal causal reasoning in LLMs, inspired by the causal inference engine.
+4. We perform extensive experiments on eight LLMs (Section 5), analyze fine-grained errors
+to showcase the limitations of LLMs in formal causal reasoning, and suggest directions
+for future research.
+2 Preliminaries on Causal Inference
+Our dataset design takes inspiration from the Causal Inference Engine as postulated by Pearl and
+Mackenzie [66], see also [59]. We begin with a brief overview of the causality framework by Pearl
+et al. [67].
+4 This framework was largely developed within the field of artificial intelligence, and there￾fore puts particular emphasis on algorithmic aspects of causal reasoning (e.g., [62])—which makes
+it particularly suited for our work, where we want to algorithmically generate ground truth answers
+to causal queries, without having to appeal to common sense to assess the correctness of an answer.
+2.1 The Ladder of Causation
+The Ladder of Causation, introduced by Pearl and Mackenzie [66], is a proposed taxonomy, and
+hierarchy, of causal inference tasks [3]. It consists of three distinct rungs.
+Rung 1 (“seeing”). This describes statistical associations (“How often do I take an aspirin when
+I have a headache?”). Rung 1 deals with statistical dependences among random variables, and
+involves probabilistic reasoning about joint and conditional distributions, P(X = x, Y = y) and
+P(Y = y|X = x), which can be formalised through Bayesian Networks [12, 58] representing a set
+of variables and their conditional dependencies via a directed acyclic graph (DAG).
+Rung 2 (“doing”). This enables us to formalize the concept of actively intervening in the world, and
+modifying it toward some end (“If I take an aspirin now, will my headache subside?”). Interventions
+can be formalized using the do-operator [24] and Causal Bayesian Networks [67] to represent, for
+example, the distribution over Y when intervening on X to set its value to x as P(Y = y|do(X = x)).
+Rung 3 (“imagining”). This rung deals with counterfactual reasoning, i.e., reasoning about alter￾native scenarios in which the world could have been different, possibly even contradicting the factual
+state (“Would my headache have subsided, if I had taken an aspirin?”). Counterfactual probabilities
+can be written as P(Yx = y), representing the probability that “Y would be y, had X been x”. Reason￾ing about Rung 3 quantities requires the introduction of Structural Causal Models (SCMs) [67]. SCMs
+are especially powerful as they enable any quantity in Rungs 1, 2, and 3 to be formulated precisely [3].
+2.2 Causal Inference
+Identification. Causal inference is especially difficult since we typically only have measurements
+from lower rungs, but want to reason about higher ones. A crucial question is then under what
+conditions are such inferences possible, i.e., what assumptions and measurements are required
+to unambiguously answer a causal query of interest: this is the question of identification. As
+argued in [3], “it is generically impossible to draw higher-layer inferences using only lower-layer
+information”. One may be able to draw inferences at a higher layer given a combination of partial
+knowledge of the underlying SCM, in the form of a causal graph, and data at lower layers. The
+graphical structure therefore plays a crucial role in bridging the rungs of the Ladder of Causation, and
+many prior works have been dedicated to exploiting properties of the graph to transform higher-rung
+queries into expressions which can be estimated based on lower-rung quantities [36, 64, 84].
+4We refer to [3, 65] for a comprehensive introduction. See also Appendix C for further details.
+3
+
+Natural Language Part of the Question Generation
+Stories (Variable Name Instantiations)
+Formal Part of the Question Generation
+Common causal graphs with treatment-effect (X-Y) pairs
+Sample a causal graph
+~
+X Y
+Z
+X Y
+X Y
+Collision:
+Confounding:
+Mediation:
+X
+Y
+Fork:
+X
+Diamond: Y
+Sample a query type
+~
+Rung 1: Association
+● Marginal prob. ● Conditional prob.
+Rung 2: Intervention
+● ATE ● Valid adjustment set
+Rung 3: Counterfactuals
+● Counterfactual prob. ● ATT
+● NDE ● NIE
+For Commonsensical Confounding Graphs:
+● Story 1: X=vaccine, Z=vulnerability, Y=fatality rate
+● Story 2: X=drug, Z=gender, Y=recovery
+● Story 3: X=treatment, Z=age, Y=recovery
+Chain: X Y
+~
+: example option to choose
+Generate
+available data
+... ...
+Generate the data s.t.
+= ∫ the estimand is identifiable Z = z P(Z = z) [E(Y | X = 1, Z = z) -
+E(Y | X = 0, Z = z)]
+ATE = E[Y| do(X=1)] - E[Y |do(X=0)]
+Map to the estimand
+Apply do-calculus given the causal graph
+Observational:
+P(...) = ...
+Interventional:
+E[...|do(...)] = ...
+Sample a degree of alignment
+with common sense
+● Commonsensical e.g., smoking causes cancer
+● Anti-commonsensical e.g., smoking affects ear shape
+● Nonsensical e.g., zory affects qixy
+Sample a story for
+variable name instantiation
+... ...
+~
+Levels of Empirical Alignment Verbalize the
+entire question
+Figure 2: The data-generating process of the CLADDER dataset. The upper part of the figure describes the
+formal part of the question generation, which samples inputs for the CI Engine and derives a ground truth answer.
+The bottom part describes the natural language part of the question generation—i.e., its verbalization, based on
+multiple stories and different degrees of alignment with commonsense knowledge.
+Causal Inference Engine. An overarching objective of this research is the construction of a Causal
+Inference Engine (CI Engine) [37, 59, 66], which takes as input a query, a graph, and some available
+data (typically from lower rungs than the query); and outputs whether a solution exists, and, if
+so, an equivalent expression of the query which is estimable from the available data. While some
+previous works refer to the CI engine in the context of Rung 2 queries, where it corresponds to the
+do-calculus [36, 84], here we refer to it in a more general sense, encompassing all three rungs.
+3 Composing the CLADDER Dataset
+Task Formulation. Like in the example of Figure 1, our dataset D := {(qi
+, ai
+, ei)}
+N
+i=1 consists
+of N triples, each containing a question qi
+, binary answer ai ∈ {Yes, No}, and an explanation ei
+.
+Our main task is to test the accuracy of the prediction function f : q 7→ a, i.e., a LLM which maps
+a natural language causal question to an answer. Apart from directly evaluating the answer, we also
+compose the ground-truth explanations e to evaluate the reasoning steps of LLMs.
+Design Principles. In the composition of our dataset, we adhere to the following design principles.
+First, we ensure broad coverage of all rungs of the ladder of causation. Second, we avoid settings that
+involve continuous variables and use binary variables instead: this is partly due to the large availability
+of identifiability results for binary and categorical variables, and partly because queries involving
+binary variables lend themselves to more natural-sounding verbalization. Moreover, since LLMs strug￾gle with calculation-heavy tasks [32, 91], and we are chiefly interested in causal reasoning abilities,
+we focus on graphs with few (three to four) variables, in various common configurations, to produce
+questions which are identifiable from the outset. Lastly, we carefully design a rich set of templates
+to translate the abstract formulas into grammatically correct and natural-sounding, fluent prompts.
+Overall Pipeline. The generation pipeline for CLADDER, depicted in Figure 2, consists of two parts:
+1. In the Formal Part (which we illustrate in Section 3.1), we specify all the required inputs (query,
+model, data) and the ground truth answer generated by the CI Engine.
+4
+
+2. In the Natural Language Part (in Section 3.2), we verbalize the formal queries and specification of
+the causal model and data by associating them to a story or narrative, using a rich set of templates.
+3.1 Formal Part of the Question Formulation
+The first step of our data generating process is to construct a set of inputs to the CI Engine such
+that by design there exists a well-defined ground truth answer: i.e., we construct triples of causal
+queries, graphs, and data such that the query can be unambiguously answered based on the available
+data (ensuring identifiability by construction).5 The ground truth causal models, which specify all
+quantities which are considered measurable in our questions, are causal Bayesian networks (CBNs),
+where each causal mechanism (i.e., conditional probability of a variable given its parents in the
+factorization according to the causal graph G) corresponds to a Bernoulli distribution. We compile a
+selection of graphs G based on examples drawn from multiple sources from the literature [66, 67,
+69, 88], where suitable graph structures are used to illustrate toy problems in causal inference. The
+complete list of structures we consider can be found in Appendix A.3; the complete list of sources
+in Appendix A.1.
+Selecting Query Types. We again draw from the causal inference literature to collect common
+query types in each rung. As illustrated in the “Sample a query type” box in Figure 2, for Rung 1, we
+can ask about probability distributions such as marginal probabilities and conditional probabilities.
+For Rung 2 questions, we can enquire average treatment effects (ATE) (“how will Y change if X
+changes from x to x
+′?”), or what constitutes a valid adjustment set that can block all backdoor
+spurious correlations between X and Y . Lastly, for Rung 3, we include counterfactuals (“what
+would happen to Y had X been x
+′
+instead of x?”), average treatment effect on the treated (ATT)
+(“for the subpopulation whose X changed from x to x
+′
+, how does their Y change on average?”),
+natural direct effect (NDE) (“what is the direct effect of X in Y , but not through the mediator?”),
+and natural indirect effect (NIE) (“what is the effect from X to Y through the mediator?”).
+Applying the Causal Inference Engine for the Ground-truth answer. By construction, the causal
+processes we define encapsulates all necessary information to make the causal quantities of the query
+types identifiable. This allows us to apply the rules of causal inference to obtain an estimand for each
+causal graph and query type, and evaluate the estimand to get a ground truth answer. The Rung 2
+queries simplify to Rung 1 terms using the rules of do-calculus [59], and, for the Rung 3 queries, we
+apply methods of counterfactual causal inference [67] (with details in Appendix C.3). The estimand
+also specifies exactly which terms are necessary to include in the prompt as “available data” in order
+to ensure that enough information is provided to answer the question correctly (i.e., for identifiability),
+provided the correct causal reasoning is applied. Our entire code base of the data generation process
+can be found at our GitHub repository, https://github.com/causalNLP/cladder.
+3.2 Natural Language Part of the Question Formulation
+While Section 3.1 describes a way to generate the ground-truth causal model, query and answers, com￾puted through a causal inference engine, real-world causal reasoning problems are expressed in natural
+language rather than symbolic expressions. The next part of the data generation pipeline therefore
+focuses on the verbalization of all these components with a plausible narrative in natural language.
+Generating the Stories. For each causal graph, we collect a set of two to five stories which consist
+of a list of variable names for each node in the graph. The stories are primarily selected from examples
+in commonly cited causal inference books and papers (see Appendix A.1), which ensures that the
+stories and corresponding causal graph structures adhere to empirical common sense (e.g., the drug￾gender-recovery example of Pearl and Mackenzie [66]). However, it is very likely that at least some
+of the stories appear in the training data of many LLMs. Therefore, we also generate various anti￾common sense and nonsensical variants of the stories, meant to isolate the effects of memorization.
+For the anti-commonsensical stories, we randomly do one of the actions: (1) replace the effect
+variable Y with an unusual attribute, that would not be an effect variable in any of the stories (e.g.,
+“ear shape”); or (2) create an irrelevant treatment variable X that does not play a causal role in any of
+our commonsensical stories, such as “playing card games” (see Appendix A.7). For the nonsensical
+variants, we invent artificial words as variable names such as “zory” and “qixy” (see Appendix A.6). .
+5We use the term “data” to denote numerical values of conditional or do-probabilities, and not as collections
+of data samples. This is in line with how the term is used in other descriptions of the CI Engine [37, 66].
+5
+
+Verbalizing the Prompts. The verbalization procedure applies the mapping of symbolic variables
+to semantic concepts to form a plausible narrative for the underlying causal process and then translates
+the symbolic expressions from the underlying causal process to natural language using carefully
+designed templates.
+Specifically, we use several different grammatical forms for each semantic concept t in the story to
+make the resulting prompt sound natural and grammatically correct. We first have the overall variable
+name voverall(t) (e.g., the recovery status), and, then, for each binary value i ∈ {0, 1}, we compose
+its noun vnoun(t = i) (e.g., recovery), verb (e.g., to recover), sentence vsent(t = i) (e.g., the patients
+recover), noun with attributive clause vattr(t = i) (e.g., patients who recover), and third conditional
+vcond(t = i) (e.g., if the patient had recovered).
+Using these elements, we first verbalize the causal graph by iterating through each node and its
+outgoing edges, using the template “t has a direct effect on CH(t).”, where CH(·) denotes the set of
+direct effects (children) of a variable. Then, for the available data d, we verbalize each conditional
+probability by “For vattr(tm = i), the probability of vnoun(tn = 1) is p.”, and each marginal
+probability by “The overall probability of vattr(t = 1) is p.” Note that our distributions are Bernoulli,
+so it is adequate to just introduce the parameter p, which is the likelihood of t = 1. For example, we
+generate sentences such as “The overall probability of recovery is 60%.” and “For patients who have
+small kidney stones, the probability of recovery is 70%.” Finally, for the query q, we instantiate each
+query type in our dataset following our question templates in Appendix A.5 such that the questions
+can always be answered with “yes” or “no”.
+Generating the Explanations. Apart from the question-answer pairs, we also generate the step-by￾step explanations. Our goal is to provide all intermediate reasoning steps a student of causal inference
+would use to answer the questions, so that each necessary subskill necessary for causal inference
+can be evaluated individually. We identify the following six subskills: ① causal graph extraction;
+② correct query type interpretation; ③ symbolic formalization of the query; ④ semantic parsing to
+compile the available data; ⑤ estimand derivation; and ⑥ arithmetic calculation to solve the estimand,
+as in the colored boxes in Figure 1. Our explanation e verbalizes all the elements ①-⑥ as sequential
+steps using our template in Appendix A.8.
+3.3 Dataset Statistics
+Our data-generating procedure has the potential to algorithmically generate a vast large number of
+questions. In practice, we pick a dataset size that is large enough to be representative, and at the same
+time not too large to be problematic given the expensive inference costs of LLMs. We therefore set
+our dataset size to be 10K, and report the statistics in Table 1.
+The dataset roughly balance across the query types, graph structures, stories, and ground truth answers
+(as seen in Figure 3). Note that some causal queries are only compatible with a subset of the graphs,
+thereby resulting in a slightly lower representation of those queries (such as the NDE and NIE). More
+details on our design choices can be found in Appendix A.4.
+Total Rung 1 Rung 2 Rung 3
+Size
+# Samples 10,112 3,160 3,160 3,792
+Question
+# Sentences/Sample 6.01 5.88 5.37 6.65
+# Words/Sample 80.9 73.43 76.95 90.42
+# Nodes/Graph 3.52 3.5 3.5 3.54
+# Edges/Graph 3.38 3.3 3.3 3.5
+Answer
+Positive Class (%) 50 50 50 50
+Explanations
+# Sentences/Sample 9.11 9.1 8.1 9.96
+# Words/Sample 47.95 49.87 32.8 58.97
+Table 1: Statistics of our CLADDER dataset v1.5.
+Rung 3
+Rung 1
+Rung 2
+Counterf.
+ATT NDENIE
+Cond. Prob.
+Marg. Prob. ATE
+Adjust. Set
+Loading [MathJax]/extensions/MathMenu.js
+Figure 3: Distributions of
+query types in our 10K data.
+3.4 Data Quality Check
+Our dataset is generated through an algorithmic procedure, which has the following potential benefits:
+formal correctness; zero human annotation cost; and, most importantly, controllability—e.g., for
+6
+
+the question distribution, as well as for making it more unlikely that the data was previously seen
+by the model. However, since the dataset is different from common NLP datasets collected from
+human natural language writing, we also need to perform additional data quality checks. We therefore
+checked for a list of non-formal, natural language properties: grammaticality; human readability;
+naturalness/perplexity; and how well humans perform on this task.
+For grammaticality, we ran a grammatical error check on our dataset using the LanguageTool
+package [51], and got on average 1.26 grammatical errors per 100 words (i.e., 98.74% correctness),
+which shows that most of the language in our dataset follows English grammar. For human readability,
+we checked how comprehensible the questions are to students who have taken causality courses. We
+selected a random subset of 50 questions from the dataset, and let a graduate student annotator go
+through the questions to judge whether they could understand them or not: 96% of the questions were
+deemed readable. Next, for the naturalness/perplexity score, we used the open-sourced GPT-2 model
+and obtained a perplexity score of 21.17 on our dataset, which is substantially lower (i.e., closer to
+the distribution of natural human-written text) than the one of MATH [32], a commonly used dataset
+of maths questions. Lastly, we conducted a sanity check where one expert evaluator tried to solve a
+random sample of 50 questions from the dataset, and we recorded an accuracy of 82% on this task.
+4 Our CAUSALCOT Model
+Determine the query type.
+Formalize the query.
+Gather all relevant data.
+Extract the causal graph.
+Our Causal Chain-of-Thought (CausalCoT) Model:
+Guidance: Address the question by following the steps below:
+Final answer: No
+Step 1
+Step 2
+Step 3
+Step 4
+Solution
+Phase
+Average Treatment Effect (ATE)
+P(Z=1)=0.50, P(Y=1|X=0)=0.045, P(Y=1|X=1)=0.05
+P(Y=1|Z=0,X=0)=0.07, P(Y=1|Z=0,X=1)=0.058
+P(Y=1|Z=1,X=0)=0.04, P(Y=1|Z=1,X=1)=0.01
+E[Y|do(X=1)] - E[Y|do(X = 0)]
+= ΣZ=z P(Z=z) [P(Y=1|Z=z,X=1)-P(Y=1|Z=z, X=0)] (Apply backdoor adjustment formula)
+X Y
+Z
+Preparation
+Phase
+Deduce the estimand using causal inference: Given all the information above, deduce the estimand
+using skills such as do-calculus, counterfactual prediction, and the basics of probabilities.
+Calculate the estimand: Insert the relevant data in Step 4 into the estimand, perform basic arithmetic
+calculations, and derive the final answer.
+Final Q Based on all the reasoning above, output one word to answer the initial question with just "Yes" or "No".
+Step 5
+Step 6
+ATE(X) = ... = -0.021 < 0
+Question
+Figure 4: Illustration of our CAUSALCOT prompting strategy, which designs a chain of subquestions inspired by
+the idea of a CI engine [66].
+In order to guide LLMs in correctly answering the questions in CLADDER, we draw inspiration
+from the ideal functioning of the CI engine [66], which breaks down a causal reasoning problem
+into multiple symbolically-grounded, simpler steps. We develop CAUSALCOT, a multi-step causal
+chain-of-thought prompt in Figure 4, which combines formal causal reasoning skills with the idea of
+chain-of-thought prompting [96] and the use of scratch pads for solving more complicated problems
+requiring a long list of steps [55] for LLMs.
+We base our prompt design on the multi-step reasoning process of causal inference as shown in
+Figure 4, first starting with four preparation steps: ① identifying the causal graph structure; ②
+determining the causal query type;6 ③ formulating the query symbolically precisely; and ④ extracting
+relevant data from the prompt. Then, given all the information collected in the preparation stage, we
+introduce the formal solution: ⑤ correctly deducing the estimand using causal inference techniques;
+and finally ⑥ evaluating the estimand to answer the question. This set of steps require both natural
+language understanding to parse the question (as in most steps in the preparation phase), as well as
+formal causal reasoning to derive the correct estimand (as in the solution phase).
+6This step amounts to a multi-class classification problem, where each class is a different causal query.
+7
+
+We build our CAUSALCOT prompting strategy using GPT-4 [56], a recent autoregressive LLM that
+achieves state-of-the-art performance on many tasks. This latest model builds upon the previous series
+of general pretrained models (GPT) [7, 76] and adds reinforcement learning with human feedback,
+or instruction-tuning [1, 57, 104], to align the model responses to free-form questions with human
+preferences. It has achieved human-competitive performance over a list of tasks [8, 43, 54, 56, 105],
+among which the more formal tasks unseen in the training data still remain elusive [42, 78, 91].
+Given a causal question q, we provide the LLM a list of instructions ℓ := (s1, . . . , s6) consisting
+of the detailed descriptions of the six steps s1, . . . , s6 in Figure 4. As the model fLLM : si
+7→ ri
+autoregressively produces responses r1, · · · , r6 sequentially corresponding to the six steps, we
+concatenate all the above before asking the final question “Based on all the reasoning above, output
+one word to answer the initial question with just ‘Yes’ or ‘No’.” See the complete prompt in
+Appendix B.1. In the end, we obtain the binary answer a ∈ {Yes, No} as the final result.
+Compared with the standard strategy of directly prompting the LLMs a question, we impose an
+inductive bias upon LLMs by using the causal inference framework, thus incorporating some of
+the powerful, principled insights of the causal inference community for NLP tasks. In this way, we
+enhance the strong natural language ability of LLMs with formal causal reasoning skills.
+5 Testing LLMs with CLADDER
+5.1 Experimental Setup
+Our empirical investigation focuses on some of the most recent language models. We include the latest
+GPT-4 [56] with 1T parameters by the time we conduct the experiments (i.e., gpt-4-1106-preview),
+the previous ChatGPT (i.e., GPT-3.5) with 175B parameters, and then a series of earlier models with
+instruction-tuning on the 175B GPT-3 (text-davinci-001, -002, and -003) [57]. As baselines, we also
+include the non-instruction-tuned GPT-3 (davinci). We use the OpenAI API with temperature 0 when
+querying these models. We also include open-source, more efficient models like LLaMa [93] and its
+instruction-tuned version Alpaca [92], both with the same number of parameters, 6.7B.
+5.2 Main Results
+Overall Acc. Acc. by Rung Acc. by Commonsense Alignment
+1 2 3 Comm. Nonsens. Anti-C.
+Random 49.27 50.28 48.40 49.12 49.01 49.69 49.12
+LLaMa 44.03 48.23 29.46 52.66 45.14 44.22 42.67
+Alpaca 44.66 52.03 29.53 51.13 44.86 44.40 44.77
+GPT-3 Non-Instr. (davinci) 49.92 50.00 49.75 50.00 49.06 49.97 50.72
+GPT-3 Instr. (text-davinci-001) 51.40 51.30 52.63 50.47 54.31 50.13 50.05
+GPT-3 Instr. (text-davinci-002) 53.15 50.85 56.96 51.90 55.33 52.47 51.81
+GPT-3 Instr. (text-davinci-003) 56.26 51.11 62.97 54.96 56.83 54.79 57.49
+GPT-3.5 52.18 51.80 54.78 50.32 54.09 50.68 52.09
+GPT-4 62.03 63.01 62.82 60.55 62.27 63.09 60.47
++ CAUSALCOT 70.40 83.35 67.47 62.05 69.25 71.58 70.12
+Table 2: Performance of all models on our CLADDER dataset v1.5. We report the overall accuracy (Acc.), and
+also fine-grained accuracy by rung, and by degree of commonsense alignment, from commonsensical (Comm.),
+nonsensical (Nonsens.), to anti-commonsensical (Anti-C.).
+We compare the performance of all models in Table 2. First, we can see that the causal reasoning task
+in CLADDER is in general very challenging for all models. Models such as the earlier, non-instruction￾tuned GPT-3, and both LLaMa and Alpaca are around random performance. With instruction-tuning,
+models start to show some improvement. And amongst all, our CAUSALCOT achieves the highest
+performance of 70.40%, which is substantially better than the vanilla GPT-4 by 8.37 points. Moreover,
+CAUSALCOT also achieve the best performance across all three rungs of causal questions, with a
+monotonically decreasing performance as the rungs get higher, i.e., the questions get more difficult.
+See Appendix D for experiments on our earlier dataset v1.0.
+5.3 Isolating the Effect of Data Contamination
+A well-known problem with evaluating LLMs on question-answering tasks is the data contamination
+problem, i.e., that LLMs perform well on a test set because the test set is (unintentionally) contained
+partially or even entirely in the training data [7, 56]. We address this problem by creating not only the
+commonsensical subset of our dataset, but also anti-commonsensical and nonsensical, both of which,
+8
+
+by construction, are very likely not in the training data of LLMs. From the accuracy by commonsense
+alignment degree in Table 2, we can see the original GPT-4 model performs the worst on the anti￾commonsensical subset (1.8 points lower than that on the commonsensical subset). However, our
+CAUSALCOT enhances the reasoning ability across all levels, with substantial improvement on
+anti-commonsensical data by 9.65 points, highlighting the strength of CAUSALCOT on unseen data.
+5.4 Error Analysis by Subquestions
+Step ① Step ② Step ③ & ⑤ Step ④ Step ⑥
+Node Edge Dist. (↓) Overall F1 Rung 1 Rung 2 Rung 3 Estimand F1 Arithmetic
+99.34 97.01 1.69 50.65 69.99 59.14 42.12 53 47.53 99
+Table 3: Performance for each step in CAUSALCOT. For Step ①, we report the F1 score of node prediction, edge
+prediction, and also the graph edit distance (Dist.) with the true graph. See more details in Appendix E.1.
+We conduct a fine-grained error analysis by looking into the performance of different steps of
+CAUSALCOT in Table 3.
+7 We can see that the model is good at Step ① to extract causal graph
+G, achieving high F1 scores for predicting both the nodes and the edges correctly, although not
+perfect, still leaving a graph edit distance of 1.69 between the ground truth causal graph and the
+model-identified graph. The other steps are more challenging for the model. Among those, Steps
+②, ③ and ⑤ require careful and correct application of causal inference, where the model struggles.
+This reveals a notable weakness of current LLMs to perform formal causal reasoning, which is an
+important direction for future work on improving and enhancing LLMs. To better understand the
+reasoning abilities of LLMs, we also perform an extensive analysis taking the entire reasoning chain
+of our CAUSALCOT and the ground-truth explanations, to produce 20 fine-grained scores about
+the multi-step reasoning quality using the ROSCOE framework [25], and show detailed results in
+Appendix E.2.
+5.5 Effect of In-Context Learning
+Marg. Cond. ATE Count. ATTNDENIE
+Marg.
+Cond.
+ATE
+Count.
+ATT
+NDE
+NIE 30
+20
+10
+0
+10
+20
+Figure 5: Heatmap showing the
+how helpful each query type is to
+solving subsequent query types.
+As an additional analysis, we look into the effect of in-context learn￾ing (ICL) by providing an example solution before asking the ques￾tion. The interesting question to us is whether models can generalize
+across different query types. Namely, we keep our CAUSALCOT
+framework, and prepend a reasoning example of query type i, and
+then calculate how much improvement it can bring when models
+answer new questions of query type j. In Figure 5, we can see that
+conditional probability and NIE are the questions that benefit the
+most from ICL, and showing examples of marginal probability and
+ATT are among the most helpful to all questions in general.
+6 Related Work
+Skill evaluation for LLMs. Our work may be seen as part of the literature aimed at evaluating the
+performance of current LLMs [7, 15, 56, 76, 103, inter alia], focusing on understanding their strengths
+and weaknesses. Various studies into the capabilities of LLMs [8, 39, 56, 74] change people’s
+perception of domains such as education [2, 80], medicine [54, 87], law [43], and computational
+social science [105]. However, most work evaluates new models on existing datasets from previously￾curated large-scale benchmarks [89, 94, 95], or human exams [41, 43, 56] which is becoming
+increasingly unreliable due to training set contamination.
+Causality-related skills for NLP. With the increasing attention on LLMs and causality [100, 101],
+we review several formulations of causality-related skills for NLP, which we summarize into (1)
+causality as knowledge, (2) causality as language comprehension, and (3) causality as reasoning. In
+the causality-as-knowledge line of work, many existing studies investigate how well NLP models
+understand commonsense causality, such as the cause and effect of an agent’s action [81], motivation
+and emotional reaction in a social context [82], correspondence of a set of steps with a high-level
+goal [102], development of a story given a different beginning [75], and how in general LLMs serve
+as a knowledge base of causality [100]. Concurrent work [45] focuses on evaluating LLMs on
+various causality related tasks by leveraging the conceptual knowledge accrued from the training
+7We experienced some rate-limiting in the fine-grained analysis of LLMs that are only accessible through a
+web API. As a result, we occasionally had to evaluate on a subset of 2K random samples.
+9
+
+data, rather than formal causal inference, except for their causal sufficiency analysis which is close
+to our counterfactual questions. Importantly, most work in this line does not define explicit causal
+graphs, making it difficult to quantitatively define the ground-truth causal relationships in a principled
+way. The causality-as-language-comprehension line of work stems from traditional linguistic studies
+on causal connectives and causal language usage [9, 90, 99], to the recent causal relation extraction
+[4, 33, 98] to identify cause-effect pairs as a subtask of information extraction from text.
+Finally, for causality as formal reasoning, our CLADDER work formulates the task of causal infer￾ence for NLP, and our other work, CORR2CAUSE [42], addresses the causal discovery problem to
+infer causation from correlation. Together, they cover the two major branches of causal reasoning
+investigated in existing technical literature on causality. See a comprehensive comparison of literature
+in Appendix F.
+7 Discussion of Limitations and Future Work
+A Natural Language “Mini Turing Test” for Causality. Pearl and Mackenzie [66] describe an
+ideal “mini-Turing test” to assess understanding of causal inference, and argue that if a machine can
+answer all possible questions correctly, then it “understands” causality. According to the authors, this
+is because there are no possible shortcuts when you consider all possible combinations of queries,
+graphs and data in this ideal test: due to their combinatorial explosion, the machine can only answer
+all questions right if it correctly applies causal reasoning. From this point of view, our work constitutes
+a first step towards a mini-Turing test formulated in natural language. However, we cover only some
+of the commonly studied causal queries spanning all three rungs. Future work may extend this to
+further queries, such as, e.g., path-specific effects other than NDE and NIE [52], thereby increasing
+the number of potential questions and moving closer to the ideal test.
+LLMs and Causal Reasoning. It has been claimed that LLMs understand causality well (e.g., [45]
+report high performance, such as 97% and 92%). In contrast, our work suggests that LLMs may
+still be far from reasoning reliably about causality (reaching only 60+% on CLADDER). As argued
+in Section 1, we believe that investigating this aspect may be of particular importance, since causal
+inference is crucial in many policy-relevant scenarios, where reliable AI systems could assist decision￾making: from epidemiology [22, 79] to economics [10, 37] to fairness [47, 71]. Testing the abilities of
+these systems in semi-realistic scenarios is therefore crucial, motivating some of the design choices in
+our dataset: e.g., the example in Figure 1 was inspired by similar questions which arose in the context
+of the COVID-19 pandemic, where incorrect causal reasoning resulted in a fallacy where vaccinations
+were considered to be harmful instead of beneficial [20, 49]. Further work may be dedicated to making
+the questions and verbalizations even closer to realistic instances of causal inference problems.
+A CI Engine Plug-in for LLMs. An interesting direction for future research could be to provide
+the LLM access to an actual implementation of the CI engine. For example, Davis and Aaronson [13]
+tested the improvement of math abilities in LLMs augmented with plug-ins (i.e., external modules
+that extend the model’s capabilities by adding specific functionality or customizing its behaviour for
+particular tasks, like a calculator), suggesting that they significantly enhance the model’s ability to
+solve these problems. However, even with plug-ins, there are still often “interface” failures: that
+is, “[the LLM] often has trouble formulating problems in a way that elicits useful answers from the
+plug-ins”. We hypothesise that something similar would happen for causal inference: even once
+suitable plug-ins are built, the language-to-tool interface may still be a non-trivial research question.
+8 Conclusion
+We proposed formal causal reasoning as a new task to evaluate LLMs, and created the CLADDER
+benchmark, covering several aspects of causal inference across all rungs of the ladder of causation
+and verbalizations involving semi-realistic scenarios. To address the task, we proposed a prompting
+strategy, CAUSALCOT, inspired by the principles of formal causal inference, which introduces
+multistep chain-of-thought reasoning for causal questions. Extensive experiments indicate that this
+dataset is highly challenging, thus offering a principled tool to gain a better understanding of the
+reasoning abilities of LLMs and to develop better models for causal reasoning in natural language.
+Acknowledgment
+We thank Sergio Hernan Garrido Mejia for pointing us to Python implementations of the causal
+inference engine. We thank Armen Aghajanyan for the idea of testing psychological bias in LLMs,
+10
+
+which partly contributes to the idea of exposing causal bias in LLMs. We thank András Strausz for
+various timely coding help, especially for our Simpson’s paradox case.
+The material presented in this manuscript is partly based upon works supported by the German
+Federal Ministry of Education and Research (BMBF): Tübingen AI Center, FKZ: 01IS18039B; by
+the Machine Learning Cluster of Excellence, EXC number 2064/1 – Project number 390727645;
+the Swiss National Science Foundation (Project No. 197155); a Responsible AI grant by the
+Haslerstiftung; an ETH Grant (ETH-19 21-1); and by the John Templeton Foundation (grant #61156).
+Zhijing Jin is supported by PhD fellowships from the Future of Life Institute and Open Philanthropy,
+as well as the travel support from ELISE (GA no 951847) for the ELLIS program. Felix Leeb is
+supported by the International Max Planck Research School for Intelligent Systems (IMPRS-IS).
+Luigi Gresele is supported by the VideoPredict project, FKZ: 01IS21088.
+Author Contributions
+The conceptualization and design of this project was led by Zhijing, Luigi and Felix, and supervised
+by Mrinmaya on the NLP part, and Bernhard on the causality part. Max provided timely insights
+from cognitive science on different types of causal tasks and on the project design. In the exploration
+stage, Ojasv did substantial work on discovering causal fallacies in news and on Twitter, which, while
+not included in the current systematic way of generating causal inference questions, was a significant
+contribution in the course of the project and in comparing various task formulations.
+As for the operationalization and programming, the dataset composition was mainly led by Yuen
+and Felix, together with daily discussions with Zhijing, and weekly discussions with Luigi. Zhiheng
+supported an important function of generating the backdoor adjustment set for a given causal graph
+with the treatment and effect variables. The experiments are mainly conducted by Zhijing and
+Fernando, with Kevin finishing the evaluation results using the ROSCOE package.
+References
+[1] Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma,
+Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, Nicholas Joseph, Saurav Kadavath,
+Jackson Kernion, Tom Conerly, Sheer El Showk, Nelson Elhage, Zac Hatfield-Dodds, Danny
+Hernandez, Tristan Hume, Scott Johnston, Shauna Kravec, Liane Lovitt, Neel Nanda, Catherine
+Olsson, Dario Amodei, Tom B. Brown, Jack Clark, Sam McCandlish, Chris Olah, Benjamin
+Mann, and Jared Kaplan. 2022. Training a helpful and harmless assistant with reinforcement
+learning from human feedback. CoRR, abs/2204.05862. [Cited on page 8.]
+[2] David Baidoo-Anu and Leticia Owusu Ansah. 2023. Education in the era of generative artificial
+intelligence (AI): Understanding the potential benefits of ChatGPT in promoting teaching and
+learning. Available at SSRN 4337484. [Cited on page 9.]
+[3] Elias Bareinboim, Juan D Correa, Duligur Ibeling, and Thomas Icard. 2022. On Pearl’s
+hierarchy and the foundations of causal inference. In Probabilistic and causal inference: the
+works of judea pearl, pages 507–556. [Cited on pages 2 and 3.]
+[4] Steven Bethard, William Corvey, Sara Klingenstein, and James H. Martin. 2008. Building a
+corpus of temporal-causal structure. In Proceedings of the Sixth International Conference on
+Language Resources and Evaluation (LREC’08), Marrakech, Morocco. European Language
+Resources Association (ELRA). [Cited on page 10.]
+[5] Chandra Bhagavatula, Ronan Le Bras, Chaitanya Malaviya, Keisuke Sakaguchi, Ari Holtzman,
+Hannah Rashkin, Doug Downey, Wen-tau Yih, and Yejin Choi. 2020. Abductive commonsense
+reasoning. In 8th International Conference on Learning Representations, ICLR 2020, Addis
+Ababa, Ethiopia, April 26-30, 2020. OpenReview.net. [Cited on page 27.]
+[6] Stephan Bongers, Patrick Forré, Jonas Peters, and Joris M Mooij. 2021. Foundations of
+structural causal models with cycles and latent variables. The Annals of Statistics, 49(5):2885–
+2915. [Cited on page 23.]
+[7] Tom B. Brown, Benjamin Mann, Nick Ryder, Melanie Subbiah, Jared Kaplan, Prafulla
+Dhariwal, Arvind Neelakantan, Pranav Shyam, Girish Sastry, Amanda Askell, Sandhini Agar￾wal, Ariel Herbert-Voss, Gretchen Krueger, Tom Henighan, Rewon Child, Aditya Ramesh,
+11
+
+Daniel M. Ziegler, Jeffrey Wu, Clemens Winter, Christopher Hesse, Mark Chen, Eric Sigler,
+Mateusz Litwin, Scott Gray, Benjamin Chess, Jack Clark, Christopher Berner, Sam McCan￾dlish, Alec Radford, Ilya Sutskever, and Dario Amodei. 2020. Language models are few-shot
+learners. In Advances in Neural Information Processing Systems 33: Annual Conference on
+Neural Information Processing Systems 2020, NeurIPS 2020, December 6-12, 2020, virtual.
+[Cited on pages 1, 8, and 9.]
+[8] Sébastien Bubeck, Varun Chandrasekaran, Ronen Eldan, Johannes Gehrke, Eric Horvitz, Ece
+Kamar, Peter Lee, Yin Tat Lee, Yuanzhi Li, Scott M. Lundberg, Harsha Nori, Hamid Palangi,
+Marco Túlio Ribeiro, and Yi Zhang. 2023. Sparks of artificial general intelligence: Early
+experiments with GPT-4. CoRR, abs/2303.12712. [Cited on pages 8 and 9.]
+[9] Angela Cao, Gregor Williamson, and Jinho D. Choi. 2022. A cognitive approach to annotating
+causal constructions in a cross-genre corpus. In Proceedings of the 16th Linguistic Annota￾tion Workshop (LAW-XVI) within LREC2022, pages 151–159, Marseille, France. European
+Language Resources Association. [Cited on page 10.]
+[10] David Card. 1999. The causal effect of education on earnings. Handbook of labor economics,
+3:1801–1863. [Cited on pages 1 and 10.]
+[11] Raj Chetty, John N Friedman, Nathaniel Hilger, Emmanuel Saez, Diane Whitmore Schanzen￾bach, and Danny Yagan. 2011. How does your kindergarten classroom affect your earnings?
+Evidence from project star. The Quarterly journal of economics, 126(4):1593–1660. [Cited on
+page 1.]
+[12] Robert G Cowell, Philip Dawid, Steffen L Lauritzen, and David J Spiegelhalter. 2007. Proba￾bilistic networks and expert systems: Exact computational methods for Bayesian networks.
+Springer Science & Business Media. [Cited on page 3.]
+[13] Ernest Davis and Scott Aaronson. 2023. Testing GPT-4 with Wolfram Alpha and Code
+Interpreter plug-ins on math and science problems. arXiv preprint arXiv:2308.05713. [Cited
+on page 10.]
+[14] Gaston De Serres, France Markowski, Eveline Toth, Monique Landry, Danielle Auger, Marlène
+Mercier, Philippe Bélanger, Bruno Turmel, Horacio Arruda, Nicole Boulianne, et al. 2013.
+Largest measles epidemic in North America in a decade—Quebec, Canada, 2011: Contribution
+of susceptibility, serendipity, and superspreading events. The Journal of infectious diseases,
+207(6):990–998. [Cited on page 1.]
+[15] Jacob Devlin, Ming-Wei Chang, Kenton Lee, and Kristina Toutanova. 2019. BERT: Pre￾training of deep bidirectional transformers for language understanding. In Proceedings of
+the 2019 Conference of the North American Chapter of the Association for Computational
+Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers), pages 4171–
+4186, Minneapolis, Minnesota. Association for Computational Linguistics. [Cited on pages 1
+and 9.]
+[16] Quang Do, Yee Seng Chan, and Dan Roth. 2011. Minimally supervised event causality
+identification. In Proceedings of the 2011 Conference on Empirical Methods in Natural Lan￾guage Processing, pages 294–303, Edinburgh, Scotland, UK. Association for Computational
+Linguistics. [Cited on page 27.]
+[17] Richard Doll and A Bradford Hill. 1950. Smoking and carcinoma of the lung. British medical
+journal, 2(4682):739. [Cited on page 1.]
+[18] Richard Doll and A Bradford Hill. 1954. The mortality of doctors in relation to their smoking
+habits. British medical journal, 1(4877):1451. [Cited on page 1.]
+[19] Jesse Dunietz, Lori Levin, and Jaime Carbonell. 2017. The BECauSE corpus 2.0: Annotating
+causality and overlapping relations. In Proceedings of the 11th Linguistic Annotation Workshop,
+pages 95–104, Valencia, Spain. Association for Computational Linguistics. [Cited on page 27.]
+[20] Jordan Ellenberg. 2021. Coronavirus vaccines work. But this statistical illusion makes people
+think they don’t. The Washington Post. [Cited on page 10.]
+12
+
+[21] Jörg Frohberg and Frank Binder. 2022. CRASS: A novel data set and benchmark to test
+counterfactual reasoning of large language models. In Proceedings of the Thirteenth Lan￾guage Resources and Evaluation Conference, pages 2126–2140, Marseille, France. European
+Language Resources Association. [Cited on page 27.]
+[22] Thomas A Glass, Steven N Goodman, Miguel A Hernán, and Jonathan M Samet. 2013. Causal
+inference in public health. Annual review of public health, 34:61–75. [Cited on page 10.]
+[23] Madelyn Glymour, Judea Pearl, and Nicholas P Jewell. 2016. Causal inference in statistics: A
+primer. John Wiley and Sons. [Cited on pages 2 and 19.]
+[24] Moisés Goldszmidt and Judea Pearl. 1992. Rank-based systems: A simple approach to belief
+revision, belief update, and reasoning about evidence and actions. KR, 92:661–672. [Cited on
+pages 2 and 3.]
+[25] Olga Golovneva, Moya Chen, Spencer Poff, Martin Corredor, Luke Zettlemoyer, Maryam
+Fazel-Zarandi, and Asli Celikyilmaz. 2022. Roscoe: A suite of metrics for scoring step-by-step
+reasoning. [Cited on pages 9 and 25.]
+[26] Andrew Gordon, Zornitsa Kozareva, and Melissa Roemmele. 2012. SemEval-2012 task
+7: Choice of plausible alternatives: An evaluation of commonsense causal reasoning. In
+*SEM 2012: The First Joint Conference on Lexical and Computational Semantics – Volume
+1: Proceedings of the main conference and the shared task, and Volume 2: Proceedings of
+the Sixth International Workshop on Semantic Evaluation (SemEval 2012), pages 394–398,
+Montréal, Canada. Association for Computational Linguistics. [Cited on page 27.]
+[27] Joseph Y. Halpern and Judea Pearl. 2005. Causes and explanations: A structural-model
+approach. part i: Causes. The British Journal for the Philosophy of Science, 56(4):843–887.
+[Cited on page 19.]
+[28] Joseph Y Halpern and Judea Pearl. 2005. Causes and explanations: A structural-model
+approach. part ii: Explanations. The British journal for the philosophy of science. [Cited on
+page 19.]
+[29] Yuval Noah Harari. 2014. Sapiens: A brief history of humankind. Random House. [Cited on
+page 1.]
+[30] James J Heckman, Lance J Lochner, and Petra E Todd. 2006. Earnings functions, rates of
+return and treatment effects: The mincer equation and beyond. Handbook of the Economics of
+Education, 1:307–458. [Cited on page 1.]
+[31] Iris Hendrickx, Su Nam Kim, Zornitsa Kozareva, Preslav Nakov, Diarmuid Ó Séaghdha,
+Sebastian Padó, Marco Pennacchiotti, Lorenza Romano, and Stan Szpakowicz. 2010. SemEval￾2010 task 8: Multi-way classification of semantic relations between pairs of nominals. In
+Proceedings of the 5th International Workshop on Semantic Evaluation, pages 33–38, Uppsala,
+Sweden. Association for Computational Linguistics. [Cited on page 27.]
+[32] Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn
+Song, and Jacob Steinhardt. 2021. Measuring mathematical problem solving with the MATH
+dataset. In Proceedings of the Neural Information Processing Systems Track on Datasets and
+Benchmarks 1, NeurIPS Datasets and Benchmarks 2021, December 2021, virtual. [Cited on
+pages 4 and 7.]
+[33] Christopher Hidey and Kathy McKeown. 2016. Identifying causal relations using parallel
+Wikipedia articles. In Proceedings of the 54th Annual Meeting of the Association for Computa￾tional Linguistics (Volume 1: Long Papers), pages 1424–1433, Berlin, Germany. Association
+for Computational Linguistics. [Cited on page 10.]
+[34] Matthew Ho, Aditya Sharma, Justin Chang, Michael Saxon, Sharon Levy, Yujie Lu, and
+William Yang Wang. 2022. Wikiwhy: Answering and explaining cause-and-effect questions.
+arXiv preprint arXiv:2210.12152. [Cited on page 2.]
+[35] Mark Hopkins and Judea Pearl. 2007. Causality and counterfactuals in the situation calculus.
+Journal of Logic and Computation, 17(5):939–953. [Cited on page 19.]
+13
+
+[36] Yimin Huang and Marco Valtorta. 2006. Pearl’s calculus of intervention is complete. In
+Proceedings of the Twenty-Second Conference on Uncertainty in Artificial Intelligence, pages
+217–224. [Cited on pages 3 and 4.]
+[37] Paul Hünermund and Elias Bareinboim. 2019. Causal inference and data fusion in econometrics.
+CoRR, abs/1912.09104. [Cited on pages 4, 5, and 10.]
+[38] Ferenc Huszár. 2023. We may be surprised again: Why i take llms seriously. [Cited on page 2.]
+[39] Oana Ignat, Zhijing Jin, Artem Abzaliev, Laura Biester, Santiago Castro, Naihao Deng, Xinyi
+Gao, Aylin Gunal, Jacky He, Ashkan Kazemi, Muhammad Khalifa, Namho Koh, Andrew Lee,
+Siyang Liu, Do June Min, Shinka Mori, Joan Nwatu, Verónica Pérez-Rosas, Siqi Shen, Zekun
+Wang, Winston Wu, and Rada Mihalcea. 2023. A PhD student’s perspective on research in
+NLP in the era of very large language models. CoRR, abs/2305.12544. [Cited on pages 1
+and 9.]
+[40] Zhengbao Jiang, Frank F. Xu, Jun Araki, and Graham Neubig. 2020. How can we know
+what language models know? Transactions of the Association for Computational Linguistics,
+8:423–438. [Cited on page 2.]
+[41] Zhijing Jin, Abhinav Lalwani, Tejas Vaidhya, Xiaoyu Shen, Yiwen Ding, Zhiheng Lyu,
+Mrinmaya Sachan, Rada Mihalcea, and Bernhard Schölkopf. 2022. Logical fallacy detection.
+In Findings of the Association for Computational Linguistics: EMNLP 2022, pages 7180–7198,
+Abu Dhabi, United Arab Emirates. Association for Computational Linguistics. [Cited on
+page 9.]
+[42] Zhijing Jin, Jiarui Liu, Zhiheng Lyu, Spencer Poff, Mrinmaya Sachan, Rada Mihalcea, Mona T.
+Diab, and Bernhard Schölkopf. 2023. Can large language models infer causation from
+correlation? CoRR, abs/2306.05836. [Cited on pages 8, 10, and 27.]
+[43] Daniel Martin Katz, Michael James Bommarito, Shang Gao, and Pablo Arredondo. 2023.
+Gpt-4 passes the bar exam. Available at SSRN 4389233. [Cited on pages 8 and 9.]
+[44] Armin Kekic, Jonas Dehning, Luigi Gresele, Julius von Kügelgen, Viola Priesemann, and ´
+Bernhard Schölkopf. 2023. Evaluating vaccine allocation strategies using simulation-assisted
+causal modeling. Patterns. [Cited on page 1.]
+[45] Emre Kıcıman, Robert Ness, Amit Sharma, and Chenhao Tan. 2023. Causal reasoning and
+large language models: Opening a new frontier for causality. arXiv preprint arXiv:2305.00050.
+[Cited on pages 9 and 10.]
+[46] Yash Kumar Lal, Nathanael Chambers, Raymond Mooney, and Niranjan Balasubramanian.
+2021. TellMeWhy: A dataset for answering why-questions in narratives. In Findings of
+the Association for Computational Linguistics: ACL-IJCNLP 2021, pages 596–610, Online.
+Association for Computational Linguistics. [Cited on page 27.]
+[47] Joshua R Loftus, Chris Russell, Matt J Kusner, and Ricardo Silva. 2018. Causal reasoning for
+algorithmic fairness. arXiv preprint arXiv:1805.05859. [Cited on page 10.]
+[48] Paramita Mirza, Rachele Sprugnoli, Sara Tonelli, and Manuela Speranza. 2014. Annotating
+causality in the TempEval-3 corpus. In Proceedings of the EACL 2014 Workshop on Computa￾tional Approaches to Causality in Language (CAtoCL), pages 10–19, Gothenburg, Sweden.
+Association for Computational Linguistics. [Cited on page 27.]
+[49] Jeffrey Morris. 2021. Israeli data: How can efficacy vs. severe disease be strong when 60% of
+hospitalized are vaccinated? Accessed: 27th of October 2023. [Cited on page 10.]
+[50] Nasrin Mostafazadeh, Alyson Grealish, Nathanael Chambers, James Allen, and Lucy Van￾derwende. 2016. CaTeRS: Causal and temporal relation scheme for semantic annotation of
+event structures. In Proceedings of the Fourth Workshop on Events, pages 51–61, San Diego,
+California. Association for Computat
+
+[... text truncated at 60,000 characters ...]

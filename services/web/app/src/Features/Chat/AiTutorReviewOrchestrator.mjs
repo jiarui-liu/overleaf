@@ -19,6 +19,17 @@ import { z } from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  AGENT_ID as SENTENCE_PLACEMENT_ID,
+  AGENT_NAME as SENTENCE_PLACEMENT_NAME,
+  buildParagraphMap,
+  runSentencePlacementAgent,
+} from './AiTutorSentencePlacement.mjs'
+import {
+  AGENT_ID as SECTION_STRUCTURE_ID,
+  AGENT_NAME as SECTION_STRUCTURE_NAME,
+  checkExperimentStructure,
+} from './AiTutorSectionStructure.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SKILLS_DIR = path.join(__dirname, 'ai-tutor-skills')
@@ -38,7 +49,8 @@ const SHOW_PREFIX = process.env.AI_TUTOR_SHOW_PREFIX !== 'false'
 // Set AI_TUTOR_DISABLED_AGENTS in .env to disable specific reviewers.
 // Available agent IDs: abstract, introduction, related_work, methods, results,
 //   conclusion, appendix, writing_style, latex_formatting, figures_tables,
-//   paper_type (dynamic), venue (dynamic), abstract_footnote (regex check)
+//   paper_type (dynamic), venue (dynamic), sentence_placement (dynamic),
+//   section_structure (dynamic, rule-based), abstract_footnote (regex check)
 // Example: AI_TUTOR_DISABLED_AGENTS=latex_formatting,venue
 const DISABLED_AGENTS = new Set(
   (process.env.AI_TUTOR_DISABLED_AGENTS || '')
@@ -210,7 +222,7 @@ export function parseSections(mergedTex)
  * \t as tab (0x09), \f as form feed (0x0C), \r as CR (0x0D).
  * This reverses that transformation so we can match against real LaTeX source.
  */
-function repairJsonEscapedLatex(text)
+export function repairJsonEscapedLatex(text)
 {
   return text
     .replace(/\x08/g, '\\b')   // backspace → \b  (e.g. \begin, \bar, \bfseries)
@@ -317,7 +329,7 @@ function diceCoefficient(a, b)
  * Returns { index, length, matchedText, similarity } in ORIGINAL
  * haystack coordinates, or null if no match meets the threshold.
  */
-function fuzzyFindInText(needle, haystack, threshold = FUZZY_THRESHOLD)
+export function fuzzyFindInText(needle, haystack, threshold = FUZZY_THRESHOLD)
 {
   if (!needle || needle.length < 5 || !haystack || haystack.length < needle.length * 0.5)
   {
@@ -597,8 +609,9 @@ const SectionAssignmentSchema = z.object({
       'Never assign more than 2 categories. When in doubt, pick the single best fit. ' +
       'abstract = abstract, introduction = introduction, ' +
       'related_work = related work / background / prior work, ' +
-      'methods = methods / approach / methodology / dataset construction / task formulation / preliminaries, ' +
-      'results = results / experiments / analysis / discussion / RQ sections / evaluation, ' +
+      'methods = methods / approach / methodology / dataset construction / task formulation / preliminaries / ' +
+      'experimental setup / implementation details / evaluation protocol / datasets and baselines, ' +
+      'results = results / experiments / analysis / discussion / RQ sections / evaluation (the findings themselves, NOT the setup), ' +
       'conclusion = conclusion / limitations / ethical considerations / acknowledgments, ' +
       'appendix = all the appendix sections'
     ),
@@ -832,7 +845,7 @@ ${introContent}
 
 Based on the above:
 1. Classify the paper type.
-2. In sectionAssignments, assign EVERY section from the numbered list above to a review category. Use the EXACT section titles. Do not skip any. Almost all sections should get exactly ONE category. Only assign TWO categories when a section truly spans two concerns (e.g., it presents both methodology AND experimental results in the same section). Never assign more than two. When in doubt, pick the single best fit.
+2. In sectionAssignments, assign EVERY section from the numbered list above to a review category. Use the EXACT section titles. Do not skip any. Almost all sections should get exactly ONE category. Only assign TWO categories when a section truly spans two concerns (e.g., it presents both methodology AND experimental results in the same section). Never assign more than two. When in doubt, pick the single best fit. An experimental setup section or subsection (setup, implementation details, datasets and baselines, evaluation protocol) goes to "methods", even when it sits inside an Experiments section; "results" is only for sections that report findings.
 3. Generate type-specific guidance for each reviewer.`
 
   // Build log-friendly versions: full template but embedded content previewed
@@ -1012,7 +1025,9 @@ export const SUBAGENT_DEFS = [
     guidanceKey: 'methodsFocus',
     textOnly: true,
     systemPreamble:
-      'Review methods for clarity, design justification, intuition-before-formalism, notation consistency, and pseudo-code readability.',
+      'Review methods for clarity, design justification, intuition-before-formalism, notation consistency, and pseudo-code readability. ' +
+      'You also review the Experimental Setup section (if present): it must give the datasets, models, baselines, metrics, ' +
+      'hyperparameters and implementation details needed to reproduce the experiments, and it must not report results.',
   },
   {
     id: 'results',
@@ -1022,7 +1037,10 @@ export const SUBAGENT_DEFS = [
     guidanceKey: 'resultsFocus',
     textOnly: true,
     systemPreamble:
-      'Review results for RQ structure, bold findings at paragraph starts, figure/table interpretation, and whether claims are supported by evidence.',
+      'Review results for RQ structure, bold findings at paragraph starts, figure/table interpretation, and whether claims are supported by evidence. ' +
+      'RULE: the Experiments / Results section must open directly with a summary of the key findings, then the results. ' +
+      'Setup details (datasets, models, baselines, metrics, hyperparameters, prompts, implementation or compute details) do not belong here; ' +
+      'flag every such passage as a [warning] and say to move it to the Experimental Setup section. A clause saying what a figure or table reports is fine.',
   },
   {
     id: 'conclusion',
@@ -1036,7 +1054,14 @@ export const SUBAGENT_DEFS = [
     guidanceKey: null,
     textOnly: true,
     systemPreamble:
-      'Review conclusion for brevity (not repeating abstract), limitations coverage, ethical considerations, and future work.',
+      'Review conclusion for brevity (not repeating abstract), limitations coverage, ethical considerations, and future work.\n' +
+      'Also check the Limitations section only (not Conclusion or Ethics) against the "Scope Rule: Keep Main-Paper Content Out of Limitations" section of the limitations skill. ' +
+      'Flag results tables or figures, new numbers or metrics not reported elsewhere, experimental setup details, extra analysis, and contribution claims. ' +
+      'Set highlightText to the exact offending text (for example the first row of the table, or the sentence with the numbers). ' +
+      'State why it is a risk and name the target section (Results, Method, or Appendix). Use severity "critical". ' +
+      'You cannot see the Results section, so you cannot tell whether a number is new. Flag a number only when the text presents it as an additional or new result (for example "we additionally show", a new dataset, or a table). ' +
+      'A number used to qualify a headline result (for example "Although our model reaches X, it still trails humans") is a brief mention of an existing result: do not flag it. When unsure, do not flag. ' +
+      'If the section is clean, leave no scope comment: admitted limitations, scope statements, future work, and numbers that restate a main-body result are clean.',
   },
   {
     id: 'appendix',
@@ -1264,7 +1289,7 @@ const SEVERITY_RANK = { critical: 3, warning: 2, suggestion: 1 }
  *
  * This removes redundancy while preserving diverse feedback.
  */
-function deduplicateComments(comments, mergedTex)
+export function deduplicateComments(comments, mergedTex)
 {
   if (comments.length <= 1) return comments
 
@@ -2792,6 +2817,22 @@ export function checkAbstractCodeFootnote(sections)
 // ---------------------------------------------------------------------------
 
 /**
+ * Append a target-venue line to the conclusion reviewer's preamble.
+ * Returns a new array; SUBAGENT_DEFS and non-conclusion defs are not copied or mutated.
+ */
+export function withConclusionVenue(defs, venue) {
+  const isArr = /^(acl|emnlp|naacl|eacl)(_|$)/.test(venue ?? '')
+  const line = isArr
+    ? `Target venue: ${venue} (ACL Rolling Review). In Limitations scope comments, say ARR can desk-reject papers that put main-paper content in Limitations.`
+    : `Target venue: ${venue}. In Limitations scope comments, say the content dodges the page limit and belongs in the main paper or appendix. Do not mention desk rejection.`
+  return defs.map(d =>
+    d.id === 'conclusion'
+      ? { ...d, systemPreamble: d.systemPreamble + '\n' + line }
+      : d
+  )
+}
+
+/**
  * Run the full multi-agent paper review.
  *
  * @param {object} opts
@@ -2873,13 +2914,16 @@ export async function runFullReview({
 
   // Build the final list of agents: static defs + dynamic paper-type agent
   // Filter out disabled agents from env config
-  const agentDefs = SUBAGENT_DEFS.filter(d => {
-    if (DISABLED_AGENTS.has(d.id)) {
-      console.log(`[AI Tutor] Agent "${d.name}" (${d.id}) disabled via AI_TUTOR_DISABLED_AGENTS`)
-      return false
-    }
-    return true
-  })
+  const agentDefs = withConclusionVenue(
+    SUBAGENT_DEFS.filter(d => {
+      if (DISABLED_AGENTS.has(d.id)) {
+        console.log(`[AI Tutor] Agent "${d.name}" (${d.id}) disabled via AI_TUTOR_DISABLED_AGENTS`)
+        return false
+      }
+      return true
+    }),
+    venue
+  )
 
   // Add a paper-type-specific reviewer if a guideline file exists for this type
   const paperTypeFile = `03_paper_types/${classification.paperType}_paper.md`
@@ -3033,6 +3077,63 @@ export async function runFullReview({
     }
   }
 
+  // Add the sentence placement reviewer: suggests where misplaced sentences
+  // should move, grounded in the role model papers (or the bundled prototype
+  // for this paper type when none were uploaded). It has its own runner and
+  // gets a longer timeout since it reads the whole paper plus prototypes.
+  if (DISABLED_AGENTS.has(SENTENCE_PLACEMENT_ID))
+  {
+    console.log(`[AI Tutor] Agent "${SENTENCE_PLACEMENT_NAME}" (${SENTENCE_PLACEMENT_ID}) disabled via AI_TUTOR_DISABLED_AGENTS`)
+  } else
+  {
+    agentDefs.push({
+      id: SENTENCE_PLACEMENT_ID,
+      name: SENTENCE_PLACEMENT_NAME,
+      timeoutMs: 180_000,
+      run: () =>
+        runSentencePlacementAgent(
+          {
+            openai,
+            model,
+            sections,
+            mergedTex,
+            roleModelTexts,
+            paperType: classification.paperType,
+          },
+          {
+            generateObjectWithRetry,
+            fuzzyFindInText,
+            repairJsonEscapedLatex,
+            loadSkill,
+            strictMode: STRICT_MODE,
+          }
+        ),
+    })
+  }
+
+  // Add the rule-based section structure check (no LLM): flags a missing
+  // Experimental Setup section, or one placed after the results. Position
+  // papers usually have no experiments, so they are skipped.
+  if (DISABLED_AGENTS.has(SECTION_STRUCTURE_ID))
+  {
+    console.log(`[AI Tutor] Agent "${SECTION_STRUCTURE_NAME}" (${SECTION_STRUCTURE_ID}) disabled via AI_TUTOR_DISABLED_AGENTS`)
+  } else if (classification.paperType !== 'position')
+  {
+    agentDefs.push({
+      id: SECTION_STRUCTURE_ID,
+      name: SECTION_STRUCTURE_NAME,
+      run: async () =>
+      {
+        const { layout, comments } = checkExperimentStructure(buildParagraphMap(sections, mergedTex), mergedTex)
+        console.log(
+          `[AI Tutor] [${SECTION_STRUCTURE_NAME}] setup: [${layout.setup.map(s => s.label).join(', ')}], ` +
+          `results: [${layout.results.map(s => s.label).join(', ')}] — ${comments.length} finding(s)`
+        )
+        return { id: SECTION_STRUCTURE_ID, comments, skipped: false }
+      },
+    })
+  }
+
   // Phase 3: Run subagents in parallel
   console.log('-'.repeat(60))
   console.log(
@@ -3049,23 +3150,26 @@ export async function runFullReview({
   const AGENT_TIMEOUT = 120_000 // 2 minutes per agent
   const subagentPromises = agentDefs.map(def =>
   {
-    const promise = runSubagent(
-      openai,
-      model,
-      def,
-      sections,
-      classification.sectionMapping,
-      classification.typeSpecificGuidance,
-      mergedTex,
-      roleModelTexts
-    )
+    const promise = def.run
+      ? def.run()
+      : runSubagent(
+        openai,
+        model,
+        def,
+        sections,
+        classification.sectionMapping,
+        classification.typeSpecificGuidance,
+        mergedTex,
+        roleModelTexts
+      )
+    const timeoutMs = def.timeoutMs || AGENT_TIMEOUT
     // Wrap with timeout
     return Promise.race([
       promise,
       new Promise((_, reject) =>
         setTimeout(
-          () => reject(new Error(`Timeout after ${AGENT_TIMEOUT}ms`)),
-          AGENT_TIMEOUT
+          () => reject(new Error(`Timeout after ${timeoutMs}ms`)),
+          timeoutMs
         )
       ),
     ]).catch(err => ({
@@ -3082,6 +3186,7 @@ export async function runFullReview({
   // Collect results
   const allComments = []
   const failedAgents = []
+  let placementPrototypes
 
   console.log(`[AI Tutor] Phase 3: All agents returned after ${phase3Elapsed}s. Collecting results:`)
 
@@ -3090,6 +3195,11 @@ export async function runFullReview({
     const result =
       results[i].status === 'fulfilled' ? results[i].value : null
     const def = agentDefs[i]
+
+    if (result?.meta?.placementPrototypes)
+    {
+      placementPrototypes = result.meta.placementPrototypes
+    }
 
     if (!result || results[i].status === 'rejected')
     {
@@ -3242,6 +3352,7 @@ export async function runFullReview({
     },
     failedAgents,
     roleModelPapers: roleModelTexts.length > 0 ? roleModelTexts.map(rm => rm.name) : undefined,
+    placementPrototypes,
   }
 
   // Cache results
