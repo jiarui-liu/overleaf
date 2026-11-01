@@ -8,6 +8,7 @@ import UserInfoController from '../User/UserInfoController.mjs'
 import ChatManager from './ChatManager.mjs'
 import ProjectEntityHandler from '../Project/ProjectEntityHandler.mjs'
 import ProjectGetter from '../Project/ProjectGetter.mjs'
+import TokenAccessHandler from '../TokenAccess/TokenAccessHandler.mjs'
 import DocumentHelper from '../Documents/DocumentHelper.mjs'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -20,6 +21,18 @@ import {
   clearAppliedThreads,
   validateAppliedThreads,
 } from './AiTutorRevisionMatcher.mjs'
+import {
+  MAX_CONCURRENT_AUTOMATED_REVIEWS,
+  automatedStartBlock,
+  automatedVenue,
+  claimAutomatedReview,
+  pendingAutomatedReview,
+  readAutomatedState,
+  readCachedReview,
+  serviceTokenMatches,
+  shareTokenFrom,
+  writeAutomatedState,
+} from './AiTutorAutomatedReview.mjs'
 import { verifyCitations } from './CitationVerifier.mjs'
 
 async function sendMessage(req, res) {
@@ -542,10 +555,20 @@ async function analyzeWholeProject(req, res) {
   }
 }
 
+const DEFAULT_REVIEW_MODEL = 'gpt-5.2-chat-latest'
+
+// A request the review cannot run on, answered with its own status
+class ReviewInputError extends Error {
+  constructor(status, message) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function reviewWholeProject(req, res) {
   try {
   const { project_id: projectId } = req.params
-  const { model = 'gpt-5.2-chat-latest', venue = 'arxiv', roleModelTexts: rawRoleModelTexts = [] } = req.body
+  const { model = DEFAULT_REVIEW_MODEL, venue = 'arxiv', roleModelTexts: rawRoleModelTexts = [] } = req.body
   const userId = SessionManager.getLoggedInUserId(req.session)
 
   // Validate roleModelTexts if provided
@@ -569,6 +592,33 @@ async function reviewWholeProject(req, res) {
     )
   }
 
+    res.json(
+      await runProjectReview(projectId, {
+        model,
+        venue,
+        roleModelTexts,
+        logUserId: userId.toString(),
+        trigger: 'manual',
+      })
+    )
+  } catch (err) {
+    console.error('[AI Tutor] Review failed:', err)
+    if (!res.headersSent) {
+      res
+        .status(err instanceof ReviewInputError ? err.status : 500)
+        .json({ error: err.message })
+    }
+  }
+}
+
+/**
+ * Analyze the project and run the full multi-agent review. This is what the
+ * panel's "Run Full Review" does, shared with automated reviews from AdminBot.
+ */
+async function runProjectReview(
+  projectId,
+  { model, venue, roleModelTexts, logUserId, trigger }
+) {
   // Step 1: Run project analysis (always re-analyze for fresh data)
   console.log('[AI Tutor] reviewWholeProject: running project analysis...')
 
@@ -580,7 +630,7 @@ async function reviewWholeProject(req, res) {
   })
 
   if (!project) {
-    return res.status(404).json({ error: 'Project not found' })
+    throw new ReviewInputError(404, 'Project not found')
   }
 
   // Find root doc
@@ -607,9 +657,10 @@ async function reviewWholeProject(req, res) {
     }
   }
   if (!rootDocPath) {
-    return res.status(400).json({
-      error: 'Could not find root .tex file with \\documentclass',
-    })
+    throw new ReviewInputError(
+      400,
+      'Could not find root .tex file with \\documentclass'
+    )
   }
 
   // Build docContentMap
@@ -790,8 +841,9 @@ async function reviewWholeProject(req, res) {
       const logEntry = {
         timestamp: new Date().toISOString(),
         type: 'full_review',
+        trigger,
         projectId,
-        userId: userId.toString(),
+        userId: logUserId,
         model,
         venue,
         roleModelPapers: roleModelTexts.length > 0 ? roleModelTexts.map(rm => rm.name) : undefined,
@@ -821,13 +873,147 @@ async function reviewWholeProject(req, res) {
       console.warn('[AI Tutor] Failed to write JSONL log:', logErr.message)
     }
 
-    res.json(result)
-  } catch (err) {
-    console.error('[AI Tutor] Review failed:', err)
-    if (!res.headersSent) {
-      res.status(500).json({ error: err.message })
-    }
+    return result
+}
+
+// Automated reviews running in this process, by project id
+const runningAutomatedReviews = new Set()
+
+/**
+ * AdminBot asks for a review of a paper at its review step. Authenticated by
+ * PAPERMENTOR_SERVICE_TOKEN rather than a session: the paper is named by its
+ * "Anyone with this link can edit" share link, which is what authors give
+ * AdminBot, so the review needs nobody's account. Answers as soon as the review
+ * has started; the result is offered in the panel once it finishes.
+ */
+async function requestAutomatedReview(req, res) {
+  const expected = process.env.PAPERMENTOR_SERVICE_TOKEN
+  if (!expected) {
+    return res.status(503).json({ error: 'Automated reviews are not enabled' })
   }
+  if (!serviceTokenMatches(req.headers.authorization, expected)) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  const body = req.body || {}
+
+  let projectId = null
+  if (body.share_link) {
+    const token = shareTokenFrom(body.share_link)
+    if (!token || !TokenAccessHandler.isReadAndWriteToken(token)) {
+      return res
+        .status(400)
+        .json({ error: 'share_link is not an Overleaf edit share link' })
+    }
+    const project =
+      await TokenAccessHandler.promises.getProjectByReadAndWriteToken(token)
+    // A link the owner has since turned off no longer names the project
+    if (!project || !TokenAccessHandler.tokenAccessEnabledForProject(project)) {
+      return res
+        .status(404)
+        .json({ error: 'No project on this Overleaf shares that link' })
+    }
+    projectId = project._id.toString()
+  } else if (/^[0-9a-f]{24}$/.test(body.project_id || '')) {
+    const project = await ProjectGetter.promises.getProject(body.project_id, {
+      _id: 1,
+    })
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' })
+    }
+    projectId = body.project_id
+  } else {
+    return res
+      .status(400)
+      .json({ error: 'Send the paper as share_link or project_id' })
+  }
+
+  const cacheDir = path.join('/var/lib/overleaf/ai-tutor-cache', projectId)
+  const block = runningAutomatedReviews.has(projectId)
+    ? { status: 'running' }
+    : automatedStartBlock(readAutomatedState(cacheDir))
+  if (block) {
+    return res.status(409).json({ project_id: projectId, ...block })
+  }
+  if (runningAutomatedReviews.size >= MAX_CONCURRENT_AUTOMATED_REVIEWS) {
+    return res.status(429).json({ project_id: projectId, status: 'busy' })
+  }
+
+  const state = { status: 'running', requestedAt: new Date().toISOString() }
+  writeAutomatedState(cacheDir, state)
+  runningAutomatedReviews.add(projectId)
+  console.log(`[AI Tutor] Automated review started for project ${projectId}`)
+
+  runProjectReview(projectId, {
+    model: DEFAULT_REVIEW_MODEL,
+    venue: automatedVenue(body.venue),
+    roleModelTexts: [],
+    logUserId: 'papermentor-automation',
+    trigger: 'automated',
+  })
+    .then(result => {
+      writeAutomatedState(cacheDir, {
+        ...state,
+        status: 'ready',
+        finishedAt: new Date().toISOString(),
+        reviewedAt: result.reviewedAt,
+      })
+      console.log(`[AI Tutor] Automated review ready for project ${projectId}`)
+    })
+    .catch(err => {
+      console.error(`[AI Tutor] Automated review failed for project ${projectId}:`, err)
+      writeAutomatedState(cacheDir, {
+        ...state,
+        status: 'failed',
+        finishedAt: new Date().toISOString(),
+        error: String(err.message).slice(0, 300),
+      })
+    })
+    .finally(() => runningAutomatedReviews.delete(projectId))
+
+  res.status(202).json({ project_id: projectId, status: 'started' })
+}
+
+/** The automated review waiting to be applied, for the panel to offer. */
+async function getAutomatedReview(req, res) {
+  const { project_id: projectId } = req.params
+  const cacheDir = path.join('/var/lib/overleaf/ai-tutor-cache', projectId)
+  const review = pendingAutomatedReview(
+    readAutomatedState(cacheDir),
+    readCachedReview(cacheDir)
+  )
+  if (!review) {
+    return res.json({ pending: false })
+  }
+  // Mapped now rather than at review time, in case files moved since
+  const allDocs = await ProjectEntityHandler.promises.getAllDocs(projectId)
+  const docPathToId = {}
+  for (const [docPath, docData] of Object.entries(allDocs)) {
+    const normalized = docPath.startsWith('/') ? docPath.slice(1) : docPath
+    docPathToId[normalized] = docData._id.toString()
+  }
+  res.json({ pending: true, review: { ...review, docPathToId } })
+}
+
+/** Mark the automated review as being applied, so it is only applied once. */
+async function claimAutomatedReviewForApply(req, res) {
+  const { project_id: projectId } = req.params
+  const userId = SessionManager.getLoggedInUserId(req.session)
+  const cacheDir = path.join('/var/lib/overleaf/ai-tutor-cache', projectId)
+  // Read and write with no await in between, so two claims cannot both succeed
+  const claimed = claimAutomatedReview(
+    readAutomatedState(cacheDir),
+    readCachedReview(cacheDir),
+    req.body?.reviewedAt,
+    userId
+  )
+  if (!claimed) {
+    return res.status(409).json({
+      error:
+        'This automated review was already applied, or a newer review replaced it.',
+    })
+  }
+  writeAutomatedState(cacheDir, claimed)
+  res.sendStatus(204)
 }
 
 async function citationCheckProject(req, res) {
@@ -1004,4 +1190,7 @@ export default {
   citationCheckProject: expressify(citationCheckProject),
   deleteAiTutorComments: expressify(deleteAiTutorComments),
   recordAiTutorAppliedThreads: expressify(recordAiTutorAppliedThreads),
+  requestAutomatedReview: expressify(requestAutomatedReview),
+  getAutomatedReview: expressify(getAutomatedReview),
+  claimAutomatedReviewForApply: expressify(claimAutomatedReviewForApply),
 }

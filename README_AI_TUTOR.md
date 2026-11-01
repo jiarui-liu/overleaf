@@ -30,6 +30,7 @@ The main UI component rendered in the editor's right rail. Contains:
 - **Run Full Review button** — triggers the full pipeline. Shows progress text during the 30-60s review.
 - **Apply Comments button** — appears after review completes. Iterates through all documents, opens each one, and applies comments as native Overleaf review threads using `submitOp` with comment operations.
 - **Delete All AI Tutor Comments button** — removes all `[AI Tutor]` prefixed comment threads from the project.
+- **Load Automated Review** — shown when AdminBot ran a review automatically and nobody has applied it yet. Loading it shows it as if it had just been run, and Apply adds it once for the whole project. AdminBot can only do this for papers whose edit share link is on the lab's own Overleaf. See "Automated reviews from AdminBot" in `README_implementation.md`.
 - **Review summary** — expandable section showing paper type, role model papers used, comment counts by category/severity/document, and any failed agents.
 - **File details** — expandable section showing TeX files merged, figures found, and bib files detected.
 

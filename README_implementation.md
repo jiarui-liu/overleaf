@@ -491,6 +491,17 @@ All paths are relative to `/home/ubuntu/overleaf/`.
 | POST | `/project/:id/ai-tutor-analyze` | `analyzeWholeProject` | Standalone project analysis (backward compat) |
 | POST | `/project/:id/ai-tutor-log` | `logAITutorSuggestions` | Log AI suggestions to disk |
 | DELETE | `/project/:id/ai-tutor-delete-comments` | `deleteAiTutorComments` | Delete all AI Tutor comments from project |
+| POST | `/internal/papermentor/review` | `requestAutomatedReview` | AdminBot starts a review in the background (service token, see below) |
+| GET | `/project/:id/ai-tutor-review/automated` | `getAutomatedReview` | The automated review waiting to be applied, if any |
+| POST | `/project/:id/ai-tutor-review/automated/claim` | `claimAutomatedReviewForApply` | Marks it applied, so coauthors cannot apply it twice |
+
+### Automated reviews from AdminBot
+
+AdminBot requests a review for each paper at its PaperMentor review step. The request names the paper by its "Anyone with this link can edit" share link, which is resolved on this server, so no user account is involved. That only works for a link on this instance: a project on overleaf.com cannot be reviewed automatically.
+
+- `POST /internal/papermentor/review` takes `{ share_link }` (or `{ project_id }`) and an optional `venue` key such as `iclr_2026`, authenticated with `Authorization: Bearer $PAPERMENTOR_SERVICE_TOKEN`. A venue without a file in `ai-tutor-skills/02_venues/` reviews as arXiv. It answers `202` once the review has started, `409` if one is running or one was requested in the last 24 hours, `429` when two automated reviews are already running, and `503` while the token is unset.
+- The review runs exactly as "Run Full Review" does and writes the usual `review_comments.json`. Its state is kept in `automated_review.json` next to it.
+- Nothing is added to the project automatically. The next time an author opens the panel, it offers **Load Automated Review**. Apply then claims the review first, so it is applied once, and a review run by hand afterwards replaces it.
 
 ## Configuration
 
@@ -512,6 +523,7 @@ Passed to the web container via `env_file: ../.env` in `docker-compose.yml`.
 | `AI_TUTOR_LOG_PROMPTS` | `false` | Set to `true` to log full LLM prompts and responses |
 | `AI_TUTOR_STRICT_MODE` | `false` | Set to `true` to only generate critical/warning comments and prune to ≤30 via Phase 5 |
 | `AI_TUTOR_SHOW_PREFIX` | `true` | Set to `false` to hide the `[AI Tutor]` prefix from comment text |
+| `PAPERMENTOR_SERVICE_TOKEN` | (unset) | Shared secret AdminBot uses to request automated reviews; the endpoint is off while unset |
 
 ### Model Selection
 

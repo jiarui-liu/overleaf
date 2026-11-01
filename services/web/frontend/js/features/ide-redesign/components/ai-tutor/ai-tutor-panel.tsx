@@ -8,6 +8,8 @@ import RangesTracker from '@overleaf/ranges-tracker'
 import {
   runFullReview,
   runCitationCheck,
+  getAutomatedReview,
+  claimAutomatedReview,
   deleteAiTutorComments,
   recordAppliedThreads,
   shouldApply,
@@ -105,6 +107,11 @@ export default function AiTutorPanel() {
   const [reviewProgress, setReviewProgress] = useState<string | null>(null)
   const [appliedCount, setAppliedCount] = useState(0)
 
+  // A review AdminBot ran automatically, not yet applied by anyone
+  const [automatedReview, setAutomatedReview] = useState<ReviewResult | null>(
+    null
+  )
+
   // Citation Sleuth state
   const [isCitationChecking, setIsCitationChecking] = useState(false)
   const [citationProgress, setCitationProgress] = useState<string | null>(null)
@@ -119,6 +126,17 @@ export default function AiTutorPanel() {
   const { currentDocument, currentDocumentId } = useEditorOpenDocContext()
   const { openDocWithId } = useEditorManagerContext()
   const { projectId } = useProjectContext()
+
+  // -----------------------------------------------------------------------
+  // Effect: offer an automated review that is waiting to be applied
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    getAutomatedReview(projectId)
+      .then(setAutomatedReview)
+      .catch(err =>
+        console.warn('[AI Tutor] Could not check for an automated review:', err)
+      )
+  }, [projectId])
 
   // -----------------------------------------------------------------------
   // Effect: when currentDocument changes during auto-apply, process next batch
@@ -369,6 +387,8 @@ export default function AiTutorPanel() {
 
       setReviewResult(result.result!)
       setReviewProgress(null)
+      // This review replaces any automated one on the server, too
+      setAutomatedReview(null)
 
       const r = result.result!
       const failedNote =
@@ -447,9 +467,23 @@ export default function AiTutorPanel() {
   }, [projectId])
 
   // -----------------------------------------------------------------------
+  // Show the automated review as if it had just been run here
+  // -----------------------------------------------------------------------
+  const handleLoadAutomatedReview = useCallback(() => {
+    if (!automatedReview) return
+    setReviewResult(automatedReview)
+    setAppliedCount(0)
+    setError(null)
+    setSuccessMessage(
+      `Loaded the automated review from ${new Date(automatedReview.reviewedAt).toLocaleString()}: ` +
+      `${automatedReview.summary.total} comments. Click Apply to add them to the project.`
+    )
+  }, [automatedReview])
+
+  // -----------------------------------------------------------------------
   // Apply review comments across all documents automatically
   // -----------------------------------------------------------------------
-  const handleApplyComments = useCallback(() => {
+  const handleApplyComments = useCallback(async () => {
     if (!reviewResult) {
       setError('No review results available.')
       return
@@ -481,6 +515,22 @@ export default function AiTutorPanel() {
       return
     }
 
+    // An automated review is applied once per project, whoever opens it first
+    if (reviewResult === automatedReview) {
+      try {
+        await claimAutomatedReview(projectId, reviewResult.reviewedAt)
+      } catch (err) {
+        console.warn('[AI Tutor] Could not claim the automated review:', err)
+        setAutomatedReview(null)
+        setReviewResult(null)
+        setError(
+          'This automated review was already applied by a coauthor, or a newer review replaced it.'
+        )
+        return
+      }
+      setAutomatedReview(null)
+    }
+
     // Initialize the queue
     commentQueueRef.current = {
       entries,
@@ -509,7 +559,7 @@ export default function AiTutorPanel() {
     } else {
       openDocWithId(firstDocId)
     }
-  }, [reviewResult, currentDocumentId, openDocWithId])
+  }, [reviewResult, automatedReview, projectId, currentDocumentId, openDocWithId])
 
   // -----------------------------------------------------------------------
   // Delete all AI Tutor comments
@@ -783,6 +833,38 @@ export default function AiTutorPanel() {
             Analyzes your project structure, classifies your paper type, then
             runs parallel reviewers for each section and aspect.
           </p>
+
+          {/* Automated review waiting to be applied */}
+          {automatedReview && reviewResult !== automatedReview && (
+            <div
+              style={{
+                fontSize: '12px',
+                padding: '8px',
+                backgroundColor: 'var(--bg-tertiary-themed)',
+                borderRadius: '4px',
+                marginBottom: '8px',
+              }}
+            >
+              <p style={{ margin: '0 0 6px 0' }}>
+                Paper Mentor reviewed this paper automatically on{' '}
+                {new Date(automatedReview.reviewedAt).toLocaleDateString()}:{' '}
+                {automatedReview.summary.total} comments
+                {automatedReview.summary.edits
+                  ? ` and ${automatedReview.summary.edits} edits`
+                  : ''}
+                . Nothing has been added to the project yet.
+              </p>
+              <OLButton
+                variant="secondary"
+                size="sm"
+                onClick={handleLoadAutomatedReview}
+                disabled={isReviewing || isApplying}
+                style={{ width: '100%' }}
+              >
+                Load Automated Review
+              </OLButton>
+            </div>
+          )}
 
           {/* Run Full Review button */}
           <OLButton
