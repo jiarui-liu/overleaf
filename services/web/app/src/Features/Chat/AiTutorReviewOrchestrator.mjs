@@ -2180,10 +2180,11 @@ const ACK_RESOURCES_SENTENCE =
   'Resources used in preparing this research project were provided, in part, by the Digital Research Alliance of Canada; the Province of Ontario; the Swiss AI Compute grants; the Government of Canada through CIFAR; and companies sponsoring the Vector Institute.'
 
 const ACK_TOOLS_SENTENCE =
-  'We thank Jiarui Liu, Andrew Kim, and the other key developers of PaperMentor (\\cite{liu-etal-2026-papermentor}; \\cite{papermentor-2}), who developed the tool that provided mentorship and valuable suggestions to polish this paper after the first draft by the authors. ' +
+  'We thank Jiarui Liu, Andrew Kim, and the other key developers of PaperMentor \\cite{liu-etal-2026-papermentor}, who developed the tool that provided mentorship and valuable suggestions to polish this paper after the first draft by the authors. ' +
   'We further acknowledge the crucial work of AdminBot \\cite{adminbot} for administrative support that streamlined our research workflow.'
 
-// BibTeX entries cited by the template; appended to the paper's .bib when missing.
+// BibTeX entries the template may cite; those it currently cites are appended to
+// the paper's .bib when missing. papermentor-2 is kept for when it is cited again.
 const ACK_BIB_ENTRIES = {
   'liu-etal-2026-papermentor': `@inproceedings{liu-etal-2026-papermentor,
   title={{PaperMentor}: {A} Human-Centered Multi-Agent Writing Tutor for {AI} Research Papers in {O}verleaf},
@@ -2552,6 +2553,7 @@ function buildAckBibEdits(mergedTex, docContentMap)
 
   const missing = Object.entries(ACK_BIB_ENTRIES).filter(([key]) =>
   {
+    if (!ACK_TOOLS_SENTENCE.includes(`\\cite{${key}}`)) return false
     const keyRe = new RegExp(`@\\w+\\s*\\{\\s*${key.replace(/[-]/g, '\\-')}\\s*,`)
     return !bibDocs.some(p => keyRe.test(docContentMap[p]))
   })
