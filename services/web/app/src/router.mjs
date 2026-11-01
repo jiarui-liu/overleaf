@@ -1122,6 +1122,26 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
       ChatController.recordAiTutorAppliedThreads
     )
 
+    // Automated review requested by AdminBot (service token, no session)
+    privateApiRouter.post(
+      '/internal/papermentor/review',
+      ChatController.requestAutomatedReview
+    )
+
+    // The automated review waiting to be applied, and claiming it for Apply
+    webRouter.get(
+      '/project/:project_id/ai-tutor-review/automated',
+      AuthorizationMiddleware.blockRestrictedUserFromProject,
+      AuthorizationMiddleware.ensureUserCanReadProject,
+      ChatController.getAutomatedReview
+    )
+    webRouter.post(
+      '/project/:project_id/ai-tutor-review/automated/claim',
+      AuthorizationMiddleware.blockRestrictedUserFromProject,
+      AuthorizationMiddleware.ensureUserCanWriteProjectContent,
+      ChatController.claimAutomatedReviewForApply
+    )
+
   }
 
   webRouter.post(

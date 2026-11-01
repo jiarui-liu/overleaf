@@ -1,4 +1,4 @@
-import { postJSON } from '@/infrastructure/fetch-json'
+import { getJSON, postJSON } from '@/infrastructure/fetch-json'
 
 export interface FileCategory {
   description: string
@@ -128,6 +128,27 @@ export async function runFullReview(
         error instanceof Error ? error.message : 'An unknown error occurred.',
     }
   }
+}
+
+// A review AdminBot ran automatically, waiting for an author to apply it
+export async function getAutomatedReview(
+  projectId: string
+): Promise<ReviewResult | null> {
+  const response = (await getJSON(
+    `/project/${projectId}/ai-tutor-review/automated`
+  )) as { pending: boolean; review?: ReviewResult }
+  return response.pending && response.review ? response.review : null
+}
+
+// Claim it before applying, so coauthors cannot apply the same review twice.
+// Fails with a 409 when someone else already did.
+export async function claimAutomatedReview(
+  projectId: string,
+  reviewedAt: string
+): Promise<void> {
+  await postJSON(`/project/${projectId}/ai-tutor-review/automated/claim`, {
+    body: { reviewedAt },
+  })
 }
 
 export async function deleteAiTutorComments(
