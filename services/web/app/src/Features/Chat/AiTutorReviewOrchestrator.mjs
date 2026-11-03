@@ -33,6 +33,7 @@ import {
   checkSectionNames,
 } from './AiTutorSectionStructure.mjs'
 import { checkAffiliationOrder, checkEmoji } from './AiTutorStyleChecks.mjs'
+import { compareRosterAffiliations, fetchAuthorAffiliations } from './AiTutorRosterAffiliations.mjs'
 import {
   normalizeWhitespace,
   diceCoefficient,
@@ -59,7 +60,8 @@ const SHOW_PREFIX = process.env.AI_TUTOR_SHOW_PREFIX !== 'false'
 // Available agent IDs: abstract, introduction, related_work, methods, results,
 //   conclusion, appendix, writing_style, latex_formatting, figures_tables,
 //   paper_type (dynamic), venue (dynamic), sentence_placement (dynamic),
-//   section_structure (dynamic, rule-based), abstract_footnote (regex check)
+//   section_structure (dynamic, rule-based), abstract_footnote (regex check),
+//   emoji, affiliation_order (regex checks), lab_affiliations (AdminBot roster)
 // Example: AI_TUTOR_DISABLED_AGENTS=latex_formatting,venue
 const DISABLED_AGENTS = new Set(
   (process.env.AI_TUTOR_DISABLED_AGENTS || '')
@@ -2715,6 +2717,54 @@ ${loadSkill('06_writing_style/affiliations.md')}
   }
 }
 
+const AuthorListSchema = z.object({
+  authors: z.array(
+    z.object({
+      name: z.string().describe('Author name exactly as written, without LaTeX commands, superscripts or footnote marks'),
+      affiliations: z
+        .array(z.string())
+        .describe('Full affiliation text for each affiliation this author is marked with, resolved from superscripts/footnotes, without LaTeX commands'),
+    })
+  ),
+})
+
+/**
+ * Compare lab members' title-page affiliations with what AdminBot records for
+ * them (see AiTutorRosterAffiliations.mjs). Skipped without
+ * ADMINBOT_PAPERMENTOR_TOKEN. Never throws.
+ * @returns {Promise<Array>} comments in the pre-mapping shape
+ */
+export async function buildRosterAffiliationComments(openai, model, sections, mergedTex)
+{
+  if (!process.env.ADMINBOT_PAPERMENTOR_TOKEN) return []
+  try
+  {
+    const frontMatter = extractFrontMatter(mergedTex, sections, 12000)
+    const result = await generateObjectWithRetry({
+      model: openai(model),
+      schema: AuthorListSchema,
+      system:
+        'List every author of this LaTeX paper in order, each with the affiliations the author block assigns ' +
+        'to them (resolve superscript numbers and \\thanks/footnote marks to the affiliation text). ' +
+        'Copy names and affiliations as written. Return an empty list if there is no author block.',
+      prompt: `## Author block\n${frontMatter}`,
+      temperature: 0,
+    }, 'Roster-Affiliations')
+    const authors = result.object.authors.filter(a => a.name.trim())
+    const roster = await fetchAuthorAffiliations(authors.map(a => a.name))
+    const comments = compareRosterAffiliations(authors, roster, frontMatter)
+    console.log(
+      `[AI Tutor] Lab affiliation check: ${authors.length} author(s), ` +
+      `${roster.filter(r => r.member).length} on the roster, ${comments.length} missing affiliation(s)`
+    )
+    return comments
+  } catch (err)
+  {
+    console.error(`[AI Tutor] Lab affiliation check FAILED, skipping: ${err.message}`)
+    return []
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Structural check — code/data footnote at the end of the abstract
 // ---------------------------------------------------------------------------
@@ -3121,7 +3171,11 @@ export async function runFullReview({
   )
   const phase3Start = Date.now()
 
-  // Direct edits (acknowledgments, affiliations) run concurrently with the reviewer subagents
+  // Direct edits (acknowledgments, affiliations) and the AdminBot roster check run
+  // concurrently with the reviewer subagents
+  const rosterAffiliationsPromise = DISABLED_AGENTS.has('lab_affiliations')
+    ? Promise.resolve(null)
+    : buildRosterAffiliationComments(openai, model, sections, mergedTex)
   const directEditsPromise = Promise.all([
     buildAcknowledgmentsEdits(openai, model, sections, mergedTex, docContentMap, rootDocPath),
     buildAffiliationEdits(openai, model, sections, mergedTex, docContentMap, rootDocPath),
@@ -3274,6 +3328,14 @@ export async function runFullReview({
     const orderComment = checkAffiliationOrder(extractFrontMatter(mergedTex, sections))
     console.log(`[AI Tutor] Affiliation order check: ${orderComment ? 'superscripts out of order' : 'OK'}`)
     if (orderComment) structuralComments.push(orderComment)
+  }
+  const rosterComments = await rosterAffiliationsPromise
+  if (rosterComments === null)
+  {
+    console.log('[AI Tutor] Lab affiliation check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else
+  {
+    structuralComments.push(...rosterComments)
   }
 
   // Phase 6: Map comments to original documents
