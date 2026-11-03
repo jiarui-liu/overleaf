@@ -29,7 +29,11 @@ import {
   AGENT_ID as SECTION_STRUCTURE_ID,
   AGENT_NAME as SECTION_STRUCTURE_NAME,
   checkExperimentStructure,
+  checkRelatedWork,
+  checkSectionNames,
 } from './AiTutorSectionStructure.mjs'
+import { checkAffiliationOrder, checkEmoji, isAnonymousSubmission } from './AiTutorStyleChecks.mjs'
+import { compareRosterAffiliations, fetchAuthorAffiliations } from './AiTutorRosterAffiliations.mjs'
 import {
   normalizeWhitespace,
   diceCoefficient,
@@ -56,7 +60,8 @@ const SHOW_PREFIX = process.env.AI_TUTOR_SHOW_PREFIX !== 'false'
 // Available agent IDs: abstract, introduction, related_work, methods, results,
 //   conclusion, appendix, writing_style, latex_formatting, figures_tables,
 //   paper_type (dynamic), venue (dynamic), sentence_placement (dynamic),
-//   section_structure (dynamic, rule-based), abstract_footnote (regex check)
+//   section_structure (dynamic, rule-based), abstract_footnote (regex check),
+//   emoji, affiliation_order (regex checks), lab_affiliations (AdminBot roster)
 // Example: AI_TUTOR_DISABLED_AGENTS=latex_formatting,venue
 const DISABLED_AGENTS = new Set(
   (process.env.AI_TUTOR_DISABLED_AGENTS || '')
@@ -1078,7 +1083,7 @@ export const SUBAGENT_DEFS = [
       'Review LaTeX formatting and front matter: \\cref usage, table formatting (booktabs, no vertical bars), ' +
       'equation punctuation, broken references, quotation marks, \\href vs typeable URLs for print readers, ' +
       '\\cleardoublepage before the appendix where appropriate, and the title block ' +
-      '(author emails must be listed; the first-page footnote must declare preprint status with the current year).',
+      '(author emails must be listed; the first-page footnote must say only "Preprint" with the current year, never "Under review" or a submitted-to venue).',
   },
   {
     id: 'figures_tables',
@@ -2712,6 +2717,54 @@ ${loadSkill('06_writing_style/affiliations.md')}
   }
 }
 
+const AuthorListSchema = z.object({
+  authors: z.array(
+    z.object({
+      name: z.string().describe('Author name exactly as written, without LaTeX commands, superscripts or footnote marks'),
+      affiliations: z
+        .array(z.string())
+        .describe('Full affiliation text for each affiliation this author is marked with, resolved from superscripts/footnotes, without LaTeX commands'),
+    })
+  ),
+})
+
+/**
+ * Compare lab members' title-page affiliations with what AdminBot records for
+ * them (see AiTutorRosterAffiliations.mjs). Skipped without
+ * ADMINBOT_PAPERMENTOR_TOKEN. Never throws.
+ * @returns {Promise<Array>} comments in the pre-mapping shape
+ */
+export async function buildRosterAffiliationComments(openai, model, sections, mergedTex)
+{
+  if (!process.env.ADMINBOT_PAPERMENTOR_TOKEN) return []
+  try
+  {
+    const frontMatter = extractFrontMatter(mergedTex, sections, 12000)
+    const result = await generateObjectWithRetry({
+      model: openai(model),
+      schema: AuthorListSchema,
+      system:
+        'List every author of this LaTeX paper in order, each with the affiliations the author block assigns ' +
+        'to them (resolve superscript numbers and \\thanks/footnote marks to the affiliation text). ' +
+        'Copy names and affiliations as written. Return an empty list if there is no author block.',
+      prompt: `## Author block\n${frontMatter}`,
+      temperature: 0,
+    }, 'Roster-Affiliations')
+    const authors = result.object.authors.filter(a => a.name.trim())
+    const roster = await fetchAuthorAffiliations(authors.map(a => a.name))
+    const comments = compareRosterAffiliations(authors, roster, frontMatter)
+    console.log(
+      `[AI Tutor] Lab affiliation check: ${authors.length} author(s), ` +
+      `${roster.filter(r => r.member).length} on the roster, ${comments.length} missing affiliation(s)`
+    )
+    return comments
+  } catch (err)
+  {
+    console.error(`[AI Tutor] Lab affiliation check FAILED, skipping: ${err.message}`)
+    return []
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Structural check — code/data footnote at the end of the abstract
 // ---------------------------------------------------------------------------
@@ -2772,8 +2825,7 @@ export function checkAbstractCodeFootnote(sections)
     highlightText,
     comment:
       'The abstract should end with a footnote pointing to the code and data, so readers can find the artifacts from the first page, ' +
-      'e.g. "...\\footnote{Our code and data are available at \\url{https://github.com/...}.}". ' +
-      'For anonymous submissions, use an anonymized link (e.g. anonymous.4open.science).',
+      'e.g. "...\\footnote{Our code and data are available at \\url{https://github.com/...}.}".',
     severity: 'warning',
     category: 'abstract',
     agentName: ABSTRACT_FOOTNOTE_AGENT_NAME,
@@ -3082,8 +3134,9 @@ export async function runFullReview({
   }
 
   // Add the rule-based section structure check (no LLM): flags a missing
-  // Experimental Setup section, or one placed after the results. Position
-  // papers usually have no experiments, so they are skipped.
+  // Experimental Setup section, or one placed after the results, and
+  // top-level titles like "Our Judge". Position papers usually have no
+  // experiments, so they are skipped.
   if (DISABLED_AGENTS.has(SECTION_STRUCTURE_ID))
   {
     console.log(`[AI Tutor] Agent "${SECTION_STRUCTURE_NAME}" (${SECTION_STRUCTURE_ID}) disabled via AI_TUTOR_DISABLED_AGENTS`)
@@ -3094,7 +3147,13 @@ export async function runFullReview({
       name: SECTION_STRUCTURE_NAME,
       run: async () =>
       {
-        const { layout, comments } = checkExperimentStructure(buildParagraphMap(sections, mergedTex), mergedTex)
+        const paragraphMap = buildParagraphMap(sections, mergedTex)
+        const { layout, comments: layoutComments } = checkExperimentStructure(paragraphMap, mergedTex)
+        const comments = [
+          ...layoutComments,
+          ...checkSectionNames(paragraphMap, mergedTex),
+          ...checkRelatedWork(paragraphMap, mergedTex),
+        ]
         console.log(
           `[AI Tutor] [${SECTION_STRUCTURE_NAME}] setup: [${layout.setup.map(s => s.label).join(', ')}], ` +
           `results: [${layout.results.map(s => s.label).join(', ')}] — ${comments.length} finding(s)`
@@ -3111,7 +3170,11 @@ export async function runFullReview({
   )
   const phase3Start = Date.now()
 
-  // Direct edits (acknowledgments, affiliations) run concurrently with the reviewer subagents
+  // Direct edits (acknowledgments, affiliations) and the AdminBot roster check run
+  // concurrently with the reviewer subagents
+  const rosterAffiliationsPromise = DISABLED_AGENTS.has('lab_affiliations')
+    ? Promise.resolve(null)
+    : buildRosterAffiliationComments(openai, model, sections, mergedTex)
   const directEditsPromise = Promise.all([
     buildAcknowledgmentsEdits(openai, model, sections, mergedTex, docContentMap, rootDocPath),
     buildAffiliationEdits(openai, model, sections, mergedTex, docContentMap, rootDocPath),
@@ -3241,11 +3304,41 @@ export async function runFullReview({
   if (DISABLED_AGENTS.has('abstract_footnote'))
   {
     console.log('[AI Tutor] Abstract footnote check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else if (isAnonymousSubmission(mergedTex))
+  {
+    // A public code link would break double-blind review
+    console.log('[AI Tutor] Abstract footnote check skipped: anonymous submission')
   } else
   {
     const footnoteComment = checkAbstractCodeFootnote(sections)
     console.log(`[AI Tutor] Abstract footnote check: ${footnoteComment ? 'no code/data footnote at the end of the abstract' : 'OK'}`)
     if (footnoteComment) structuralComments.push(footnoteComment)
+  }
+  if (DISABLED_AGENTS.has('emoji'))
+  {
+    console.log('[AI Tutor] Emoji check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else
+  {
+    const emojiComments = checkEmoji(mergedTex)
+    console.log(`[AI Tutor] Emoji check: ${emojiComments.length} line(s) with emoji`)
+    structuralComments.push(...emojiComments)
+  }
+  if (DISABLED_AGENTS.has('affiliation_order'))
+  {
+    console.log('[AI Tutor] Affiliation order check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else
+  {
+    const orderComment = checkAffiliationOrder(extractFrontMatter(mergedTex, sections))
+    console.log(`[AI Tutor] Affiliation order check: ${orderComment ? 'superscripts out of order' : 'OK'}`)
+    if (orderComment) structuralComments.push(orderComment)
+  }
+  const rosterComments = await rosterAffiliationsPromise
+  if (rosterComments === null)
+  {
+    console.log('[AI Tutor] Lab affiliation check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else
+  {
+    structuralComments.push(...rosterComments)
   }
 
   // Phase 6: Map comments to original documents
