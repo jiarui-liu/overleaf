@@ -32,7 +32,7 @@ import {
   checkRelatedWork,
   checkSectionNames,
 } from './AiTutorSectionStructure.mjs'
-import { checkAffiliationOrder, checkEmoji } from './AiTutorStyleChecks.mjs'
+import { checkAffiliationOrder, checkEmoji, isAnonymousSubmission } from './AiTutorStyleChecks.mjs'
 import { compareRosterAffiliations, fetchAuthorAffiliations } from './AiTutorRosterAffiliations.mjs'
 import {
   normalizeWhitespace,
@@ -2825,8 +2825,7 @@ export function checkAbstractCodeFootnote(sections)
     highlightText,
     comment:
       'The abstract should end with a footnote pointing to the code and data, so readers can find the artifacts from the first page, ' +
-      'e.g. "...\\footnote{Our code and data are available at \\url{https://github.com/...}.}". ' +
-      'For anonymous submissions, use an anonymized link (e.g. anonymous.4open.science).',
+      'e.g. "...\\footnote{Our code and data are available at \\url{https://github.com/...}.}".',
     severity: 'warning',
     category: 'abstract',
     agentName: ABSTRACT_FOOTNOTE_AGENT_NAME,
@@ -3305,6 +3304,10 @@ export async function runFullReview({
   if (DISABLED_AGENTS.has('abstract_footnote'))
   {
     console.log('[AI Tutor] Abstract footnote check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else if (isAnonymousSubmission(mergedTex))
+  {
+    // A public code link would break double-blind review
+    console.log('[AI Tutor] Abstract footnote check skipped: anonymous submission')
   } else
   {
     const footnoteComment = checkAbstractCodeFootnote(sections)

@@ -7,6 +7,8 @@
  *   section titles.
  * - Affiliation order: affiliation superscripts are numbered 1, 2, 3, ... in
  *   the order they first appear in the author list.
+ * - Anonymous submission: whether the paper is in a venue's double-blind mode,
+ *   so checks that ask for identifying links can stand down.
  *
  * Each check returns comments in the pre-mapping shape the orchestrator's
  * structural checks use: { highlightText, comment, severity, category, agentName }.
@@ -112,4 +114,27 @@ export function checkAffiliationOrder(frontMatter)
     category: 'front_matter',
     agentName: AFFILIATION_ORDER_AGENT_NAME,
   }
+}
+
+// Venue styles in their anonymous (submission) mode. Each venue's camera-ready
+// option is the absence of these: NeurIPS [final]/[preprint], ICML [accepted],
+// ICLR \iclrfinalcopy.
+const ANONYMOUS_MODE_RES = [
+  /\\usepackage\s*(?:\[[^\]]*\b(?:review|submission|anonymous)\b[^\]]*\])\s*\{[^}]*\}/,
+  /\\documentclass\s*\[[^\]]*\b(?:anonymous|review)\b[^\]]*\]/,
+  /\\usepackage\s*(?:\[(?![^\]]*\b(?:final|preprint)\b)[^\]]*\])?\s*\{neurips_\d+\}/,
+  /\\usepackage\s*(?:\[(?![^\]]*\baccepted\b)[^\]]*\])?\s*\{icml\d+\}/,
+]
+
+/**
+ * Whether the paper is set up as an anonymous (double-blind) submission:
+ * the author is "Anonymous", or a venue style is in its review mode. Comments
+ * are ignored, so a commented-out \usepackage[final] doesn't count.
+ */
+export function isAnonymousSubmission(mergedTex)
+{
+  const tex = mergedTex.split('\n').map(stripComment).join('\n')
+  if (/\\author\s*(?:\[[^\]]*\])?\s*\{\s*Anonymous\b/i.test(tex)) return true
+  if (/\\usepackage\s*\{iclr\d+_conference\}/.test(tex) && !/\\iclrfinalcopy\b/.test(tex)) return true
+  return ANONYMOUS_MODE_RES.some(re => re.test(tex))
 }

@@ -8,7 +8,7 @@
  */
 
 import assert from 'node:assert/strict'
-import { checkAffiliationOrder, checkEmoji } from './AiTutorStyleChecks.mjs'
+import { checkAffiliationOrder, checkEmoji, isAnonymousSubmission } from './AiTutorStyleChecks.mjs'
 
 let passed = 0
 function test(name, fn)
@@ -70,6 +70,41 @@ test('ignores symbol marks and a single affiliation', () =>
 {
   assert.equal(checkAffiliationOrder('\\author{Alice$^{1,*}$ Bob$^{1,\\dagger}$}'), null)
   assert.equal(checkAffiliationOrder('(not found)'), null)
+})
+
+console.log('isAnonymousSubmission')
+
+test('recognizes venue styles in review mode and anonymous authors', () =>
+{
+  for (const tex of [
+    '\\usepackage{neurips_2025}',
+    '\\usepackage[nonatbib]{neurips_2025}',
+    '\\usepackage{icml2025}',
+    '\\usepackage{iclr2025_conference}',
+    '\\usepackage[review]{acl}',
+    '\\usepackage[submission]{colm2025_conference}',
+    '\\documentclass[sigconf,anonymous,review]{acmart}',
+    '\\author{Anonymous Authors}',
+  ])
+  {
+    assert.ok(isAnonymousSubmission(tex), tex)
+  }
+})
+
+test('treats arXiv, preprint and camera-ready papers as not anonymous', () =>
+{
+  for (const tex of [
+    '\\documentclass{article}\n\\author{Ada Lovelace}',
+    '\\usepackage[preprint]{neurips_2025}',
+    '\\usepackage[final]{neurips_2025}',
+    '\\usepackage[accepted]{icml2025}',
+    '\\usepackage{iclr2025_conference}\n\\iclrfinalcopy',
+    '\\usepackage[final]{acl}',
+    '% \\usepackage{neurips_2025}\n\\usepackage[preprint]{neurips_2025}',
+  ])
+  {
+    assert.ok(!isAnonymousSubmission(tex), tex)
+  }
 })
 
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`)
