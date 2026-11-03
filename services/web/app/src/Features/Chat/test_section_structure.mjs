@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict'
 import { parseSections } from './AiTutorReviewOrchestrator.mjs'
 import { buildParagraphMap } from './AiTutorSentencePlacement.mjs'
-import { checkExperimentStructure, sectionRole } from './AiTutorSectionStructure.mjs'
+import { checkExperimentStructure, checkSectionNames, sectionRole } from './AiTutorSectionStructure.mjs'
 
 let passed = 0
 function test(name, fn)
@@ -128,6 +128,31 @@ test('says nothing about a paper without experiments', () =>
 {
   const tex = paper([['section', 'Introduction'], ['section', 'Problem Setup'], ['section', 'Discussion'], ['section', 'Conclusion']])
   assert.equal(check(tex).comments.length, 0)
+})
+
+console.log('checkSectionNames')
+
+function names(tex)
+{
+  return checkSectionNames(buildParagraphMap(parseSections(tex), tex), tex)
+}
+
+test('flags a top-level section named after the system', () =>
+{
+  const tex = paper([['section', 'Introduction'], ['section', 'Our Judge'], ['section', 'Experimental Setup'], ['section', 'Results']])
+  const comments = names(tex)
+  assert.equal(comments.length, 1)
+  assert.equal(comments[0].highlightText, '\\section{Our Judge}')
+  assert.match(comments[0].comment, /"Methodology"/)
+})
+
+test('leaves standard names, subsections and the appendix alone', () =>
+{
+  const tex = paper(
+    [['section', 'Methodology'], ['subsection', 'Our Judge'], ['section', 'Experimental Setup'], ['section', 'Our Prompts']],
+    { appendixFrom: 3 }
+  )
+  assert.equal(names(tex).length, 0)
 })
 
 console.log(`\n${passed} passed${process.exitCode ? ', some FAILED' : ''}`)

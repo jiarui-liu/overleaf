@@ -29,7 +29,9 @@ import {
   AGENT_ID as SECTION_STRUCTURE_ID,
   AGENT_NAME as SECTION_STRUCTURE_NAME,
   checkExperimentStructure,
+  checkSectionNames,
 } from './AiTutorSectionStructure.mjs'
+import { checkAffiliationOrder, checkEmoji } from './AiTutorStyleChecks.mjs'
 import {
   normalizeWhitespace,
   diceCoefficient,
@@ -1078,7 +1080,7 @@ export const SUBAGENT_DEFS = [
       'Review LaTeX formatting and front matter: \\cref usage, table formatting (booktabs, no vertical bars), ' +
       'equation punctuation, broken references, quotation marks, \\href vs typeable URLs for print readers, ' +
       '\\cleardoublepage before the appendix where appropriate, and the title block ' +
-      '(author emails must be listed; the first-page footnote must declare preprint status with the current year).',
+      '(author emails must be listed; the first-page footnote must say only "Preprint" with the current year, never "Under review" or a submitted-to venue).',
   },
   {
     id: 'figures_tables',
@@ -3082,8 +3084,9 @@ export async function runFullReview({
   }
 
   // Add the rule-based section structure check (no LLM): flags a missing
-  // Experimental Setup section, or one placed after the results. Position
-  // papers usually have no experiments, so they are skipped.
+  // Experimental Setup section, or one placed after the results, and
+  // top-level titles like "Our Judge". Position papers usually have no
+  // experiments, so they are skipped.
   if (DISABLED_AGENTS.has(SECTION_STRUCTURE_ID))
   {
     console.log(`[AI Tutor] Agent "${SECTION_STRUCTURE_NAME}" (${SECTION_STRUCTURE_ID}) disabled via AI_TUTOR_DISABLED_AGENTS`)
@@ -3094,7 +3097,9 @@ export async function runFullReview({
       name: SECTION_STRUCTURE_NAME,
       run: async () =>
       {
-        const { layout, comments } = checkExperimentStructure(buildParagraphMap(sections, mergedTex), mergedTex)
+        const paragraphMap = buildParagraphMap(sections, mergedTex)
+        const { layout, comments: layoutComments } = checkExperimentStructure(paragraphMap, mergedTex)
+        const comments = [...layoutComments, ...checkSectionNames(paragraphMap, mergedTex)]
         console.log(
           `[AI Tutor] [${SECTION_STRUCTURE_NAME}] setup: [${layout.setup.map(s => s.label).join(', ')}], ` +
           `results: [${layout.results.map(s => s.label).join(', ')}] — ${comments.length} finding(s)`
@@ -3246,6 +3251,24 @@ export async function runFullReview({
     const footnoteComment = checkAbstractCodeFootnote(sections)
     console.log(`[AI Tutor] Abstract footnote check: ${footnoteComment ? 'no code/data footnote at the end of the abstract' : 'OK'}`)
     if (footnoteComment) structuralComments.push(footnoteComment)
+  }
+  if (DISABLED_AGENTS.has('emoji'))
+  {
+    console.log('[AI Tutor] Emoji check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else
+  {
+    const emojiComments = checkEmoji(mergedTex)
+    console.log(`[AI Tutor] Emoji check: ${emojiComments.length} line(s) with emoji`)
+    structuralComments.push(...emojiComments)
+  }
+  if (DISABLED_AGENTS.has('affiliation_order'))
+  {
+    console.log('[AI Tutor] Affiliation order check disabled via AI_TUTOR_DISABLED_AGENTS')
+  } else
+  {
+    const orderComment = checkAffiliationOrder(extractFrontMatter(mergedTex, sections))
+    console.log(`[AI Tutor] Affiliation order check: ${orderComment ? 'superscripts out of order' : 'OK'}`)
+    if (orderComment) structuralComments.push(orderComment)
   }
 
   // Phase 6: Map comments to original documents

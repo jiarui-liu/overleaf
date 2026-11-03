@@ -31,12 +31,18 @@ Non-anonymous arXiv preprints should declare their preprint status in the first 
 
 **Expected pattern:**
 - `\thanks{Preprint, {{CURRENT_YEAR}}.}` attached to the title or first author, OR
-- `\footnote{Preprint, {{CURRENT_YEAR}}. Under review.}` on the first non-anonymous page, OR
-- A title-block remark like `Preprint. Submitted {{CURRENT_YEAR}}.`
+- `\footnote{Preprint, {{CURRENT_YEAR}}.}` on the first non-anonymous page.
+
+The note says "Preprint" and nothing more. An arXiv version must never say the paper is under review or name the venue it was submitted to.
 
 **Flag if:**
 - No first-page footnote indicates preprint status.
 - The footnote shows a stale year (e.g., "Preprint 2023" when the current year is {{CURRENT_YEAR}}).
+- The footnote or title block says "Under review", "Submitted to <venue>" or "Under submission" (including the `\iclrfinalcopy`-less "Under review as a conference paper" header). Suggest replacing it with `Preprint, {{CURRENT_YEAR}}.`
 - The footnote uses "DRAFT" or "Do not distribute" placeholders left over from earlier drafts.
 
 **Anonymous submission exception:** anonymous double-blind versions should NOT include a "Preprint {{CURRENT_YEAR}}" footnote — the venue formatting package handles that. Do not flag in that case.
+
+## Spacing Between Authors and Affiliations
+
+When affiliations are listed on their own lines below the author names (superscript style), the two blocks often run together. Suggest a small vertical gap, e.g. `\vspace{0.5em}` (or `\\[0.5em]`), between the last author line and the first affiliation line so the reader can tell names from institutions at a glance. Do not suggest it when the venue template lays out authors and affiliations itself (e.g. `\And`/`\AND` blocks in ACL, `\icmlaffiliation` in ICML).

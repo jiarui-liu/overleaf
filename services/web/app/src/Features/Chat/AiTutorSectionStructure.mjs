@@ -139,3 +139,29 @@ export function checkExperimentStructure(paragraphMap, mergedTex)
       .map(c => ({ ...c, category: AGENT_ID, agentName: AGENT_NAME })),
   }
 }
+
+// Top-level titles named after the authors' own system: "Our Judge",
+// "Our Approach", "My Method".
+const POSSESSIVE_TITLE_RE = /^(our|my)\b/i
+
+/**
+ * Flag top-level main-text sections titled with "Our ..." and suggest the
+ * standard names readers scan for (Methodology, Experimental Setup).
+ */
+export function checkSectionNames(paragraphMap, mergedTex)
+{
+  return paragraphMap
+    .filter(s => !s.isAppendix && s.level === 1)
+    .filter(s => POSSESSIVE_TITLE_RE.test(s.title.replace(/\\[a-zA-Z]+\*?/g, ' ').replace(/[{}]/g, ' ').trim()))
+    .map(s => ({
+      highlightText: headerLine(mergedTex, s),
+      comment:
+        `Use a standard section name instead of "${s.title}". Readers scan for "Methodology" (what the ` +
+        `approach is) and "${SETUP_SECTION_NAME}" (datasets, models, baselines, metrics). The system's ` +
+        'name can go in a subsection title under Methodology.',
+      severity: 'suggestion',
+      category: AGENT_ID,
+      agentName: AGENT_NAME,
+    }))
+    .filter(c => c.highlightText)
+}
