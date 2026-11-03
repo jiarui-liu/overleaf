@@ -12,7 +12,7 @@
  * These checks look only at section titles and order. Whether setup
  * sentences sit inside the results is judged by the Sentence Placement
  * Reviewer, which uses describeExperimentLayout() as ground truth.
-*
+ *
  * Also: top-level sections are not named "Our ..." (checkSectionNames), and
  * Related Work has at least three cited paragraphs that each say how this
  * work differs (checkRelatedWork).
