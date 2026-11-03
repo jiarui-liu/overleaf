@@ -13,6 +13,13 @@ Think about three research areas that are most relevant to the paper. Then struc
 \paragraph{Related Topic 3}
 ```
 
+## Minimum Requirements (always flag if missing)
+
+- **At least 3 paragraphs**, one per related research area. A single paragraph or a bulleted list is not a related work section.
+- **A substantial number of citations**: typically 5-10 relevant papers per paragraph, and at least 10 overall. A paragraph about prior work with no citation is always wrong.
+- **Detail about what happened in the field**: say what each line of work did and how the area developed, not just a list of names.
+- **Every paragraph ends with what is missing**: how our work is different from those works and what addition it makes.
+
 ## Step 1: Gather All the "Ingredients"
 
 **Prerequisite:** A thorough literature review has been done (see `01_setup/finding_prototype_papers.md` for search actions).

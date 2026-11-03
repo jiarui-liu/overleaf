@@ -29,6 +29,7 @@ import {
   AGENT_ID as SECTION_STRUCTURE_ID,
   AGENT_NAME as SECTION_STRUCTURE_NAME,
   checkExperimentStructure,
+  checkRelatedWork,
   checkSectionNames,
 } from './AiTutorSectionStructure.mjs'
 import { checkAffiliationOrder, checkEmoji } from './AiTutorStyleChecks.mjs'
@@ -3099,7 +3100,11 @@ export async function runFullReview({
       {
         const paragraphMap = buildParagraphMap(sections, mergedTex)
         const { layout, comments: layoutComments } = checkExperimentStructure(paragraphMap, mergedTex)
-        const comments = [...layoutComments, ...checkSectionNames(paragraphMap, mergedTex)]
+        const comments = [
+          ...layoutComments,
+          ...checkSectionNames(paragraphMap, mergedTex),
+          ...checkRelatedWork(paragraphMap, mergedTex),
+        ]
         console.log(
           `[AI Tutor] [${SECTION_STRUCTURE_NAME}] setup: [${layout.setup.map(s => s.label).join(', ')}], ` +
           `results: [${layout.results.map(s => s.label).join(', ')}] — ${comments.length} finding(s)`

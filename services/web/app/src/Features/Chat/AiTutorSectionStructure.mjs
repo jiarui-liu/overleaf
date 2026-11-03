@@ -12,6 +12,10 @@
  * These checks look only at section titles and order. Whether setup
  * sentences sit inside the results is judged by the Sentence Placement
  * Reviewer, which uses describeExperimentLayout() as ground truth.
+*
+ * Also: top-level sections are not named "Our ..." (checkSectionNames), and
+ * Related Work has at least three cited paragraphs that each say how this
+ * work differs (checkRelatedWork).
  */
 
 export const AGENT_ID = 'section_structure'
@@ -164,4 +168,101 @@ export function checkSectionNames(paragraphMap, mergedTex)
       agentName: AGENT_NAME,
     }))
     .filter(c => c.highlightText)
+}
+
+// "Related Work", "Prior Work", "Background and Related Work", "Literature Review".
+const RELATED_WORK_TITLE_RE = /\b(related|prior|previous) (work|research|literature)\b|\bliterature review\b/i
+
+// Any citation command: \cite, \citep, \citet, \citealp, \parencite, \textcite, \autocite, ...
+const CITE_RE = /\\[a-zA-Z]*cite[a-zA-Z]*\*?(?:\s*\[[^\]]*\])*\s*\{([^}]*)\}/g
+
+// A sentence that positions the paper against the cited work.
+const CONTRAST_RE = /\b(our|we|this (paper|work|study))\b/i
+
+export const MIN_RELATED_WORK_PARAGRAPHS = 3
+export const MIN_RELATED_WORK_CITATIONS = 10
+
+/** The first line of a paragraph, verbatim, for anchoring a comment. */
+function paragraphLine(mergedTex, p)
+{
+  const lineEnd = mergedTex.indexOf('\n', p.start)
+  return mergedTex.slice(p.start, lineEnd === -1 || lineEnd > p.end ? p.end : lineEnd).trim()
+}
+
+/** Distinct citation keys in a paragraph's text. */
+function citationKeys(text)
+{
+  const keys = new Set()
+  for (const m of text.matchAll(CITE_RE))
+  {
+    for (const key of m[1].split(',')) if (key.trim()) keys.add(key.trim())
+  }
+  return keys
+}
+
+/**
+ * Check the Related Work section against the lab's minimum: at least three
+ * topic paragraphs, a substantial number of citations, a citation in every
+ * paragraph, and each paragraph saying how this work differs from what it
+ * cites. Subsections count as part of the section.
+ */
+export function checkRelatedWork(paragraphMap, mergedTex)
+{
+  const section = paragraphMap.find(s => !s.isAppendix && s.level === 1 && RELATED_WORK_TITLE_RE.test(s.title))
+  if (!section) return []
+  const paragraphs = paragraphMap
+    .filter(s => s === section || s.label.startsWith(`${section.label} > `))
+    .flatMap(s => s.paragraphs)
+
+  const comments = []
+  const header = headerLine(mergedTex, section)
+  const allKeys = new Set(paragraphs.flatMap(p => [...citationKeys(p.text)]))
+  if (paragraphs.length < MIN_RELATED_WORK_PARAGRAPHS)
+  {
+    comments.push({
+      highlightText: header,
+      comment:
+        `"${section.title}" has ${paragraphs.length} paragraph(s). Write at least ${MIN_RELATED_WORK_PARAGRAPHS}, ` +
+        'one per related research area (e.g. \\paragraph{Topic 1}, \\paragraph{Topic 2}, \\paragraph{Topic 3}), ' +
+        'each tracing how the area developed and ending with how this work differs and what it adds.',
+      severity: 'warning',
+    })
+  }
+  if (allKeys.size < MIN_RELATED_WORK_CITATIONS)
+  {
+    comments.push({
+      highlightText: header,
+      comment:
+        `"${section.title}" cites ${allKeys.size} distinct work(s). Related work should credit the field ` +
+        `thoroughly: aim for at least ${MIN_RELATED_WORK_CITATIONS} citations, typically 5-10 relevant papers per ` +
+        'topic paragraph, covering the traditional approaches, recent trends and the nearest neighbors of this work.',
+      severity: 'warning',
+    })
+  }
+  for (const p of paragraphs)
+  {
+    const highlightText = paragraphLine(mergedTex, p)
+    if (citationKeys(p.text).size === 0)
+    {
+      comments.push({
+        highlightText,
+        comment:
+          'This related-work paragraph cites nothing. Every claim about prior work needs a citation; ' +
+          'name the specific papers (\\citet{...}) for the methods and trends described.',
+        severity: 'warning',
+      })
+    } else if (!CONTRAST_RE.test(p.text))
+    {
+      comments.push({
+        highlightText,
+        comment:
+          'This paragraph describes prior work but never says how this paper relates to it. End it with how ' +
+          'our work differs from these works (assumptions, method or setting) and what it adds.',
+        severity: 'suggestion',
+      })
+    }
+  }
+  return comments
+    .filter(c => c.highlightText)
+    .map(c => ({ ...c, category: 'related_work', agentName: AGENT_NAME }))
 }
